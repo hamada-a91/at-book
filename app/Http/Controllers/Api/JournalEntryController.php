@@ -1,0 +1,92 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Modules\Accounting\Services\BookingService;
+use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
+
+class JournalEntryController extends Controller
+{
+    public function __construct(
+        private BookingService $bookingService
+    ) {}
+
+    /**
+     * Create a new draft booking
+     */
+    public function store(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'date' => 'required|date',
+            'description' => 'required|string|min:3',
+            'contact_id' => 'nullable|exists:contacts,id',
+            'lines' => 'required|array|min:2',
+            'lines.*.account_id' => 'required|exists:accounts,id',
+            'lines.*.type' => 'required|in:debit,credit',
+            'lines.*.amount' => 'required|integer|min:1',
+            'lines.*.tax_key' => 'nullable|string',
+            'lines.*.tax_amount' => 'nullable|integer',
+        ]);
+
+        try {
+            $entry = $this->bookingService->createBooking($validated);
+            return response()->json($entry->load('lines'), 201);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
+    }
+
+    /**
+     * Lock a booking (GoBD)
+     */
+    public function lock(int $id): JsonResponse
+    {
+        try {
+            $entry = $this->bookingService->lockBooking($id);
+            return response()->json($entry);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
+    }
+
+    /**
+     * Reverse a booking
+     */
+    public function reverse(int $id): JsonResponse
+    {
+        try {
+            $reversal = $this->bookingService->reverseBooking($id);
+            return response()->json($reversal->load('lines'), 201);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
+    }
+
+    /**
+     * List journal entries
+     */
+    public function index(Request $request): JsonResponse
+    {
+        $query = \App\Modules\Accounting\Models\JournalEntry::with('lines.account')
+            ->orderBy('booking_date', 'desc');
+
+        if ($request->has('status')) {
+            $query->where('status', $request->status);
+        }
+
+        $entries = $query->paginate(50);
+        return response()->json($entries);
+    }
+
+    /**
+     * Show a single booking
+     */
+    public function show(int $id): JsonResponse
+    {
+        $entry = \App\Modules\Accounting\Models\JournalEntry::with('lines.account')
+            ->findOrFail($id);
+        return response()->json($entry);
+    }
+}

@@ -1,0 +1,46 @@
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Dashboard } from './pages/Dashboard';
+import { AccountsList } from './pages/AccountsList';
+import { AccountCreate } from './pages/AccountCreate';
+import { JournalList } from './pages/JournalList';
+import { BookingCreate } from './pages/BookingCreate';
+import { ContactsList } from './pages/ContactsList';
+import '../css/app.css';
+
+const queryClient = new QueryClient({
+    defaultOptions: {
+        queries: {
+            refetchOnWindowFocus: false,
+            retry: 1,
+        },
+    },
+});
+
+function App() {
+    return (
+        <QueryClientProvider client={queryClient}>
+            <BrowserRouter>
+                <Routes>
+                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/accounts" element={<AccountsList />} />
+                    <Route path="/accounts/create" element={<AccountCreate />} />
+                    <Route path="/contacts" element={<ContactsList />} />
+                    <Route path="/bookings" element={<JournalList />} />
+                    <Route path="/bookings/create" element={<BookingCreate />} />
+                </Routes>
+            </BrowserRouter>
+        </QueryClientProvider>
+    );
+}
+
+const root = document.getElementById('app');
+if (root) {
+    ReactDOM.createRoot(root).render(
+        <React.StrictMode>
+            <App />
+        </React.StrictMode>
+    );
+}

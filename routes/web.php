@@ -2,6 +2,8 @@
 
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return view('welcome');
-});
+// Serve React App for all routes (React Router handles routing)
+Route::get('/{any}', function () {
+    return view('app');
+})->where('any', '.*');
+
