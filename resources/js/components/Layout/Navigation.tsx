@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, FileText, BookOpen, Users, LayoutDashboard, ChevronRight } from 'lucide-react';
+import { Home, FileText, BookOpen, Users, LayoutDashboard, ChevronRight, Settings } from 'lucide-react';
 
 interface NavigationProps {
     children: React.ReactNode;
@@ -14,6 +14,7 @@ export function Navigation({ children }: NavigationProps) {
         { name: 'Konten', href: '/accounts', icon: FileText },
         { name: 'Journal', href: '/bookings', icon: BookOpen },
         { name: 'Kontakte', href: '/contacts', icon: Users },
+        { name: 'Einstellungen', href: '/settings', icon: Settings },
     ];
 
     const isActive = (path: string) => {
@@ -30,6 +31,7 @@ export function Navigation({ children }: NavigationProps) {
             accounts: 'Konten',
             bookings: 'Journal',
             contacts: 'Kontakte',
+            settings: 'Einstellungen',
             create: 'Erstellen',
         };
 

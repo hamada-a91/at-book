@@ -23,6 +23,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { ContactSelector } from '@/components/ContactSelector';
 
 interface Account {
     id: number;
@@ -198,21 +199,13 @@ export function BookingCreate() {
                                         render={({ field }) => (
                                             <FormItem>
                                                 <FormLabel>Kontakt (Optional)</FormLabel>
-                                                <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                                    <FormControl>
-                                                        <SelectTrigger>
-                                                            <SelectValue placeholder="Kontakt wählen..." />
-                                                        </SelectTrigger>
-                                                    </FormControl>
-                                                    <SelectContent>
-                                                        <SelectItem value="none">Kein Kontakt</SelectItem>
-                                                        {contacts?.map((contact) => (
-                                                            <SelectItem key={contact.id} value={String(contact.id)}>
-                                                                {contact.name} ({contact.type === 'customer' ? 'Kunde' : 'Lieferant'})
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
+                                                <FormControl>
+                                                    <ContactSelector
+                                                        contacts={contacts}
+                                                        value={field.value}
+                                                        onChange={field.onChange}
+                                                    />
+                                                </FormControl>
                                                 <FormMessage />
                                             </FormItem>
                                         )}

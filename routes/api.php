@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AccountController;
 use App\Http\Controllers\Api\JournalEntryController;
 use App\Http\Controllers\Api\ContactController;
+use App\Http\Controllers\Api\CompanySettingController;
 
 Route::middleware(['api'])->group(function () {
     // Accounts
@@ -20,4 +21,8 @@ Route::middleware(['api'])->group(function () {
     Route::post('/bookings', [JournalEntryController::class, 'store']);
     Route::post('/bookings/{id}/lock', [JournalEntryController::class, 'lock']);
     Route::post('/bookings/{id}/reverse', [JournalEntryController::class, 'reverse']);
+
+    // Company Settings
+    Route::get('/settings', [CompanySettingController::class, 'show']);
+    Route::post('/settings', [CompanySettingController::class, 'update']);
 });

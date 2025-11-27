@@ -16,5 +16,12 @@ class Contact extends Model
         'address',
         'email',
         'phone',
+        'notice',
+        'bank_account',
+        'contact_person',
     ];
+    public function bookings()
+    {
+        return $this->hasMany(\App\Modules\Bookings\Models\Booking::class);
+    }
 }

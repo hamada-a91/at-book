@@ -8,6 +8,7 @@ import { AccountCreate } from './pages/AccountCreate';
 import { JournalList } from './pages/JournalList';
 import { BookingCreate } from './pages/BookingCreate';
 import { ContactsList } from './pages/ContactsList';
+import { Settings } from './pages/Settings';
 import '../css/app.css';
 
 const queryClient = new QueryClient({
@@ -30,6 +31,7 @@ function App() {
                     <Route path="/contacts" element={<ContactsList />} />
                     <Route path="/bookings" element={<JournalList />} />
                     <Route path="/bookings/create" element={<BookingCreate />} />
+                    <Route path="/settings" element={<Settings />} />
                 </Routes>
             </BrowserRouter>
         </QueryClientProvider>
