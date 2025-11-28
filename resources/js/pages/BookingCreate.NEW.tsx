@@ -200,30 +200,20 @@ export function BookingCreate() {
         // Generate booking lines
         const newLines = [];
 
-        // ========================================
-        // WICHTIG: Bei "Direkt bezahlt" = 5 ZEILEN!
-        // ========================================
         if (is_paid) {
-            // *** PAID: 5 LINES (Invoice 3 + Payment 2) ***
-
+            // PAID VERSION: Include payment account
             if (selectedContact.type === 'customer') {
-                // === SCHRITT 1: RECHNUNG (3 Zeilen) ===
-
-                // Zeile 1: Soll Debitor 119€
+                // Customer Sale WITH Payment: Debit Cash/Bank, Credit Revenue, Credit VAT
                 newLines.push({
-                    account_id: String(selectedContact.account_id),
+                    account_id: payment_account_id,
                     type: 'debit' as const,
                     amount: gross,
                 });
-
-                // Zeile 2: Haben Erlöse 100€
                 newLines.push({
                     account_id: contra_account_id,
                     type: 'credit' as const,
                     amount: net,
                 });
-
-                // Zeile 3: Haben USt 19€
                 if (vatAccount && tax > 0) {
                     newLines.push({
                         account_id: String(vatAccount.id),
@@ -231,41 +221,18 @@ export function BookingCreate() {
                         amount: tax,
                     });
                 }
-
-                // === SCHRITT 2: ZAHLUNG (2 Zeilen) ===
-
-                // Zeile 4: Soll Kasse 119€
+            } else {
+                // Vendor Purchase WITH Payment: Credit Cash/Bank, Debit Expense, Debit Input VAT
                 newLines.push({
                     account_id: payment_account_id,
-                    type: 'debit' as const,
-                    amount: gross,
-                });
-
-                // Zeile 5: Haben Debitor 119€
-                newLines.push({
-                    account_id: String(selectedContact.account_id),
                     type: 'credit' as const,
                     amount: gross,
                 });
-
-            } else {
-                // === VENDOR: SCHRITT 1: RECHNUNG (3 Zeilen) ===
-
-                // Zeile 1: Haben Kreditor
-                newLines.push({
-                    account_id: String(selectedContact.account_id),
-                    type: 'credit' as const,
-                    amount: gross,
-                });
-
-                // Zeile 2: Soll Aufwand
                 newLines.push({
                     account_id: contra_account_id,
                     type: 'debit' as const,
                     amount: net,
                 });
-
-                // Zeile 3: Soll Vorsteuer
                 if (vatAccount && tax > 0) {
                     newLines.push({
                         account_id: String(vatAccount.id),
@@ -273,22 +240,6 @@ export function BookingCreate() {
                         amount: tax,
                     });
                 }
-
-                // === SCHRITT 2: ZAHLUNG (2 Zeilen) ===
-
-                // Zeile 4: Haben Kasse/Bank
-                newLines.push({
-                    account_id: payment_account_id,
-                    type: 'credit' as const,
-                    amount: gross,
-                });
-
-                // Zeile 5: Soll Kreditor
-                newLines.push({
-                    account_id: String(selectedContact.account_id),
-                    type: 'debit' as const,
-                    amount: gross,
-                });
             }
         } else {
             // UNPAID VERSION: Contact account instead of cash/bank

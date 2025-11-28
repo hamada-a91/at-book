@@ -100,10 +100,28 @@ app/
 - created_at
 ```
 
+#### `contacts` - Customers and Vendors
+```sql
+- id
+- name
+- type (customer, vendor)
+- tax_number
+- address
+- email
+- phone
+- notice
+- bank_account
+- contact_person
+- account_id (FK to accounts - auto-created on contact creation)
+- timestamps
+```
+
 ### Key Relationships
 - `JournalEntry` (1) ↔ (N) `JournalEntryLine`
 - `JournalEntry` (1) ↔ (N) `Document` (polymorphic)
+- `JournalEntry` (N) ↔ (1) `Contact` (optional)
 - `Account` (1) ↔ (N) `JournalEntryLine`
+- `Contact` (1) ↔ (1) `Account` (auto-created debtor/creditor account)
 
 ## 🔐 GoBD Compliance Features
 
@@ -176,6 +194,34 @@ Located: `resources/js/components/BookingMask.tsx`
 - Lines: Min 2 lines required
 - Balance: SUM(Debit) must equal SUM(Credit)
 ```
+
+### Quick Entry Feature
+Located: `resources/js/pages/BookingCreate.tsx`
+
+**Purpose:** Simplifies common booking scenarios (customer sales, vendor purchases) by auto-generating booking lines.
+
+**Workflow:**
+1. User selects:
+   - **Contact** (customer/vendor) → Auto-fills their debtor/creditor account
+   - **Contra Account** (revenue/expense account with search)
+   - **VAT Rate** (19%, 7%, or 0%)
+   - **Gross Amount** (total including VAT)
+
+2. System automatically generates 3 balanced booking lines:
+   - **Customer Sale Example:**
+     - Debit: Contact Account (10001 - Customer X) = Gross Amount
+     - Credit: Revenue Account (8400 - Erlöse 19%) = Net Amount
+     - Credit: VAT Account (1776 - USt 19%) = Tax Amount
+   - **Vendor Purchase Example:**
+     - Credit: Contact Account (70001 - Vendor Y) = Gross Amount
+     - Debit: Expense Account (4400 - Waren) = Net Amount
+     - Debit: Input VAT Account (1576 - VSt 19%) = Tax Amount
+
+3. User reviews auto-filled lines and clicks "Save"
+
+**Account Numbering Convention:**
+- Customers (Debitors): 10000-19999 (auto-incremented starting at 10001)
+- Vendors (Creditors): 70000-79999 (auto-incremented starting at 70001)
 
 ## 🎨 UI Components (shadcn/ui)
 

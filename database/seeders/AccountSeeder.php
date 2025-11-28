@@ -18,7 +18,9 @@ class AccountSeeder extends Seeder
             // Liabilities
             ['code' => '1600', 'name' => 'Verbindlichkeiten a.LL.', 'type' => 'liability', 'tax_key_code' => null],
             ['code' => '1776', 'name' => 'Umsatzsteuer 19%', 'type' => 'liability', 'tax_key_code' => null],
+            ['code' => '1771', 'name' => 'Umsatzsteuer 7%', 'type' => 'liability', 'tax_key_code' => null],
             ['code' => '1576', 'name' => 'Vorsteuer 19%', 'type' => 'asset', 'tax_key_code' => null],
+            ['code' => '1571', 'name' => 'Vorsteuer 7%', 'type' => 'asset', 'tax_key_code' => null],
 
             // Revenue (Erlöse)
             ['code' => '8400', 'name' => 'Erlöse 19% USt', 'type' => 'revenue', 'tax_key_code' => 'UST_19'],

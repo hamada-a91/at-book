@@ -19,7 +19,14 @@ class Contact extends Model
         'notice',
         'bank_account',
         'contact_person',
+        'account_id',
     ];
+    
+    public function account()
+    {
+        return $this->belongsTo(\App\Modules\Accounting\Models\Account::class);
+    }
+    
     public function bookings()
     {
         return $this->hasMany(\App\Modules\Bookings\Models\Booking::class);

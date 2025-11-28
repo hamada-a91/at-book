@@ -33,9 +33,33 @@ class ContactController extends Controller
             'contact_person' => 'nullable|string|max:255',
         ]);
 
+        // Determine account code based on contact type
+        $baseCode = $validated['type'] === 'customer' ? 10000 : 70000;
+        
+        // Find the next available account code
+        $lastAccount = \App\Modules\Accounting\Models\Account::where('code', 'like', $baseCode . '%')
+            ->orderBy('code', 'desc')
+            ->first();
+        
+        $nextCode = $baseCode + 1;
+        if ($lastAccount) {
+            $nextCode = intval($lastAccount->code) + 1;
+        }
+        
+        // Create the account
+        $account = \App\Modules\Accounting\Models\Account::create([
+            'code' => (string)$nextCode,
+            'name' => $validated['name'],
+            'type' => $validated['type'] === 'customer' ? 'asset' : 'liability',
+            'tax_key_code' => null,
+            'is_system' => false,
+        ]);
+        
+        // Create the contact with the account_id
+        $validated['account_id'] = $account->id;
         $contact = Contact::create($validated);
 
-        return response()->json($contact, 201);
+        return response()->json($contact->load('account'), 201);
     }
 
     /**
