@@ -13,7 +13,21 @@ class ContactController extends Controller
      */
     public function index()
     {
-        return Contact::orderBy('name')->get();
+        $contacts = Contact::with('account.journalEntryLines')->orderBy('name')->get();
+        
+        return $contacts->map(function ($contact) {
+            $data = $contact->toArray();
+            
+            if ($contact->account) {
+                $data['balance'] = $this->calculateAccountBalance($contact->account);
+                $data['balance_formatted'] = $this->formatCurrency($data['balance']);
+            } else {
+                $data['balance'] = 0;
+                $data['balance_formatted'] = '0,00 €';
+            }
+            
+            return $data;
+        });
     }
 
     /**
@@ -108,5 +122,36 @@ class ContactController extends Controller
         $contact->delete();
 
         return response()->json(['message' => 'Kontakt gelöscht']);
+    }
+    
+    /**
+     * Calculate balance for an account
+     */
+    private function calculateAccountBalance($account): int
+    {
+        $debitSum = $account->journalEntryLines()
+            ->where('type', 'debit')
+            ->sum('amount');
+            
+        $creditSum = $account->journalEntryLines()
+            ->where('type', 'credit')
+            ->sum('amount');
+        
+        // Customer accounts (asset): Debit - Credit
+        // Vendor accounts (liability): Credit - Debit
+        if ($account->type === 'asset') {
+            return $debitSum - $creditSum;
+        } else {
+            return $creditSum - $debitSum;
+        }
+    }
+    
+    /**
+     * Format currency in cents to Euro string
+     */
+    private function formatCurrency(int $cents): string
+    {
+        $euros = $cents / 100;
+        return number_format($euros, 2, ',', '.') . ' €';
     }
 }

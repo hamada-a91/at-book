@@ -3,14 +3,24 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AccountController;
+use App\Http\Controllers\Api\AccountBalanceController;
+use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\JournalEntryController;
 use App\Http\Controllers\Api\ContactController;
 use App\Http\Controllers\Api\CompanySettingController;
 
 Route::middleware(['api'])->group(function () {
+    // Dashboard
+    Route::get('/dashboard/summary', [DashboardController::class, 'summary']);
+    Route::get('/dashboard/recent-bookings', [DashboardController::class, 'recentBookings']);
+    
     // Accounts
     Route::get('/accounts', [AccountController::class, 'index']);
     Route::post('/accounts', [AccountController::class, 'store']);
+    
+    // Account Balances
+    Route::get('/accounts/balances', [AccountBalanceController::class, 'index']);
+    Route::get('/accounts/{account}/balance', [AccountBalanceController::class, 'show']);
 
     // Contacts
     Route::apiResource('contacts', ContactController::class);

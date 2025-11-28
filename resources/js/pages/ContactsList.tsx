@@ -4,6 +4,7 @@ import { Navigation } from '@/components/Layout/Navigation';
 import { Plus, Eye, Pencil, Trash2, X } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
     Dialog,
     DialogContent,
@@ -26,6 +27,8 @@ interface Contact {
     notice: string | null;
     bank_account: string | null;
     contact_person: string | null;
+    balance?: number;
+    balance_formatted?: string;
 }
 
 export function ContactsList() {
@@ -33,6 +36,7 @@ export function ContactsList() {
     const [editContact, setEditContact] = useState<Contact | null>(null);
     const [viewContact, setViewContact] = useState<Contact | null>(null);
     const [deleteContact, setDeleteContact] = useState<Contact | null>(null);
+    const [search, setSearch] = useState('');
 
     const queryClient = useQueryClient();
 
@@ -98,6 +102,15 @@ export function ContactsList() {
         }
     });
 
+    // Filter contacts based on search
+    const filteredContacts = contacts?.filter((contact) => {
+        const matchesSearch = search === '' ||
+            contact.name.toLowerCase().includes(search.toLowerCase()) ||
+            (contact.email && contact.email.toLowerCase().includes(search.toLowerCase())) ||
+            (contact.phone && contact.phone.includes(search));
+        return matchesSearch;
+    });
+
     return (
         <Navigation>
             <div className="space-y-6">
@@ -114,11 +127,23 @@ export function ContactsList() {
                     </Button>
                 </div>
 
+                {/* Search */}
+                <Card className="shadow-lg mb-4">
+                    <CardContent className="p-4">
+                        <Input
+                            type="text"
+                            placeholder="Suche nach Name, E-Mail oder Telefon..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                        />
+                    </CardContent>
+                </Card>
+
                 {/* List */}
                 <Card className="shadow-lg">
                     {isLoading ? (
                         <CardContent className="p-8 text-center">Lade Kontakte...</CardContent>
-                    ) : contacts?.length === 0 ? (
+                    ) : filteredContacts?.length === 0 ? (
                         <CardContent className="p-8 text-center text-slate-500">
                             Keine Kontakte gefunden.
                         </CardContent>
@@ -131,11 +156,12 @@ export function ContactsList() {
                                         <th className="px-6 py-3 text-left text-xs font-medium text-slate-700 uppercase">Typ</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-slate-700 uppercase">Steuernummer</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-slate-700 uppercase">Kontakt</th>
+                                        <th className="px-6 py-3 text-right text-xs font-medium text-slate-700 uppercase">Saldo</th>
                                         <th className="px-6 py-3 text-right text-xs font-medium text-slate-700 uppercase">Aktionen</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-200">
-                                    {contacts?.map((contact) => (
+                                    {filteredContacts?.map((contact) => (
                                         <tr key={contact.id} className="hover:bg-slate-50">
                                             <td className="px-6 py-4 font-medium">{contact.name}</td>
                                             <td className="px-6 py-4">
@@ -150,6 +176,19 @@ export function ContactsList() {
                                             <td className="px-6 py-4 text-slate-600">
                                                 {contact.email && <div>{contact.email}</div>}
                                                 {contact.phone && <div className="text-xs">{contact.phone}</div>}
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+                                                <span className={`font-semibold ${contact.balance && contact.balance > 0
+                                                    ? (contact.type === 'customer' ? 'text-green-600' : 'text-red-600')
+                                                    : (contact.type === 'customer' ? 'text-red-600' : 'text-green-600')
+                                                    }`}>
+                                                    {contact.balance_formatted || '0,00 €'}
+                                                </span>
+                                                <div className="text-xs text-slate-500">
+                                                    {contact.balance && contact.balance > 0
+                                                        ? (contact.type === 'customer' ? 'Forderung' : 'Guthaben')
+                                                        : (contact.type === 'customer' ? 'Guthaben' : 'Verbindlichkeit')}
+                                                </div>
                                             </td>
                                             <td className="px-6 py-4 text-right space-x-2">
                                                 <Button variant="ghost" size="icon" onClick={() => setViewContact(contact)}>

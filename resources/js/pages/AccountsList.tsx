@@ -13,6 +13,8 @@ interface Account {
     name: string;
     type: string;
     tax_key_code: string | null;
+    balance?: number;
+    balance_formatted?: string;
 }
 
 const accountTypeLabels: Record<string, string> = {
@@ -130,6 +132,9 @@ export function AccountsList() {
                                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-700 uppercase">
                                                 Steuerschlüssel
                                             </th>
+                                            <th className="px-6 py-3 text-right text-xs font-medium text-slate-700 uppercase">
+                                                Saldo
+                                            </th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-200">
@@ -149,6 +154,16 @@ export function AccountsList() {
                                                 </td>
                                                 <td className="px-6 py-4 text-sm text-slate-700">
                                                     {account.tax_key_code || '-'}
+                                                </td>
+                                                <td className="px-6 py-4 text-right">
+                                                    <span className={`font-semibold ${account.balance && account.balance > 0
+                                                            ? 'text-green-600'
+                                                            : account.balance && account.balance < 0
+                                                                ? 'text-red-600'
+                                                                : 'text-slate-600'
+                                                        }`}>
+                                                        {account.balance_formatted || '0,00 €'}
+                                                    </span>
                                                 </td>
                                             </tr>
                                         ))}
