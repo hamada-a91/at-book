@@ -27,6 +27,7 @@ Route::middleware(['api'])->group(function () {
     
     // Invoices
     Route::apiResource('invoices', \App\Http\Controllers\Api\InvoiceController::class);
+    Route::put('/invoices/{invoice}', [\App\Http\Controllers\Api\InvoiceController::class, 'update']);
     Route::post('/invoices/{invoice}/book', [\App\Http\Controllers\Api\InvoiceController::class, 'book']);
     Route::post('/invoices/{invoice}/payment', [\App\Http\Controllers\Api\InvoiceController::class, 'recordPayment']);
     Route::get('/invoices/{invoice}/pdf', [\App\Http\Controllers\Api\InvoiceController::class, 'downloadPDF']);

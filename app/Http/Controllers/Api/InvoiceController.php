@@ -254,6 +254,75 @@ class InvoiceController extends Controller
     }
 
     /**
+     * Update the specified invoice (only drafts can be edited)
+     */
+    public function update(Request $request, Invoice $invoice)
+    {
+        // Only allow editing drafts
+        if ($invoice->status !== 'draft') {
+            return response()->json(['message' => 'Nur Entwürfe können bearbeitet werden'], 403);
+        }
+
+        $validated = $request->validate([
+            'contact_id' => 'required|exists:contacts,id',
+            'invoice_date' => 'required|date',
+            'due_date' => 'required|date',
+            'intro_text' => 'nullable|string',
+            'payment_terms' => 'nullable|string',
+            'footer_note' => 'nullable|string',
+            'lines' => 'required|array',
+            'lines.*.description' => 'required|string',
+            'lines.*.quantity' => 'required|numeric|min:0',
+            'lines.*.unit' => 'required|string',
+            'lines.*.unit_price' => 'required|integer',
+            'lines.*.tax_rate' => 'required|numeric|min:0',
+            'lines.*.account_id' => 'required|exists:accounts,id',
+        ]);
+
+        // Calculate totals
+        $subtotal = 0;
+        $taxTotal = 0;
+        foreach ($validated['lines'] as $line) {
+            $lineTotal = $line['quantity'] * $line['unit_price'];
+            $lineTax = $lineTotal * ($line['tax_rate'] / 100);
+            $subtotal += $lineTotal;
+            $taxTotal += $lineTax;
+        }
+        $total = $subtotal + $taxTotal;
+
+        // Update invoice
+        $invoice->update([
+            'contact_id' => $validated['contact_id'],
+            'invoice_date' => $validated['invoice_date'],
+            'due_date' => $validated['due_date'],
+            'subtotal' => $subtotal,
+            'tax_total' => $taxTotal,
+            'total' => $total,
+            'intro_text' => $validated['intro_text'] ?? 'Unsere Lieferungen/Leistungen stellen wir Ihnen wie folgt in Rechnung.',
+            'payment_terms' => $validated['payment_terms'] ?? 'Zahlbar sofort, rein netto',
+            'footer_note' => $validated['footer_note'] ?? 'Vielen Dank für die gute Zusammenarbeit.',
+        ]);
+
+        // Delete old lines and create new ones
+        $invoice->lines()->delete();
+
+        foreach ($validated['lines'] as $line) {
+            $lineTotal = $line['quantity'] * $line['unit_price'];
+            $invoice->lines()->create([
+                'description' => $line['description'],
+                'quantity' => $line['quantity'],
+                'unit' => $line['unit'],
+                'unit_price' => $line['unit_price'],
+                'tax_rate' => $line['tax_rate'],
+                'line_total' => $lineTotal,
+                'account_id' => $line['account_id'],
+            ]);
+        }
+
+        return response()->json($invoice->load(['contact', 'lines']));
+    }
+
+    /**
      * Download invoice as PDF
      */
     public function downloadPDF(Invoice $invoice)

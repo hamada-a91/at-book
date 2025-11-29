@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Navigation } from '@/components/Layout/Navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -41,7 +41,9 @@ const TAX_ACCOUNT_MAP: Record<number, string> = {
 
 export function InvoiceCreate() {
     const navigate = useNavigate();
+    const { id } = useParams<{ id: string }>();
     const queryClient = useQueryClient();
+    const isEditMode = !!id;
 
     const [customerName, setCustomerName] = useState('');
     const [customerAddress, setCustomerAddress] = useState('');
@@ -73,6 +75,42 @@ export function InvoiceCreate() {
         },
     });
 
+    // Load existing invoice data if editing
+    const { data: existingInvoice } = useQuery({
+        queryKey: ['invoice', id],
+        queryFn: async () => {
+            if (!id) return null;
+            const res = await fetch(`/api/invoices/${id}`);
+            return res.json();
+        },
+        enabled: !!id,
+    });
+
+    // Populate form when invoice data loads
+    useEffect(() => {
+        if (existingInvoice) {
+            setCustomerName(existingInvoice.contact?.name || '');
+            setCustomerAddress(existingInvoice.contact?.address || '');
+            setSelectedContactId(existingInvoice.contact?.id || null);
+            setInvoiceDate(existingInvoice.invoice_date?.split('T')[0] || '');
+            setDueDate(existingInvoice.due_date?.split('T')[0] || '');
+            setIntroText(existingInvoice.intro_text || 'Unsere Lieferungen/Leistungen stellen wir Ihnen wie folgt in Rechnung.');
+            setPaymentTerms(existingInvoice.payment_terms || 'Zahlbar sofort, rein netto');
+            setFooterNote(existingInvoice.footer_note || 'Vielen Dank für die gute Zusammenarbeit.');
+
+            if (existingInvoice.lines && existingInvoice.lines.length > 0) {
+                setLines(existingInvoice.lines.map((line: any) => ({
+                    description: line.description,
+                    quantity: line.quantity,
+                    unit: line.unit || 'Stück',
+                    unit_price: line.unit_price / 100, // Convert from cents
+                    tax_rate: line.tax_rate,
+                    account_id: line.account_id.toString(),
+                })));
+            }
+        }
+    }, [existingInvoice]);
+
     const createContactMutation = useMutation({
         mutationFn: async (data: any) => {
             const res = await fetch('/api/contacts', {
@@ -91,14 +129,17 @@ export function InvoiceCreate() {
 
     const createInvoiceMutation = useMutation({
         mutationFn: async (data: any) => {
-            const res = await fetch('/api/invoices', {
-                method: 'POST',
+            const url = isEditMode ? `/api/invoices/${id}` : '/api/invoices';
+            const method = isEditMode ? 'PUT' : 'POST';
+
+            const res = await fetch(url, {
+                method,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data),
             });
             if (!res.ok) {
                 const error = await res.json();
-                throw new Error(error.message || 'Fehler beim Erstellen');
+                throw new Error(error.message || 'Fehler beim Speichern');
             }
             return res.json();
         },
@@ -258,8 +299,12 @@ export function InvoiceCreate() {
         <Navigation>
             <div className="space-y-6">
                 <div>
-                    <h1 className="text-4xl font-bold text-slate-900">Neue Rechnung</h1>
-                    <p className="text-slate-600">Erstelle eine neue Ausgangsrechnung</p>
+                    <h1 className="text-4xl font-bold text-slate-900">
+                        {isEditMode ? 'Rechnung bearbeiten' : 'Neue Rechnung'}
+                    </h1>
+                    <p className="text-slate-600">
+                        {isEditMode ? 'Bearbeite die Rechnungsdaten' : 'Erstelle eine neue Ausgangsrechnung'}
+                    </p>
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-6">
@@ -534,7 +579,10 @@ export function InvoiceCreate() {
                             Abbrechen
                         </Button>
                         <Button type="submit" disabled={createInvoiceMutation.isPending || createContactMutation.isPending}>
-                            {createInvoiceMutation.isPending || createContactMutation.isPending ? 'Erstelle...' : 'Rechnung erstellen'}
+                            {createInvoiceMutation.isPending || createContactMutation.isPending
+                                ? (isEditMode ? 'Speichere...' : 'Erstelle...')
+                                : (isEditMode ? 'Änderungen speichern' : 'Rechnung erstellen')
+                            }
                         </Button>
                     </div>
                 </form>
