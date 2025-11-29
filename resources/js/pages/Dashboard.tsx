@@ -1,11 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { FileText, Users, BookOpen, PlusCircle, TrendingUp, Clock, CheckCircle2 } from 'lucide-react';
+import { FileText, Users, BookOpen, PlusCircle, TrendingUp, TrendingDown, DollarSign, Clock, CheckCircle2, Calendar, BarChart3 } from 'lucide-react';
 import { Navigation } from '@/components/Layout/Navigation';
 import { StatCard } from '@/components/Dashboard/StatCard';
 import { QuickActionCard } from '@/components/Dashboard/QuickActionCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface JournalEntry {
     id: number;
@@ -14,7 +15,17 @@ interface JournalEntry {
     status: string;
 }
 
+interface DashboardSummary {
+    income: number;
+    income_formatted: string;
+    expenses: number;
+    expenses_formatted: string;
+    profit: number;
+    profit_formatted: string;
+}
+
 export function Dashboard() {
+    const [period, setPeriod] = useState<string>('current_month');
     const { data: accounts } = useQuery({
         queryKey: ['accounts'],
         queryFn: async () => {
@@ -38,6 +49,49 @@ export function Dashboard() {
             return res.json();
         },
     });
+
+    // Dashboard summary with period filtering
+    const { data: summary, isLoading: summaryLoading } = useQuery<DashboardSummary>({
+        queryKey: ['dashboard-summary', period],
+        queryFn: async () => {
+            const params = getPeriodParams(period);
+            const res = await fetch(`/api/dashboard/summary?start_date=${params.startDate}&end_date=${params.endDate}`);
+            return res.json();
+        },
+    });
+
+    // Helper function to get date range for selected period
+    function getPeriodParams(periodValue: string) {
+        const now = new Date();
+        let startDate, endDate;
+
+        switch (periodValue) {
+            case 'current_month':
+                startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+                endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+                break;
+            case 'previous_month':
+                startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                endDate = new Date(now.getFullYear(), now.getMonth(), 0);
+                break;
+            case 'current_year':
+                startDate = new Date(now.getFullYear(), 0, 1);
+                endDate = new Date(now.getFullYear(), 11, 31);
+                break;
+            case 'previous_year':
+                startDate = new Date(now.getFullYear() - 1, 0, 1);
+                endDate = new Date(now.getFullYear() - 1, 11, 31);
+                break;
+            default:
+                startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+                endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        }
+
+        return {
+            startDate: startDate.toISOString().split('T')[0],
+            endDate: endDate.toISOString().split('T')[0]
+        };
+    }
 
     const bookings = bookingsData?.data || [];
     const recentBookings = bookings.slice(0, 5);
@@ -99,6 +153,201 @@ export function Dashboard() {
                 <p className="text-xl text-slate-600">
                     Hier ist eine Übersicht Ihrer Buchhaltung
                 </p>
+            </div>
+
+            {/* Period Selector */}
+            <div className="mb-8">
+                <Card className="shadow-md">
+                    <CardContent className="p-4">
+                        <div className="flex items-center gap-4">
+                            <Calendar className="h-5 w-5 text-slate-600" />
+                            <span className="text-sm font-medium text-slate-700">Zeitraum:</span>
+                            <Select value={period} onValueChange={setPeriod}>
+                                <SelectTrigger className="w-[200px]">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="current_month">Dieser Monat</SelectItem>
+                                    <SelectItem value="previous_month">Vormonat</SelectItem>
+                                    <SelectItem value="current_year">Dieses Jahr</SelectItem>
+                                    <SelectItem value="previous_year">Vorjahr</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+
+            {/* Financial KPIs */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+                <Card className="shadow-lg border-t-4 border-green-500">
+                    <CardHeader className="flex flex-row items-center justify-between pb-2">
+                        <CardTitle className="text-sm font-medium text-slate-600">Einnahmen</CardTitle>
+                        <TrendingUp className="h-5 w-5 text-green-600" />
+                    </CardHeader>
+                    <CardContent>
+                        {summaryLoading ? (
+                            <div className="h-8 bg-slate-200 animate-pulse rounded" />
+                        ) : (
+                            <>
+                                <div className="text-3xl font-bold text-green-600">
+                                    {summary?.income_formatted || '0,00 €'}
+                                </div>
+                                <p className="text-xs text-slate-500 mt-1">Erlöse</p>
+                            </>
+                        )}
+                    </CardContent>
+                </Card>
+
+                <Card className="shadow-lg border-t-4 border-red-500">
+                    <CardHeader className="flex flex-row items-center justify-between pb-2">
+                        <CardTitle className="text-sm font-medium text-slate-600">Ausgaben</CardTitle>
+                        <TrendingDown className="h-5 w-5 text-red-600" />
+                    </CardHeader>
+                    <CardContent>
+                        {summaryLoading ? (
+                            <div className="h-8 bg-slate-200 animate-pulse rounded" />
+                        ) : (
+                            <>
+                                <div className="text-3xl font-bold text-red-600">
+                                    {summary?.expenses_formatted || '0,00 €'}
+                                </div>
+                                <p className="text-xs text-slate-500 mt-1">Kosten</p>
+                            </>
+                        )}
+                    </CardContent>
+                </Card>
+
+                <Card className={`shadow-lg border-t-4 ${(summary?.profit ?? 0) >= 0 ? 'border-blue-500' : 'border-orange-500'}`}>
+                    <CardHeader className="flex flex-row items-center justify-between pb-2">
+                        <CardTitle className="text-sm font-medium text-slate-600">Gewinn / Verlust</CardTitle>
+                        <DollarSign className={`h-5 w-5 ${(summary?.profit ?? 0) >= 0 ? 'text-blue-600' : 'text-orange-600'}`} />
+                    </CardHeader>
+                    <CardContent>
+                        {summaryLoading ? (
+                            <div className="h-8 bg-slate-200 animate-pulse rounded" />
+                        ) : (
+                            <>
+                                <div className={`text-3xl font-bold ${(summary?.profit ?? 0) >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
+                                    {summary?.profit_formatted || '0,00 €'}
+                                </div>
+                                <p className="text-xs text-slate-500 mt-1">
+                                    {(summary?.profit ?? 0) >= 0 ? 'Gewinn' : 'Verlust'}
+                                </p>
+                            </>
+                        )}
+                    </CardContent>
+                </Card>
+            </div>
+
+            {/* Charts Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
+                {/* Profit Bar Chart */}
+                <Card className="shadow-lg">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <BarChart3 className="h-5 w-5 text-slate-600" />
+                            Gewinn-Übersicht
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="h-64 flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg">
+                            <div className="text-center">
+                                <div className="space-y-4">
+                                    <div className="flex justify-center gap-8">
+                                        <div className="text-center">
+                                            <div className="text-sm text-slate-600 mb-1">Einnahmen</div>
+                                            <div className="h-32 w-20 bg-green-500 rounded-t-lg flex items-end justify-center pb-2 text-white font-semibold"
+                                                style={{ height: `${Math.min(((summary?.income ?? 0) / Math.max((summary?.income ?? 1), (summary?.expenses ?? 1))) * 200, 200)}px` }}>
+                                                {summary?.income ? `${((summary.income / 100).toFixed(0))}€` : '0'}
+                                            </div>
+                                        </div>
+                                        <div className="text-center">
+                                            <div className="text-sm text-slate-600 mb-1">Ausgaben</div>
+                                            <div className="h-32 w-20 bg-red-500 rounded-t-lg flex items-end justify-center pb-2 text-white font-semibold"
+                                                style={{ height: `${Math.min(((summary?.expenses ?? 0) / Math.max((summary?.income ?? 1), (summary?.expenses ?? 1))) * 200, 200)}px` }}>
+                                                {summary?.expenses ? `${((summary.expenses / 100).toFixed(0))}€` : '0'}
+                                            </div>
+                                        </div>
+                                        <div className="text-center">
+                                            <div className="text-sm text-slate-600 mb-1">Gewinn</div>
+                                            <div className={`h-32 w-20 rounded-t-lg flex items-end justify-center pb-2 text-white font-semibold ${(summary?.profit ?? 0) >= 0 ? 'bg-blue-500' : 'bg-orange-500'}`}
+                                                style={{ height: `${Math.min((Math.abs(summary?.profit ?? 0) / Math.max((summary?.income ?? 1), (summary?.expenses ?? 1))) * 200, 200)}px` }}>
+                                                {summary?.profit ? `${((summary.profit / 100).toFixed(0))}€` : '0'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* Trend Line Chart */}
+                <Card className="shadow-lg">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <TrendingUp className="h-5 w-5 text-slate-600" />
+                            Trend-Übersicht
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="h-64 bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg p-4">
+                            <div className="h-full flex flex-col">
+                                {/* Y-Axis Labels */}
+                                <div className="flex-1 flex">
+                                    <div className="w-12 flex flex-col justify-between text-xs text-slate-600 pr-2">
+                                        <div>{Math.round((Math.max(summary?.income ?? 0, summary?.expenses ?? 0) / 100))}</div>
+                                        <div>{Math.round((Math.max(summary?.income ?? 0, summary?.expenses ?? 0) / 200))}</div>
+                                        <div>0</div>
+                                    </div>
+                                    <div className="flex-1 relative border-l border-b border-slate-300">
+                                        {/* Grid lines */}
+                                        <div className="absolute inset-0 flex flex-col justify-between">
+                                            <div className="border-t border-slate-200"></div>
+                                            <div className="border-t border-slate-200"></div>
+                                            <div className="border-t border-slate-200"></div>
+                                        </div>
+                                        {/* Simple trend visualization */}
+                                        <div className="absolute inset-0 flex items-end justify-around pb-2 px-4">
+                                            <div className="flex flex-col items-center gap-1">
+                                                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                                <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                                                <div className={`w-2 h-2 rounded-full ${(summary?.profit ?? 0) >= 0 ? 'bg-blue-500' : 'bg-orange-500'}`}></div>
+                                            </div>
+                                            <div className="h-full border-l-2 border-dashed border-slate-300"></div>
+                                            <div className="flex flex-col items-center gap-1">
+                                                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                                <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                                                <div className={`w-2 h-2 rounded-full ${(summary?.profit ?? 0) >= 0 ? 'bg-blue-500' : 'bg-orange-500'}`}></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                {/* X-Axis Labels */}
+                                <div className="flex justify-between text-xs text-slate-600 ml-12 mt-2">
+                                    <div>Start</div>
+                                    <div>Ende</div>
+                                </div>
+                                {/* Legend */}
+                                <div className="flex justify-center gap-4 mt-3 text-xs">
+                                    <div className="flex items-center gap-1">
+                                        <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                                        <span>Einnahmen</span>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                                        <span>Ausgaben</span>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <div className={`w-3 h-3 rounded-full ${(summary?.profit ?? 0) >= 0 ? 'bg-blue-500' : 'bg-orange-500'}`}></div>
+                                        <span>Gewinn</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
             </div>
 
             {/* Statistics Grid */}

@@ -14,6 +14,12 @@ class CompanySetting extends Model
         'country',
         'tax_type',
         'logo_path',
+        'tax_number',
+        'email',
+        'phone',
+        'bank_details',
+        'invoice_prefix',
+        'invoice_footer_text',
     ];
 
     /**
@@ -26,6 +32,7 @@ class CompanySetting extends Model
         return [
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
+            'bank_details' => 'array',
         ];
     }
 }
