@@ -17,6 +17,9 @@ class Invoice extends Model
         'total',
         'journal_entry_id',
         'notes',
+        'intro_text',
+        'payment_terms',
+        'footer_note',
     ];
 
     protected $casts = [

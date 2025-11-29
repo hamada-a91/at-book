@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Navigation } from '@/components/Layout/Navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Plus, FileText, Trash2, Send, Euro } from 'lucide-react';
+import { Plus, FileText, Trash2, Send, Euro, Eye, Edit } from 'lucide-react';
 
 interface Invoice {
     id: number;
@@ -23,6 +23,7 @@ interface Invoice {
 }
 
 export function InvoicesList() {
+    const navigate = useNavigate();
     const queryClient = useQueryClient();
     const [paymentDialog, setPaymentDialog] = useState<{ open: boolean; invoice: Invoice | null }>({ open: false, invoice: null });
     const [paymentAccount, setPaymentAccount] = useState('');
@@ -121,6 +122,18 @@ export function InvoicesList() {
         });
     };
 
+    const handleDelete = (id: number) => {
+        if (confirm('Rechnung wirklich löschen?')) {
+            deleteMutation.mutate(id);
+        }
+    };
+
+    const handleBook = (id: number) => {
+        if (confirm('Rechnung jetzt buchen? Dies kann nicht rückgängig gemacht werden.')) {
+            bookMutation.mutate(id);
+        }
+    };
+
     return (
         <Navigation>
             <div className="space-y-6">
@@ -204,12 +217,20 @@ export function InvoicesList() {
                                             </td>
                                             <td className="px-6 py-4 text-right">
                                                 <div className="flex justify-end gap-2">
+                                                    {/* View Button - Always */}
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        onClick={() => navigate(`/invoices/${invoice.id}/preview`)}
+                                                    >
+                                                        <Eye className="w-4 h-4" />
+                                                    </Button>
+
                                                     {invoice.status === 'draft' && (
                                                         <>
                                                             <Button
                                                                 size="sm"
-                                                                variant="outline"
-                                                                onClick={() => bookMutation.mutate(invoice.id)}
+                                                                onClick={() => handleBook(invoice.id)}
                                                                 disabled={bookMutation.isPending}
                                                             >
                                                                 <Send className="w-4 h-4" />
@@ -217,11 +238,14 @@ export function InvoicesList() {
                                                             <Button
                                                                 size="sm"
                                                                 variant="outline"
-                                                                onClick={() => {
-                                                                    if (confirm('Rechnung wirklich l\u00f6schen?')) {
-                                                                        deleteMutation.mutate(invoice.id);
-                                                                    }
-                                                                }}
+                                                                onClick={() => navigate(`/invoices/${invoice.id}/edit`)}
+                                                            >
+                                                                <Edit className="w-4 h-4" />
+                                                            </Button>
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                onClick={() => handleDelete(invoice.id)}
                                                                 disabled={deleteMutation.isPending}
                                                             >
                                                                 <Trash2 className="w-4 h-4 text-red-600" />

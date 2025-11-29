@@ -50,6 +50,9 @@ export function InvoiceCreate() {
     const [dueDate, setDueDate] = useState(
         new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
     );
+    const [introText, setIntroText] = useState('Unsere Lieferungen/Leistungen stellen wir Ihnen wie folgt in Rechnung.');
+    const [paymentTerms, setPaymentTerms] = useState('Zahlbar sofort, rein netto');
+    const [footerNote, setFooterNote] = useState('Vielen Dank für die gute Zusammenarbeit.');
     const [lines, setLines] = useState<InvoiceLine[]>([
         { description: '', quantity: 1, unit: 'Stück', unit_price: 0, tax_rate: 19, account_id: '' },
     ]);
@@ -99,8 +102,8 @@ export function InvoiceCreate() {
             }
             return res.json();
         },
-        onSuccess: () => {
-            navigate('/invoices');
+        onSuccess: (data) => {
+            navigate(`/invoices/${data.id}/preview`);
         },
     });
 
@@ -229,6 +232,9 @@ export function InvoiceCreate() {
             contact_id: contactId,
             invoice_date: invoiceDate,
             due_date: dueDate,
+            intro_text: introText,
+            payment_terms: paymentTerms,
+            footer_note: footerNote,
             lines: formattedLines,
         });
     };
@@ -477,6 +483,47 @@ export function InvoiceCreate() {
                                         {calculateTotal().toFixed(2)} €
                                     </div>
                                 </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Footer Section */}
+                    <Card className="shadow-lg">
+                        <CardHeader>
+                            <CardTitle>Fußbereich (optional)</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-2">
+                                    Einleitungstext
+                                </label>
+                                <Textarea
+                                    value={introText}
+                                    onChange={(e) => setIntroText(e.target.value)}
+                                    rows={2}
+                                    placeholder="Unsere Lieferungen/Leistungen stellen wir Ihnen wie folgt in Rechnung."
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-2">
+                                    Zahlungsbedingung
+                                </label>
+                                <Input
+                                    value={paymentTerms}
+                                    onChange={(e) => setPaymentTerms(e.target.value)}
+                                    placeholder="Zahlbar sofort, rein netto"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-2">
+                                    Nachbemerkung
+                                </label>
+                                <Textarea
+                                    value={footerNote}
+                                    onChange={(e) => setFooterNote(e.target.value)}
+                                    rows={2}
+                                    placeholder="Vielen Dank für die gute Zusammenarbeit."
+                                />
                             </div>
                         </CardContent>
                     </Card>

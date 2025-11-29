@@ -21,6 +21,9 @@ class InvoiceController extends Controller
             'invoice_date' => 'required|date',
             'due_date' => 'required|date',
             'notes' => 'nullable|string',
+            'intro_text' => 'nullable|string',
+            'payment_terms' => 'nullable|string',
+            'footer_note' => 'nullable|string',
             'lines' => 'required|array|min:1',
             'lines.*.description' => 'required|string',
             'lines.*.quantity' => 'required|numeric|min:0',
@@ -58,6 +61,9 @@ class InvoiceController extends Controller
             'tax_total' => $taxTotal,
             'total' => $total,
             'notes' => $validated['notes'] ?? null,
+            'intro_text' => $validated['intro_text'] ?? 'Unsere Lieferungen/Leistungen stellen wir Ihnen wie folgt in Rechnung.',
+            'payment_terms' => $validated['payment_terms'] ?? 'Zahlbar sofort, rein netto',
+            'footer_note' => $validated['footer_note'] ?? 'Vielen Dank für die gute Zusammenarbeit.',
             'status' => 'draft',
         ]);
 
@@ -245,5 +251,21 @@ class InvoiceController extends Controller
         $invoice->update(['status' => 'paid']);
 
         return response()->json($invoice->load(['contact', 'lines']));
+    }
+
+    /**
+     * Download invoice as PDF
+     */
+    public function downloadPDF(Invoice $invoice)
+    {
+        $invoice->load(['contact', 'lines.account']);
+        $settings = \App\Models\CompanySetting::first();
+        
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('invoices.pdf', [
+            'invoice' => $invoice,
+            'settings' => $settings,
+        ])->setPaper('a4');
+        
+        return $pdf->download("Rechnung-{$invoice->invoice_number}.pdf");
     }
 }

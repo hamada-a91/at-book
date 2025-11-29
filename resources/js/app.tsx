@@ -10,6 +10,7 @@ import { BookingCreate } from './pages/BookingCreate';
 import { ContactsList } from './pages/ContactsList';
 import { InvoicesList } from './pages/InvoicesList';
 import { InvoiceCreate } from './pages/InvoiceCreate';
+import { InvoicePreview } from './pages/InvoicePreview';
 import { Settings } from './pages/Settings';
 import '../css/app.css';
 
@@ -33,6 +34,8 @@ function App() {
                     <Route path="/contacts" element={<ContactsList />} />
                     <Route path="/invoices" element={<InvoicesList />} />
                     <Route path="/invoices/create" element={<InvoiceCreate />} />
+                    <Route path="/invoices/:id/preview" element={<InvoicePreview />} />
+                    <Route path="/invoices/:id/edit" element={<InvoiceCreate />} />
                     <Route path="/bookings" element={<JournalList />} />
                     <Route path="/bookings/create" element={<BookingCreate />} />
                     <Route path="/settings" element={<Settings />} />
