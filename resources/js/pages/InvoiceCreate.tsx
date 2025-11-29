@@ -1,17 +1,19 @@
-import { useState } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Navigation } from '@/components/Layout/Navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, UserPlus } from 'lucide-react';
 
 interface Contact {
     id: number;
     name: string;
     type: string;
+    address?: string;
 }
 
 interface Account {
@@ -24,20 +26,32 @@ interface Account {
 interface InvoiceLine {
     description: string;
     quantity: number;
+    unit: string;
     unit_price: number;
     tax_rate: number;
     account_id: string;
 }
 
+// Tax rate to revenue account mapping
+const TAX_ACCOUNT_MAP: Record<number, string> = {
+    19: '8400', // Erlöse 19% USt
+    7: '8300',  // Erlöse 7% USt  
+    0: '8100',  // Erlöse steuerfrei
+};
+
 export function InvoiceCreate() {
     const navigate = useNavigate();
-    const [contactId, setContactId] = useState('');
+    const queryClient = useQueryClient();
+
+    const [customerName, setCustomerName] = useState('');
+    const [customerAddress, setCustomerAddress] = useState('');
+    const [selectedContactId, setSelectedContactId] = useState<number | null>(null);
     const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
     const [dueDate, setDueDate] = useState(
         new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
     );
     const [lines, setLines] = useState<InvoiceLine[]>([
-        { description: '', quantity: 1, unit_price: 0, tax_rate: 19, account_id: '' },
+        { description: '', quantity: 1, unit: 'Stück', unit_price: 0, tax_rate: 19, account_id: '' },
     ]);
 
     const { data: contacts } = useQuery<Contact[]>({
@@ -56,7 +70,23 @@ export function InvoiceCreate() {
         },
     });
 
-    const createMutation = useMutation({
+    const createContactMutation = useMutation({
+        mutationFn: async (data: any) => {
+            const res = await fetch('/api/contacts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+            if (!res.ok) throw new Error('Fehler beim Erstellen des Kunden');
+            return res.json();
+        },
+        onSuccess: (newContact) => {
+            queryClient.invalidateQueries({ queryKey: ['contacts'] });
+            setSelectedContactId(newContact.id);
+        },
+    });
+
+    const createInvoiceMutation = useMutation({
         mutationFn: async (data: any) => {
             const res = await fetch('/api/invoices', {
                 method: 'POST',
@@ -74,11 +104,86 @@ export function InvoiceCreate() {
         },
     });
 
-    const revenueAccounts = accounts?.filter((a) => a.type === 'revenue') || [];
     const customers = contacts?.filter((c) => c.type === 'customer') || [];
 
+    // Auto-fill address when customer is selected from suggestions
+    const handleCustomerSelect = (contact: Contact) => {
+        setCustomerName(contact.name);
+        setCustomerAddress(contact.address || '');
+        setSelectedContactId(contact.id);
+    };
+
+    // Auto-select revenue account for default 19% tax rate when accounts load
+    useEffect(() => {
+        if (accounts && accounts.length > 0) {
+            setLines(prevLines =>
+                prevLines.map(line => {
+                    // Only auto-set if account_id is empty and tax_rate is default (19)
+                    if (!line.account_id && line.tax_rate === 19) {
+                        const accountCode = TAX_ACCOUNT_MAP[19];
+                        let account = accounts.find(a => a.code === accountCode);
+                        if (!account) {
+                            account = accounts.find(a => a.type === 'revenue' && a.code.startsWith('8'));
+                        }
+                        if (account) {
+                            return { ...line, account_id: account.id.toString() };
+                        }
+                    }
+                    return line;
+                })
+            );
+        }
+    }, [accounts]);
+
+    // Update tax rate and auto-select revenue account
+    const handleTaxRateChange = (index: number, taxRate: number) => {
+        const newLines = [...lines];
+        newLines[index] = {
+            ...newLines[index],
+            tax_rate: taxRate,
+        };
+
+        // Auto-select revenue account based on tax rate
+        const accountCode = TAX_ACCOUNT_MAP[taxRate];
+        if (accountCode && accounts) {
+            // First try exact match
+            let account = accounts.find(a => a.code === accountCode);
+
+            // If not found, try any revenue account starting with 8
+            if (!account) {
+                account = accounts.find(a => a.type === 'revenue' && a.code.startsWith('8'));
+            }
+
+            if (account) {
+                newLines[index].account_id = account.id.toString();
+            }
+        }
+
+        setLines(newLines);
+    };
+
     const addLine = () => {
-        setLines([...lines, { description: '', quantity: 1, unit_price: 0, tax_rate: 19, account_id: '' }]);
+        // Find default account for 19% tax
+        let defaultAccountId = '';
+        if (accounts) {
+            const accountCode = TAX_ACCOUNT_MAP[19];
+            let account = accounts.find(a => a.code === accountCode);
+            if (!account) {
+                account = accounts.find(a => a.type === 'revenue' && a.code.startsWith('8'));
+            }
+            if (account) {
+                defaultAccountId = account.id.toString();
+            }
+        }
+
+        setLines([...lines, {
+            description: '',
+            quantity: 1,
+            unit: 'Stück',
+            unit_price: 0,
+            tax_rate: 19,
+            account_id: defaultAccountId
+        }]);
     };
 
     const removeLine = (index: number) => {
@@ -91,19 +196,37 @@ export function InvoiceCreate() {
         setLines(newLines);
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        let contactId = selectedContactId;
+
+        // If no contact selected, create new one
+        if (!contactId) {
+            try {
+                const newContact = await createContactMutation.mutateAsync({
+                    name: customerName,
+                    type: 'customer',
+                    address: customerAddress,
+                });
+                contactId = newContact.id;
+            } catch (error) {
+                alert('Fehler beim Erstellen des Kunden');
+                return;
+            }
+        }
 
         const formattedLines = lines.map((line) => ({
             description: line.description,
             quantity: parseFloat(line.quantity.toString()),
+            unit: line.unit,
             unit_price: Math.round(parseFloat(line.unit_price.toString()) * 100), // convert to cents
             tax_rate: parseFloat(line.tax_rate.toString()),
             account_id: parseInt(line.account_id),
         }));
 
-        createMutation.mutate({
-            contact_id: parseInt(contactId),
+        createInvoiceMutation.mutate({
+            contact_id: contactId,
             invoice_date: invoiceDate,
             due_date: dueDate,
             lines: formattedLines,
@@ -118,6 +241,13 @@ export function InvoiceCreate() {
         }, 0);
     };
 
+    // Filter customers for autocomplete
+    const filteredCustomers = customerName
+        ? customers.filter((c) =>
+            c.name.toLowerCase().includes(customerName.toLowerCase())
+        )
+        : [];
+
     return (
         <Navigation>
             <div className="space-y-6">
@@ -127,30 +257,74 @@ export function InvoiceCreate() {
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-6">
-                    {/* Header Info */}
+                    {/* Customer Info */}
+                    <Card className="shadow-lg">
+                        <CardHeader>
+                            <CardTitle>Kundeninformationen</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="relative">
+                                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                                        Kundenname *
+                                    </label>
+                                    <Input
+                                        value={customerName}
+                                        onChange={(e) => {
+                                            setCustomerName(e.target.value);
+                                            setSelectedContactId(null);
+                                        }}
+                                        placeholder="Name eingeben..."
+                                        required
+                                    />
+                                    {/* Autocomplete dropdown */}
+                                    {customerName && filteredCustomers.length > 0 && !selectedContactId && (
+                                        <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-auto">
+                                            {filteredCustomers.map((contact) => (
+                                                <button
+                                                    key={contact.id}
+                                                    type="button"
+                                                    onClick={() => handleCustomerSelect(contact)}
+                                                    className="w-full px-4 py-2 text-left hover:bg-slate-50 flex items-center justify-between"
+                                                >
+                                                    <span>{contact.name}</span>
+                                                    <span className="text-xs text-slate-500">Vorhanden</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                    {selectedContactId && (
+                                        <p className="text-xs text-green-600 mt-1">✓ Kunde ausgewählt</p>
+                                    )}
+                                    {customerName && !selectedContactId && filteredCustomers.length === 0 && (
+                                        <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
+                                            <UserPlus className="w-3 h-3" />
+                                            Neuer Kunde wird erstellt
+                                        </p>
+                                    )}
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                                        Adresse
+                                    </label>
+                                    <Textarea
+                                        value={customerAddress}
+                                        onChange={(e) => setCustomerAddress(e.target.value)}
+                                        placeholder="Straße, PLZ Stadt"
+                                        rows={3}
+                                    />
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Invoice Details */}
                     <Card className="shadow-lg">
                         <CardHeader>
                             <CardTitle>Rechnungsdetails</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                                        Kunde *
-                                    </label>
-                                    <Select value={contactId} onValueChange={setContactId} required>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Kunde wählen..." />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {customers?.map((contact) => (
-                                                <SelectItem key={contact.id} value={contact.id.toString()}>
-                                                    {contact.name}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-2">
                                         Rechnungsdatum *
@@ -195,7 +369,7 @@ export function InvoiceCreate() {
                                         key={index}
                                         className="grid grid-cols-12 gap-4 p-4 bg-slate-50 rounded-lg"
                                     >
-                                        <div className="col-span-4">
+                                        <div className="col-span-3">
                                             <label className="block text-sm font-medium text-slate-700 mb-1">
                                                 Beschreibung *
                                             </label>
@@ -206,30 +380,9 @@ export function InvoiceCreate() {
                                                 placeholder="Leistung/Artikel"
                                             />
                                         </div>
-                                        <div className="col-span-2">
+                                        <div className="col-span-1">
                                             <label className="block text-sm font-medium text-slate-700 mb-1">
-                                                Erlöskonto *
-                                            </label>
-                                            <Select
-                                                value={line.account_id}
-                                                onValueChange={(value) => updateLine(index, 'account_id', value)}
-                                                required
-                                            >
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder="Konto..." />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {revenueAccounts.map((acc) => (
-                                                        <SelectItem key={acc.id} value={acc.id.toString()}>
-                                                            {acc.code} - {acc.name}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                        <div className="col-span-2">
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">
-                                                Menge
+                                                Menge *
                                             </label>
                                             <Input
                                                 type="number"
@@ -243,7 +396,27 @@ export function InvoiceCreate() {
                                         </div>
                                         <div className="col-span-2">
                                             <label className="block text-sm font-medium text-slate-700 mb-1">
-                                                Einzelpreis (€)
+                                                Einheit *
+                                            </label>
+                                            <Select
+                                                value={line.unit}
+                                                onValueChange={(value) => updateLine(index, 'unit', value)}
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="Stück">Stück</SelectItem>
+                                                    <SelectItem value="Stunde">Stunde</SelectItem>
+                                                    <SelectItem value="Tag">Tag</SelectItem>
+                                                    <SelectItem value="Monat">Monat</SelectItem>
+                                                    <SelectItem value="Pauschal">Pauschal</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="col-span-2">
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                                Einzelpreis (€) *
                                             </label>
                                             <Input
                                                 type="number"
@@ -255,19 +428,29 @@ export function InvoiceCreate() {
                                                 required
                                             />
                                         </div>
-                                        <div className="col-span-1">
+                                        <div className="col-span-2">
                                             <label className="block text-sm font-medium text-slate-700 mb-1">
-                                                MwSt %
+                                                USt. % *
                                             </label>
-                                            <Input
-                                                type="number"
-                                                step="0.01"
-                                                value={line.tax_rate}
-                                                onChange={(e) =>
-                                                    updateLine(index, 'tax_rate', parseFloat(e.target.value))
-                                                }
-                                                required
-                                            />
+                                            <Select
+                                                value={line.tax_rate.toString()}
+                                                onValueChange={(value) => handleTaxRateChange(index, parseFloat(value))}
+                                                defaultValue="19"
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="19% USt." />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="19">19% USt.</SelectItem>
+                                                    <SelectItem value="7">7% USt.</SelectItem>
+                                                    <SelectItem value="0">0% (steuerfrei)</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="col-span-1 flex items-center justify-center pt-6">
+                                            <span className="text-sm font-semibold">
+                                                {(line.quantity * line.unit_price * (1 + line.tax_rate / 100)).toFixed(2)} €
+                                            </span>
                                         </div>
                                         <div className="col-span-1 flex items-end">
                                             {lines.length > 1 && (
@@ -303,8 +486,8 @@ export function InvoiceCreate() {
                         <Button type="button" variant="outline" onClick={() => navigate('/invoices')}>
                             Abbrechen
                         </Button>
-                        <Button type="submit" disabled={createMutation.isPending}>
-                            {createMutation.isPending ? 'Erstelle...' : 'Rechnung erstellen'}
+                        <Button type="submit" disabled={createInvoiceMutation.isPending || createContactMutation.isPending}>
+                            {createInvoiceMutation.isPending || createContactMutation.isPending ? 'Erstelle...' : 'Rechnung erstellen'}
                         </Button>
                     </div>
                 </form>

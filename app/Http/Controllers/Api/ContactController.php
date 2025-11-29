@@ -60,6 +60,11 @@ class ContactController extends Controller
             $nextCode = intval($lastAccount->code) + 1;
         }
         
+        // Ensure the code is unique (in case of gaps)
+        while (\App\Modules\Accounting\Models\Account::where('code', (string)$nextCode)->exists()) {
+            $nextCode++;
+        }
+        
         // Create the account
         $account = \App\Modules\Accounting\Models\Account::create([
             'code' => (string)$nextCode,

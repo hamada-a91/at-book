@@ -67,6 +67,7 @@ class InvoiceController extends Controller
             $invoice->lines()->create([
                 'description' => $line['description'],
                 'quantity' => $line['quantity'],
+                'unit' => $line['unit'] ?? 'Stück',
                 'unit_price' => $line['unit_price'],
                 'tax_rate' => $line['tax_rate'],
                 'line_total' => $lineTotal,
