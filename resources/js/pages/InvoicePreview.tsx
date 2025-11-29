@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Navigation } from '@/components/Layout/Navigation';
+
 import { Button } from '@/components/ui/button';
 import { Printer, Download, Send, Save } from 'lucide-react';
 
@@ -87,11 +87,9 @@ export function InvoicePreview() {
 
     if (isLoading || !invoice) {
         return (
-            <Navigation>
-                <div className="flex items-center justify-center h-64">
-                    <p>Laden...</p>
-                </div>
-            </Navigation>
+            <div className="flex items-center justify-center h-64">
+                <p>Laden...</p>
+            </div>
         );
     }
 

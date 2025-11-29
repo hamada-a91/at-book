@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -7,7 +7,7 @@ import * as z from 'zod';
 import { ArrowLeft, Plus, Trash2, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
     Form,
     FormControl,
@@ -346,334 +346,327 @@ export function BookingCreate() {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-            <div className="container mx-auto py-8 px-4">
-                {/* Header */}
-                <div className="mb-6">
-                    <Link to="/" className="text-blue-600 hover:underline mb-2 inline-flex items-center gap-2">
-                        <ArrowLeft className="w-4 h-4" />
-                        Zurück zum Dashboard
-                    </Link>
-                    <h1 className="text-4xl font-bold text-slate-900">Neue Buchung</h1>
-                    <p className="text-slate-600">Buchungssatz erstellen (Doppelte Buchführung)</p>
+        <div className="space-y-6">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Neue Buchung</h1>
+                    <p className="text-slate-500 dark:text-slate-400">Erstellen Sie einen neuen Buchungssatz</p>
                 </div>
+                <Button variant="ghost" onClick={() => navigate('/bookings')} className="gap-2">
+                    <ArrowLeft className="w-4 h-4" />
+                    Zurück zur Übersicht
+                </Button>
+            </div>
 
-                {/* Form */}
-                <Card className="shadow-lg">
-                    <CardContent className="p-6">
-                        <Form {...form}>
-                            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                                {/* Header Data */}
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    <FormField
-                                        control={form.control}
-                                        name="date"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel>Datum *</FormLabel>
-                                                <FormControl>
-                                                    <Input type="date" {...field} />
-                                                </FormControl>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={form.control}
-                                        name="description"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel>Beschreibung *</FormLabel>
-                                                <FormControl>
-                                                    <Input placeholder="z.B. Büromaterial Einkauf" {...field} />
-                                                </FormControl>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={form.control}
-                                        name="contact_id"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel>Kontakt (Optional)</FormLabel>
-                                                <FormControl>
-                                                    <ContactSelector
-                                                        contacts={contacts}
-                                                        value={field.value}
-                                                        onChange={field.onChange}
-                                                    />
-                                                </FormControl>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
+            <div className="grid gap-6 lg:grid-cols-12">
+                {/* Main Form Area */}
+                <div className="lg:col-span-12 space-y-6">
+                    {/* Quick Entry Card */}
+                    <Card className="border-none shadow-md bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 dark:border dark:border-blue-900/50">
+                        <CardHeader className="pb-4">
+                            <div className="flex items-center gap-2">
+                                <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
+                                    <Zap className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                                </div>
+                                <div>
+                                    <CardTitle className="text-lg text-blue-900 dark:text-blue-100">Schnelleingabe</CardTitle>
+                                    <CardDescription className="text-blue-700 dark:text-blue-300">
+                                        Automatische Generierung von Buchungssätzen
+                                    </CardDescription>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+                                <div className="lg:col-span-2">
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                                        Kontakt *
+                                    </label>
+                                    <ContactSelector
+                                        contacts={contacts}
+                                        value={quickEntry.contact_id}
+                                        onChange={(value) => setQuickEntry(prev => ({ ...prev, contact_id: value }))}
                                     />
                                 </div>
 
-                                {/* Quick Entry Section */}
-                                <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
-                                    <CardContent className="p-4">
-                                        <div className="flex items-center gap-2 mb-4">
-                                            <Zap className="w-5 h-5 text-blue-600" />
-                                            <h3 className="text-lg font-semibold text-blue-900">Schnelleingabe</h3>
-                                            <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded">Neu!</span>
+                                <div className="lg:col-span-2">
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                                        Gegenkonto *
+                                    </label>
+                                    <AccountSelector
+                                        accounts={accounts}
+                                        value={quickEntry.contra_account_id}
+                                        onChange={(value) => setQuickEntry(prev => ({ ...prev, contra_account_id: value }))}
+                                        filterType={['revenue', 'expense']}
+                                        placeholder="Erlös-/Aufwandskonto..."
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                                        MwSt *
+                                    </label>
+                                    <Select
+                                        value={quickEntry.vat_rate}
+                                        onValueChange={(value) => setQuickEntry(prev => ({ ...prev, vat_rate: value }))}
+                                    >
+                                        <SelectTrigger className="bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="19">19%</SelectItem>
+                                            <SelectItem value="7">7%</SelectItem>
+                                            <SelectItem value="0">0%</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                                        Betrag (€) *
+                                    </label>
+                                    <Input
+                                        type="number"
+                                        step="0.01"
+                                        placeholder="0.00"
+                                        value={quickEntry.gross_amount}
+                                        onChange={(e) => setQuickEntry(prev => ({ ...prev, gross_amount: e.target.value }))}
+                                        className="bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="mt-4 flex items-center justify-between">
+                                <div className="flex items-center space-x-2">
+                                    <Checkbox
+                                        id="is_paid"
+                                        checked={quickEntry.is_paid}
+                                        onCheckedChange={(checked) => setQuickEntry(prev => ({ ...prev, is_paid: !!checked }))}
+                                        className="border-blue-400 data-[state=checked]:bg-blue-600"
+                                    />
+                                    <label
+                                        htmlFor="is_paid"
+                                        className="text-sm font-medium leading-none text-slate-700 dark:text-slate-300 cursor-pointer"
+                                    >
+                                        Als "Bezahlt" markieren
+                                    </label>
+                                    {quickEntry.is_paid && (
+                                        <div className="w-[200px] ml-4">
+                                            <AccountSelector
+                                                accounts={accounts}
+                                                value={quickEntry.payment_account_id}
+                                                onChange={(value) => setQuickEntry(prev => ({ ...prev, payment_account_id: value }))}
+                                                filterType={['asset']}
+                                                placeholder="Kasse/Bank..."
+                                            />
                                         </div>
-                                        <p className="text-sm text-slate-600 mb-4">
-                                            Geben Sie Kontakt, Gegenkonto, MwSt und Bruttobetrag ein. Die Buchungszeilen werden automatisch generiert.
-                                        </p>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-                                            {/* Contact */}
-                                            <div>
-                                                <label className="block text-sm font-medium text-slate-700 mb-1">
-                                                    Kontakt *
-                                                </label>
-                                                <ContactSelector
-                                                    contacts={contacts}
-                                                    value={quickEntry.contact_id}
-                                                    onChange={(value) => setQuickEntry(prev => ({ ...prev, contact_id: value }))}
-                                                />
-                                            </div>
-
-                                            {/* Contra Account */}
-                                            <div>
-                                                <label className="block text-sm font-medium text-slate-700 mb-1">
-                                                    Gegenkonto (Erlös/Aufwand) *
-                                                </label>
-                                                <AccountSelector
-                                                    accounts={accounts}
-                                                    value={quickEntry.contra_account_id}
-                                                    onChange={(value) => setQuickEntry(prev => ({ ...prev, contra_account_id: value }))}
-                                                    filterType={['revenue', 'expense']}
-                                                    placeholder="Erlös-/Aufwandskonto..."
-                                                />
-                                            </div>
-
-                                            {/* VAT Rate */}
-                                            <div>
-                                                <label className="block text-sm font-medium text-slate-700 mb-1">
-                                                    MwSt-Satz *
-                                                </label>
-                                                <Select
-                                                    value={quickEntry.vat_rate}
-                                                    onValueChange={(value) => setQuickEntry(prev => ({ ...prev, vat_rate: value }))}
-                                                >
-                                                    <SelectTrigger>
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="19">19%</SelectItem>
-                                                        <SelectItem value="7">7%</SelectItem>
-                                                        <SelectItem value="0">0% (Steuerfrei)</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-
-                                            {/* Gross Amount */}
-                                            <div>
-                                                <label className="block text-sm font-medium text-slate-700 mb-1">
-                                                    Bruttobetrag (€) *
-                                                </label>
-                                                <Input
-                                                    type="number"
-                                                    step="0.01"
-                                                    placeholder="119.00"
-                                                    value={quickEntry.gross_amount}
-                                                    onChange={(e) => setQuickEntry(prev => ({ ...prev, gross_amount: e.target.value }))}
-                                                />
-                                            </div>
-
-                                            {/* Payment Option */}
-                                            <div>
-                                                <label className="block text-sm font-medium text-slate-700 mb-1">
-                                                    Zahlung
-                                                </label>
-                                                <div className="flex items-center space-x-2 h-10">
-                                                    <Checkbox
-                                                        id="is_paid"
-                                                        checked={quickEntry.is_paid}
-                                                        onCheckedChange={(checked) => setQuickEntry(prev => ({ ...prev, is_paid: !!checked }))}
-                                                    />
-                                                    <label
-                                                        htmlFor="is_paid"
-                                                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                                                    >
-                                                        Direkt bezahlt?
-                                                    </label>
-                                                </div>
-                                                {quickEntry.is_paid && (
-                                                    <div className="mt-2">
-                                                        <AccountSelector
-                                                            accounts={accounts}
-                                                            value={quickEntry.payment_account_id}
-                                                            onChange={(value) => setQuickEntry(prev => ({ ...prev, payment_account_id: value }))}
-                                                            filterType={['asset']}
-                                                            placeholder="Kasse/Bank..."
-                                                        />
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            {/* Auto-Fill Button */}
-                                            <div className="flex items-end">
-                                                <Button
-                                                    type="button"
-                                                    onClick={handleQuickEntry}
-                                                    className="w-full bg-blue-600 hover:bg-blue-700"
-                                                >
-                                                    <Zap className="w-4 h-4 mr-2" />
-                                                    Ausfüllen
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-
-                                {/* Lines */}
-                                <div className="space-y-4">
-                                    <div className="flex justify-between items-center">
-                                        <h3 className="text-lg font-medium">Buchungszeilen</h3>
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => append({ account_id: '', type: 'debit', amount: 0 })}
-                                        >
-                                            <Plus className="w-4 h-4 mr-2" /> Zeile hinzufügen
-                                        </Button>
-                                    </div>
-
-                                    {fields.map((field, index) => (
-                                        <div key={field.id} className="grid grid-cols-12 gap-3 p-4 bg-slate-50 rounded-lg">
-                                            {/* Account */}
-                                            <div className="col-span-5">
-                                                <FormField
-                                                    control={form.control}
-                                                    name={`lines.${index}.account_id`}
-                                                    render={({ field }) => (
-                                                        <FormItem>
-                                                            <FormLabel>Konto</FormLabel>
-                                                            <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                                                <FormControl>
-                                                                    <SelectTrigger>
-                                                                        <SelectValue placeholder="Konto wählen..." />
-                                                                    </SelectTrigger>
-                                                                </FormControl>
-                                                                <SelectContent>
-                                                                    {accounts?.map((acc) => (
-                                                                        <SelectItem key={acc.id} value={String(acc.id)}>
-                                                                            {acc.code} - {acc.name}
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                </SelectContent>
-                                                            </Select>
-                                                            <FormMessage />
-                                                        </FormItem>
-                                                    )}
-                                                />
-                                            </div>
-
-                                            {/* Type */}
-                                            <div className="col-span-2">
-                                                <FormField
-                                                    control={form.control}
-                                                    name={`lines.${index}.type`}
-                                                    render={({ field }) => (
-                                                        <FormItem>
-                                                            <FormLabel>Typ</FormLabel>
-                                                            <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                                                <FormControl>
-                                                                    <SelectTrigger>
-                                                                        <SelectValue />
-                                                                    </SelectTrigger>
-                                                                </FormControl>
-                                                                <SelectContent>
-                                                                    <SelectItem value="debit">Soll</SelectItem>
-                                                                    <SelectItem value="credit">Haben</SelectItem>
-                                                                </SelectContent>
-                                                            </Select>
-                                                            <FormMessage />
-                                                        </FormItem>
-                                                    )}
-                                                />
-                                            </div>
-
-                                            {/* Amount with Rounding */}
-                                            <div className="col-span-3">
-                                                <FormField
-                                                    control={form.control}
-                                                    name={`lines.${index}.amount`}
-                                                    render={({ field }) => (
-                                                        <FormItem>
-                                                            <FormLabel>Betrag (€)</FormLabel>
-                                                            <FormControl>
-                                                                <Input
-                                                                    type="number"
-                                                                    step="0.01"
-                                                                    {...field}
-                                                                    value={field.value ? roundToTwoDecimals(parseFloat(String(field.value))) : ''}
-                                                                    onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                                                                />
-                                                            </FormControl>
-                                                            <FormMessage />
-                                                        </FormItem>
-                                                    )}
-                                                />
-                                            </div>
-
-                                            {/* Delete */}
-                                            <div className="col-span-2 flex items-end">
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    onClick={() => remove(index)}
-                                                    disabled={fields.length <= 2}
-                                                >
-                                                    <Trash2 className="w-4 h-4 text-red-500" />
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    ))}
-
-                                    {form.formState.errors.lines?.root && (
-                                        <p className="text-red-500 text-sm font-medium">{form.formState.errors.lines.root.message}</p>
                                     )}
                                 </div>
+                                <Button
+                                    type="button"
+                                    onClick={handleQuickEntry}
+                                    className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
+                                >
+                                    <Zap className="w-4 h-4 mr-2" />
+                                    Übernehmen
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
 
-                                {/* Balance Check with Formatted Currency */}
-                                <div className={`p-4 rounded-lg ${isBalanced ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
-                                    <div className="grid grid-cols-3 gap-4 text-sm">
-                                        <div>
-                                            <span className="font-medium text-slate-700">Soll:</span>
-                                            <span className="ml-2 font-bold">{formatEuro(debitSum)}</span>
+                    {/* Manual Entry Form */}
+                    <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
+                        <CardHeader>
+                            <CardTitle>Buchungsdetails</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <Form {...form}>
+                                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+                                    {/* Header Data */}
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                        <FormField
+                                            control={form.control}
+                                            name="date"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel className="text-slate-700 dark:text-slate-300">Datum *</FormLabel>
+                                                    <FormControl>
+                                                        <Input type="date" {...field} className="bg-white dark:bg-slate-950" />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={form.control}
+                                            name="description"
+                                            render={({ field }) => (
+                                                <FormItem className="md:col-span-2">
+                                                    <FormLabel className="text-slate-700 dark:text-slate-300">Beschreibung *</FormLabel>
+                                                    <FormControl>
+                                                        <Input placeholder="z.B. Büromaterial Einkauf bei Müller" {...field} className="bg-white dark:bg-slate-950" />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                    </div>
+
+                                    {/* Lines */}
+                                    <div className="space-y-4">
+                                        <div className="flex justify-between items-center">
+                                            <h3 className="text-lg font-medium text-slate-900 dark:text-slate-100">Buchungszeilen</h3>
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => append({ account_id: '', type: 'debit', amount: 0 })}
+                                                className="bg-white dark:bg-slate-950"
+                                            >
+                                                <Plus className="w-4 h-4 mr-2" /> Zeile hinzufügen
+                                            </Button>
                                         </div>
-                                        <div>
-                                            <span className="font-medium text-slate-700">Haben:</span>
-                                            <span className="ml-2 font-bold">{formatEuro(creditSum)}</span>
+
+                                        <div className="space-y-3">
+                                            {fields.map((field, index) => (
+                                                <div key={field.id} className="group relative grid grid-cols-12 gap-4 p-4 bg-slate-50/50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800 hover:border-slate-200 dark:hover:border-slate-700 transition-colors">
+                                                    {/* Account */}
+                                                    <div className="col-span-12 md:col-span-5">
+                                                        <FormField
+                                                            control={form.control}
+                                                            name={`lines.${index}.account_id`}
+                                                            render={({ field }) => (
+                                                                <FormItem>
+                                                                    <FormLabel className="text-xs text-slate-500 dark:text-slate-400">Konto</FormLabel>
+                                                                    <Select onValueChange={field.onChange} value={field.value}>
+                                                                        <FormControl>
+                                                                            <SelectTrigger className="bg-white dark:bg-slate-950 h-10">
+                                                                                <SelectValue placeholder="Konto wählen..." />
+                                                                            </SelectTrigger>
+                                                                        </FormControl>
+                                                                        <SelectContent>
+                                                                            {accounts?.map((acc) => (
+                                                                                <SelectItem key={acc.id} value={String(acc.id)}>
+                                                                                    <span className="font-mono text-slate-500 mr-2">{acc.code}</span>
+                                                                                    {acc.name}
+                                                                                </SelectItem>
+                                                                            ))}
+                                                                        </SelectContent>
+                                                                    </Select>
+                                                                    <FormMessage />
+                                                                </FormItem>
+                                                            )}
+                                                        />
+                                                    </div>
+
+                                                    {/* Type */}
+                                                    <div className="col-span-6 md:col-span-3">
+                                                        <FormField
+                                                            control={form.control}
+                                                            name={`lines.${index}.type`}
+                                                            render={({ field }) => (
+                                                                <FormItem>
+                                                                    <FormLabel className="text-xs text-slate-500 dark:text-slate-400">Typ</FormLabel>
+                                                                    <Select onValueChange={field.onChange} value={field.value}>
+                                                                        <FormControl>
+                                                                            <SelectTrigger className={`h-10 ${field.value === 'debit' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'} bg-white dark:bg-slate-950`}>
+                                                                                <SelectValue />
+                                                                            </SelectTrigger>
+                                                                        </FormControl>
+                                                                        <SelectContent>
+                                                                            <SelectItem value="debit" className="text-emerald-600">Soll</SelectItem>
+                                                                            <SelectItem value="credit" className="text-rose-600">Haben</SelectItem>
+                                                                        </SelectContent>
+                                                                    </Select>
+                                                                    <FormMessage />
+                                                                </FormItem>
+                                                            )}
+                                                        />
+                                                    </div>
+
+                                                    {/* Amount */}
+                                                    <div className="col-span-6 md:col-span-3">
+                                                        <FormField
+                                                            control={form.control}
+                                                            name={`lines.${index}.amount`}
+                                                            render={({ field }) => (
+                                                                <FormItem>
+                                                                    <FormLabel className="text-xs text-slate-500 dark:text-slate-400">Betrag (€)</FormLabel>
+                                                                    <FormControl>
+                                                                        <Input
+                                                                            type="number"
+                                                                            step="0.01"
+                                                                            {...field}
+                                                                            value={field.value ? roundToTwoDecimals(parseFloat(String(field.value))) : ''}
+                                                                            onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                                                                            className="h-10 font-mono text-right bg-white dark:bg-slate-950"
+                                                                        />
+                                                                    </FormControl>
+                                                                    <FormMessage />
+                                                                </FormItem>
+                                                            )}
+                                                        />
+                                                    </div>
+
+                                                    {/* Delete */}
+                                                    <div className="col-span-12 md:col-span-1 flex items-end justify-end pb-1">
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            onClick={() => remove(index)}
+                                                            disabled={fields.length <= 2}
+                                                            className="text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            ))}
                                         </div>
-                                        <div>
-                                            <span className={`font-medium ${isBalanced ? 'text-green-700' : 'text-red-700'}`}>
-                                                {isBalanced ? '✓ Ausgeglichen' : '✗ Nicht ausgeglichen'}
-                                            </span>
+                                        {form.formState.errors.lines?.root && (
+                                            <p className="text-rose-500 text-sm font-medium">{form.formState.errors.lines.root.message}</p>
+                                        )}
+                                    </div>
+
+                                    {/* Footer Actions */}
+                                    <div className="flex flex-col md:flex-row items-center justify-between gap-6 pt-6 border-t border-slate-100 dark:border-slate-800">
+                                        {/* Balance Indicator */}
+                                        <div className={`flex items-center gap-6 px-4 py-2 rounded-full ${isBalanced ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400' : 'bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-400'}`}>
+                                            <div className="text-sm">
+                                                <span className="opacity-70 mr-2">Soll:</span>
+                                                <span className="font-mono font-bold">{formatEuro(debitSum)}</span>
+                                            </div>
+                                            <div className="h-4 w-px bg-current opacity-20" />
+                                            <div className="text-sm">
+                                                <span className="opacity-70 mr-2">Haben:</span>
+                                                <span className="font-mono font-bold">{formatEuro(creditSum)}</span>
+                                            </div>
+                                            <div className="h-4 w-px bg-current opacity-20" />
+                                            <div className="text-sm font-medium flex items-center gap-1.5">
+                                                {isBalanced ? (
+                                                    <><span>✓</span> Ausgeglichen</>
+                                                ) : (
+                                                    <><span>!</span> Differenz: {formatEuro(Math.abs(debitSum - creditSum))}</>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-3 w-full md:w-auto">
+                                            <Button type="button" variant="outline" onClick={() => navigate('/bookings')} className="flex-1 md:flex-none">
+                                                Abbrechen
+                                            </Button>
+                                            <Button type="submit" disabled={!isBalanced || createMutation.isPending} className="flex-1 md:flex-none min-w-[140px]">
+                                                {createMutation.isPending ? 'Speichert...' : 'Buchung speichern'}
+                                            </Button>
                                         </div>
                                     </div>
-                                </div>
-
-                                {/* Submit */}
-                                <div className="flex gap-3">
-                                    <Button type="submit" disabled={!isBalanced || createMutation.isPending} className="flex-1">
-                                        {createMutation.isPending ? 'Wird gespeichert...' : 'Buchung speichern (Entwurf)'}
-                                    </Button>
-                                    <Link to="/" className="flex-1">
-                                        <Button type="button" variant="outline" className="w-full">
-                                            Abbrechen
-                                        </Button>
-                                    </Link>
-                                </div>
-                            </form>
-                        </Form>
-                    </CardContent>
-                </Card>
+                                </form>
+                            </Form>
+                        </CardContent>
+                    </Card>
+                </div>
             </div>
         </div>
     );

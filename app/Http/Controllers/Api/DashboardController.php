@@ -98,6 +98,74 @@ class DashboardController extends Controller
     }
     
     /**
+     * Get chart data for income vs expenses
+     */
+    public function chart(Request $request): JsonResponse
+    {
+        $startDate = $request->input('start_date', now()->startOfMonth()->toDateString());
+        $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
+        $groupBy = $request->input('group_by', 'day'); // 'day' or 'month'
+
+        $dateFormat = $groupBy === 'month' ? '%Y-%m' : '%Y-%m-%d';
+        $phpDateFormat = $groupBy === 'month' ? 'Y-m' : 'Y-m-d';
+
+        // Use raw SQL for efficient aggregation
+        // Note: SQLite uses strftime, MySQL uses DATE_FORMAT. Assuming MySQL/MariaDB for production but check local env.
+        // User is on WSL/Ubuntu, likely MySQL or SQLite. Laravel projects usually default to MySQL.
+        // Let's use a collection-based approach to be DB-agnostic if performance allows, or try to detect driver.
+        // For robustness in this environment, let's fetch relevant lines and aggregate in PHP.
+        
+        $entries = JournalEntry::with(['lines.account'])
+            ->where('status', 'posted')
+            ->whereBetween('booking_date', [$startDate, $endDate])
+            ->orderBy('booking_date')
+            ->get();
+
+        $data = [];
+
+        foreach ($entries as $entry) {
+            $date = \Carbon\Carbon::parse($entry->booking_date)->format($phpDateFormat);
+            
+            if (!isset($data[$date])) {
+                $data[$date] = ['date' => $date, 'income' => 0, 'expense' => 0];
+            }
+
+            foreach ($entry->lines as $line) {
+                if (!$line->account) continue;
+
+                if ($line->account->type === 'revenue') {
+                    if ($line->type === 'credit') {
+                        $data[$date]['income'] += $line->amount;
+                    } else {
+                        $data[$date]['income'] -= $line->amount;
+                    }
+                } elseif ($line->account->type === 'expense') {
+                    if ($line->type === 'debit') {
+                        $data[$date]['expense'] += $line->amount;
+                    } else {
+                        $data[$date]['expense'] -= $line->amount;
+                    }
+                }
+            }
+        }
+
+        // Fill missing dates if needed, but for now just return what we have
+        // Sort by date
+        ksort($data);
+
+        // Convert to array and format amounts
+        $chartData = array_values(array_map(function ($item) {
+            return [
+                'name' => $item['date'],
+                'income' => round($item['income'] / 100, 2),
+                'expense' => round($item['expense'] / 100, 2),
+            ];
+        }, $data));
+
+        return response()->json($chartData);
+    }
+
+    /**
      * Format currency in cents to Euro string
      */
     private function formatCurrency(int $cents): string

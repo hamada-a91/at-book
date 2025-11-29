@@ -1,17 +1,26 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Plus, Eye, Lock, RotateCcw, CheckCircle2, AlertCircle, X } from 'lucide-react';
-import { Navigation } from '@/components/Layout/Navigation';
-import { PageHeader } from '@/components/Layout/PageHeader';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Plus, Eye, Lock, RotateCcw, CheckCircle2, AlertCircle, X, FileText, Calendar, ArrowRight } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import {
     Dialog,
     DialogContent,
     DialogHeader,
     DialogTitle,
+    DialogDescription,
 } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from '@/components/ui/table';
 
 interface JournalEntry {
     id: number;
@@ -40,16 +49,10 @@ const statusLabels = {
     cancelled: 'Storniert',
 };
 
-const statusColors = {
-    draft: 'bg-yellow-50 text-yellow-700 border-yellow-200',
-    posted: 'bg-green-50 text-green-700 border-green-200',
-    cancelled: 'bg-red-50 text-red-700 border-red-200',
-};
-
-const statusIcons = {
-    draft: AlertCircle,
-    posted: CheckCircle2,
-    cancelled: X,
+const statusVariants: Record<string, "default" | "secondary" | "destructive" | "outline" | "success" | "warning"> = {
+    draft: 'warning',
+    posted: 'success',
+    cancelled: 'destructive',
 };
 
 export function JournalList() {
@@ -144,62 +147,103 @@ export function JournalList() {
     const postedCount = bookingsList.filter((b) => b.status === 'posted').length;
 
     return (
-        <Navigation>
-            <PageHeader
-                title="Journal"
-                subtitle="Alle Buchungen (GoBD-konform)"
-                action={{
-                    label: 'Neue Buchung',
-                    icon: Plus,
-                    href: '/bookings/create',
-                }}
-                stats={[
-                    { label: 'Gesamt', value: bookingsList.length },
-                    { label: 'Entwürfe', value: draftCount },
-                    { label: 'Gebucht', value: postedCount },
-                ]}
-            />
+        <div className="space-y-6">
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Journal</h1>
+                    <p className="text-slate-500 dark:text-slate-400">Alle Buchungen (GoBD-konform)</p>
+                </div>
+                <Link to="/bookings/create">
+                    <Button className="gap-2 shadow-lg shadow-primary/20">
+                        <Plus className="w-4 h-4" />
+                        Neue Buchung
+                    </Button>
+                </Link>
+            </div>
+
+            {/* Stats */}
+            <div className="grid gap-4 md:grid-cols-3">
+                <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
+                    <CardContent className="p-6 flex items-center justify-between">
+                        <div>
+                            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Gesamt Buchungen</p>
+                            <div className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-1">{bookingsList.length}</div>
+                        </div>
+                        <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                            <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                        </div>
+                    </CardContent>
+                </Card>
+                <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
+                    <CardContent className="p-6 flex items-center justify-between">
+                        <div>
+                            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Entwürfe</p>
+                            <div className="text-2xl font-bold text-amber-600 dark:text-amber-500 mt-1">{draftCount}</div>
+                        </div>
+                        <div className="h-10 w-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                            <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                        </div>
+                    </CardContent>
+                </Card>
+                <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
+                    <CardContent className="p-6 flex items-center justify-between">
+                        <div>
+                            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Gebucht</p>
+                            <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-500 mt-1">{postedCount}</div>
+                        </div>
+                        <div className="h-10 w-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                            <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
 
             {/* Filters */}
-            <Card className="shadow-md mb-8">
-                <CardContent className="p-6">
-                    <div className="flex gap-3">
+            <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
+                <CardContent className="p-4">
+                    <div className="flex gap-2">
                         <Button
-                            variant={statusFilter === 'all' ? 'default' : 'outline'}
+                            variant={statusFilter === 'all' ? 'default' : 'ghost'}
                             onClick={() => setStatusFilter('all')}
+                            size="sm"
+                            className="rounded-full"
                         >
-                            Alle ({bookingsList.length})
+                            Alle
                         </Button>
                         <Button
-                            variant={statusFilter === 'draft' ? 'default' : 'outline'}
+                            variant={statusFilter === 'draft' ? 'default' : 'ghost'}
                             onClick={() => setStatusFilter('draft')}
+                            size="sm"
+                            className="rounded-full"
                         >
-                            Entwürfe ({draftCount})
+                            Entwürfe
                         </Button>
                         <Button
-                            variant={statusFilter === 'posted' ? 'default' : 'outline'}
+                            variant={statusFilter === 'posted' ? 'default' : 'ghost'}
                             onClick={() => setStatusFilter('posted')}
+                            size="sm"
+                            className="rounded-full"
                         >
-                            Gebucht ({postedCount})
+                            Gebucht
                         </Button>
                     </div>
                 </CardContent>
             </Card>
 
             {/* Bookings Table */}
-            <Card className="shadow-lg">
+            <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm overflow-hidden">
                 {isLoading ? (
                     <CardContent className="p-12 text-center">
-                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                        <p className="text-slate-600">Lade Buchungen...</p>
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+                        <p className="text-slate-500 dark:text-slate-400">Lade Buchungen...</p>
                     </CardContent>
                 ) : !bookingsList || bookingsList.length === 0 ? (
                     <CardContent className="p-12 text-center">
-                        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <Plus className="w-8 h-8 text-slate-400" />
+                        <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <Plus className="w-6 h-6 text-slate-400" />
                         </div>
-                        <h3 className="text-lg font-semibold text-slate-900 mb-2">Keine Buchungen gefunden</h3>
-                        <p className="text-slate-600 mb-6">
+                        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2">Keine Buchungen gefunden</h3>
+                        <p className="text-slate-500 dark:text-slate-400 mb-6">
                             {statusFilter !== 'all'
                                 ? `Keine ${statusFilter === 'draft' ? 'Entwürfe' : 'gebuchten Einträge'} vorhanden.`
                                 : 'Erstellen Sie Ihre erste Buchung.'}
@@ -213,136 +257,133 @@ export function JournalList() {
                     </CardContent>
                 ) : (
                     <div className="overflow-x-auto">
-                        <table className="w-full">
-                            <thead className="bg-slate-50 border-b-2 border-slate-200">
-                                <tr>
-                                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                                        ID
-                                    </th>
-                                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                                        Datum
-                                    </th>
-                                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                                        Beschreibung
-                                    </th>
-                                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                                        Status
-                                    </th>
-                                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                                        Zeilen
-                                    </th>
-                                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                                        Aktionen
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 bg-white">
+                        <Table>
+                            <TableHeader className="bg-slate-50/50 dark:bg-slate-800/50">
+                                <TableRow>
+                                    <TableHead className="w-[80px]">ID</TableHead>
+                                    <TableHead>Datum</TableHead>
+                                    <TableHead>Beschreibung</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead>Zeilen</TableHead>
+                                    <TableHead className="text-right">Aktionen</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
                                 {bookingsList.map((booking) => {
-                                    const StatusIcon = statusIcons[booking.status];
                                     const canReverse = booking.status === 'posted' && booking.locked_at;
                                     const canLock = booking.status === 'draft';
 
                                     return (
-                                        <tr key={booking.id} className="hover:bg-slate-50 transition-colors">
-                                            <td className="px-6 py-4 text-sm font-medium text-slate-900">
-                                                {booking.id}
-                                            </td>
-                                            <td className="px-6 py-4 text-sm text-slate-700">
-                                                {formatDate(booking.booking_date)}
-                                            </td>
-                                            <td className="px-6 py-4 text-sm text-slate-900 font-medium">
+                                        <TableRow key={booking.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
+                                            <TableCell className="font-mono font-medium text-slate-900 dark:text-slate-100">
+                                                #{booking.id}
+                                            </TableCell>
+                                            <TableCell className="text-slate-700 dark:text-slate-300">
+                                                <div className="flex items-center gap-2">
+                                                    <Calendar className="w-3 h-3 text-slate-400" />
+                                                    {formatDate(booking.booking_date)}
+                                                </div>
+                                            </TableCell>
+                                            <TableCell className="text-slate-900 dark:text-slate-100 font-medium">
                                                 {booking.description}
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <span
-                                                    className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${statusColors[booking.status]
-                                                        }`}
-                                                >
-                                                    <StatusIcon className="w-3 h-3 mr-1.5" />
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge variant={statusVariants[booking.status]}>
                                                     {statusLabels[booking.status]}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4 text-sm text-slate-600">
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="text-slate-500 dark:text-slate-400">
                                                 {booking.lines?.length || 0}
-                                            </td>
-                                            <td className="px-6 py-4 text-sm">
-                                                <div className="flex items-center gap-3">
-                                                    <button
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
                                                         onClick={() => viewDetails(booking.id)}
-                                                        className="text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                                                        className="h-8 px-2 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20"
                                                     >
-                                                        <Eye className="w-4 h-4" />
+                                                        <Eye className="w-4 h-4 mr-1" />
                                                         Details
-                                                    </button>
+                                                    </Button>
                                                     {canLock && (
-                                                        <button
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
                                                             onClick={() => handleLock(booking.id)}
-                                                            className="text-green-600 hover:text-green-700 font-medium flex items-center gap-1"
+                                                            className="h-8 px-2 text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
                                                             disabled={lockMutation.isPending}
                                                         >
-                                                            <Lock className="w-4 h-4" />
+                                                            <Lock className="w-4 h-4 mr-1" />
                                                             Buchen
-                                                        </button>
+                                                        </Button>
                                                     )}
                                                     {canReverse && (
-                                                        <button
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
                                                             onClick={() => handleReverse(booking)}
-                                                            className="text-red-600 hover:text-red-700 font-medium flex items-center gap-1"
+                                                            className="h-8 px-2 text-rose-600 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-900/20"
                                                             disabled={reverseMutation.isPending}
                                                         >
-                                                            <RotateCcw className="w-4 h-4" />
+                                                            <RotateCcw className="w-4 h-4 mr-1" />
                                                             Stornieren
-                                                        </button>
+                                                        </Button>
                                                     )}
                                                 </div>
-                                            </td>
-                                        </tr>
+                                            </TableCell>
+                                        </TableRow>
                                     );
                                 })}
-                            </tbody>
-                        </table>
+                            </TableBody>
+                        </Table>
                     </div>
                 )}
             </Card>
 
             {/* Details Dialog */}
             <Dialog open={!!selectedBooking} onOpenChange={(open) => !open && setSelectedBooking(null)}>
-                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl">
                     <DialogHeader>
-                        <DialogTitle className="text-2xl">Buchungsdetails</DialogTitle>
+                        <DialogTitle className="text-2xl flex items-center gap-2">
+                            <FileText className="w-6 h-6 text-primary" />
+                            Buchungsdetails
+                        </DialogTitle>
+                        <DialogDescription>
+                            Detaillierte Ansicht der Buchung #{selectedBooking?.id}
+                        </DialogDescription>
                     </DialogHeader>
 
                     {selectedBooking && (
-                        <div className="space-y-6">
+                        <div className="space-y-6 mt-4">
                             {/* Header Info */}
-                            <div className="grid grid-cols-2 gap-6 p-6 bg-slate-50 rounded-lg">
+                            <div className="grid grid-cols-2 gap-6 p-6 bg-slate-50/50 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-700">
                                 <div>
-                                    <p className="text-sm text-slate-600 mb-1">Buchungs-ID</p>
-                                    <p className="text-lg font-semibold text-slate-900">#{selectedBooking.id}</p>
+                                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">Buchungs-ID</p>
+                                    <p className="text-lg font-semibold text-slate-900 dark:text-slate-100 font-mono">#{selectedBooking.id}</p>
                                 </div>
                                 <div>
-                                    <p className="text-sm text-slate-600 mb-1">Datum</p>
-                                    <p className="text-lg font-semibold text-slate-900">
+                                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">Datum</p>
+                                    <p className="text-lg font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                                        <Calendar className="w-4 h-4 text-slate-400" />
                                         {formatDate(selectedBooking.booking_date)}
                                     </p>
                                 </div>
                                 <div className="col-span-2">
-                                    <p className="text-sm text-slate-600 mb-1">Beschreibung</p>
-                                    <p className="text-lg font-semibold text-slate-900">{selectedBooking.description}</p>
+                                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">Beschreibung</p>
+                                    <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">{selectedBooking.description}</p>
                                 </div>
                                 <div>
-                                    <p className="text-sm text-slate-600 mb-1">Status</p>
-                                    <span
-                                        className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${statusColors[selectedBooking.status]
-                                            }`}
-                                    >
+                                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">Status</p>
+                                    <Badge variant={statusVariants[selectedBooking.status]}>
                                         {statusLabels[selectedBooking.status]}
-                                    </span>
+                                    </Badge>
                                 </div>
                                 {selectedBooking.locked_at && (
                                     <div>
-                                        <p className="text-sm text-slate-600 mb-1">Gebucht am</p>
-                                        <p className="text-sm text-slate-900">
+                                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">Gebucht am</p>
+                                        <p className="text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                                            <Lock className="w-3 h-3 text-emerald-500" />
                                             {formatDate(selectedBooking.locked_at)}
                                         </p>
                                     </div>
@@ -351,59 +392,51 @@ export function JournalList() {
 
                             {/* Booking Lines */}
                             <div>
-                                <h3 className="text-lg font-semibold text-slate-900 mb-4">Buchungszeilen</h3>
-                                <div className="border border-slate-200 rounded-lg overflow-hidden">
-                                    <table className="w-full">
-                                        <thead className="bg-slate-50">
-                                            <tr>
-                                                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">
-                                                    Konto
-                                                </th>
-                                                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">
-                                                    Typ
-                                                </th>
-                                                <th className="px-4 py-3 text-right text-sm font-semibold text-slate-700">
-                                                    Betrag
-                                                </th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-100">
+                                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
+                                    <ArrowRight className="w-4 h-4 text-primary" />
+                                    Buchungszeilen
+                                </h3>
+                                <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+                                    <Table>
+                                        <TableHeader className="bg-slate-50 dark:bg-slate-800">
+                                            <TableRow>
+                                                <TableHead>Konto</TableHead>
+                                                <TableHead>Typ</TableHead>
+                                                <TableHead className="text-right">Betrag</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
                                             {selectedBooking.lines?.map((line) => (
-                                                <tr key={line.id} className="hover:bg-slate-50">
-                                                    <td className="px-4 py-3 text-sm text-slate-900">
+                                                <TableRow key={line.id} className="hover:bg-slate-50 dark:hover:bg-slate-800">
+                                                    <TableCell className="text-sm text-slate-900 dark:text-slate-100 font-medium">
                                                         {line.account
                                                             ? `${line.account.code} - ${line.account.name}`
                                                             : 'N/A'}
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        <span
-                                                            className={`inline-flex px-2 py-1 rounded text-xs font-medium ${line.type === 'debit'
-                                                                    ? 'bg-blue-100 text-blue-700'
-                                                                    : 'bg-green-100 text-green-700'
-                                                                }`}
-                                                        >
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Badge variant={line.type === 'debit' ? 'default' : 'secondary'} className={line.type === 'debit' ? 'bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400'}>
                                                             {line.type === 'debit' ? 'Soll' : 'Haben'}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-4 py-3 text-sm text-right font-mono font-semibold text-slate-900">
+                                                        </Badge>
+                                                    </TableCell>
+                                                    <TableCell className="text-right font-mono font-semibold text-slate-900 dark:text-slate-100">
                                                         {formatCurrency(line.amount)}
-                                                    </td>
-                                                </tr>
+                                                    </TableCell>
+                                                </TableRow>
                                             ))}
-                                        </tbody>
-                                    </table>
+                                        </TableBody>
+                                    </Table>
                                 </div>
                             </div>
 
                             {/* Actions */}
-                            <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
+                            <div className="flex justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
                                 {selectedBooking.status === 'draft' && (
                                     <Button
                                         onClick={() => {
                                             handleLock(selectedBooking.id);
                                             setSelectedBooking(null);
                                         }}
-                                        className="bg-green-600 hover:bg-green-700"
+                                        className="bg-emerald-600 hover:bg-emerald-700 text-white"
                                     >
                                         <Lock className="w-4 h-4 mr-2" />
                                         Jetzt buchen
@@ -427,6 +460,6 @@ export function JournalList() {
                     )}
                 </DialogContent>
             </Dialog>
-        </Navigation>
+        </div>
     );
 }

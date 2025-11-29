@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\CompanySettingController;
 Route::middleware(['api'])->group(function () {
     // Dashboard
     Route::get('/dashboard/summary', [DashboardController::class, 'summary']);
+    Route::get('/dashboard/chart', [DashboardController::class, 'chart']);
     Route::get('/dashboard/recent-bookings', [DashboardController::class, 'recentBookings']);
     
     // Accounts

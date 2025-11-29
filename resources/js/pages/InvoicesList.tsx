@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
-import { Navigation } from '@/components/Layout/Navigation';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Plus, FileText, Trash2, Send, Euro, Eye, Edit } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Plus, FileText, Trash2, Send, Euro, Eye, Edit, Search } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 
 interface Invoice {
     id: number;
@@ -28,6 +29,7 @@ export function InvoicesList() {
     const [paymentDialog, setPaymentDialog] = useState<{ open: boolean; invoice: Invoice | null }>({ open: false, invoice: null });
     const [paymentAccount, setPaymentAccount] = useState('');
     const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
+    const [searchTerm, setSearchTerm] = useState('');
 
     const { data: invoices, isLoading } = useQuery<Invoice[]>({
         queryKey: ['invoices'],
@@ -92,12 +94,12 @@ export function InvoicesList() {
         }).format(cents / 100);
     };
 
-    const statusColors: Record<string, string> = {
-        draft: 'bg-yellow-100 text-yellow-700',
-        booked: 'bg-blue-100 text-blue-700',
-        sent: 'bg-purple-100 text-purple-700',
-        paid: 'bg-green-100 text-green-700',
-        cancelled: 'bg-red-100 text-red-700',
+    const statusStyles: Record<string, string> = {
+        draft: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800',
+        booked: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-800',
+        sent: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 border-purple-200 dark:border-purple-800',
+        paid: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800',
+        cancelled: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 border-rose-200 dark:border-rose-800',
     };
 
     const statusLabels: Record<string, string> = {
@@ -134,199 +136,241 @@ export function InvoicesList() {
         }
     };
 
-    return (
-        <Navigation>
-            <div className="space-y-6">
-                {/* Header */}
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h1 className="text-4xl font-bold text-slate-900">Rechnungen</h1>
-                        <p className="text-slate-600">Verwalte deine Ausgangsrechnungen</p>
-                    </div>
-                    <Link to="/invoices/create">
-                        <Button className="gap-2">
-                            <Plus className="w-4 h-4" />
-                            Neue Rechnung
-                        </Button>
-                    </Link>
-                </div>
+    const filteredInvoices = invoices?.filter(invoice =>
+        invoice.invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        invoice.contact.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
 
-                {/* Invoice List */}
-                <Card className="shadow-lg">
-                    {isLoading ? (
-                        <CardContent className="p-8 text-center">Lade Rechnungen...</CardContent>
-                    ) : invoices && invoices.length === 0 ? (
-                        <CardContent className="p-8 text-center text-slate-500">
-                            <FileText className="w-12 h-12 mx-auto mb-4 text-slate-300" />
-                            <p className="mb-4">Noch keine Rechnungen vorhanden</p>
-                            <Link to="/invoices/create">
-                                <Button>Erste Rechnung erstellen</Button>
-                            </Link>
-                        </CardContent>
-                    ) : (
-                        <div className="overflow-x-auto">
-                            <table className="w-full">
-                                <thead className="bg-slate-100 border-b border-slate-200">
-                                    <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-700 uppercase">
-                                            Rechnungsnr.
-                                        </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-700 uppercase">
-                                            Kunde
-                                        </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-700 uppercase">
-                                            Datum
-                                        </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-700 uppercase">
-                                            Fällig
-                                        </th>
-                                        <th className="px-6 py-3 text-right text-xs font-medium text-slate-700 uppercase">
-                                            Betrag
-                                        </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-700 uppercase">
-                                            Status
-                                        </th>
-                                        <th className="px-6 py-3 text-right text-xs font-medium text-slate-700 uppercase">
-                                            Aktionen
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-200">
-                                    {invoices?.map((invoice) => (
-                                        <tr key={invoice.id} className="hover:bg-slate-50">
-                                            <td className="px-6 py-4 font-mono font-medium">
-                                                {invoice.invoice_number}
-                                            </td>
-                                            <td className="px-6 py-4">{invoice.contact.name}</td>
-                                            <td className="px-6 py-4">
-                                                {new Date(invoice.invoice_date).toLocaleDateString('de-DE')}
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                {new Date(invoice.due_date).toLocaleDateString('de-DE')}
-                                            </td>
-                                            <td className="px-6 py-4 text-right font-semibold">
-                                                {formatCurrency(invoice.total)}
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <span
-                                                    className={`px-2 py-1 text-xs font-semibold rounded-full ${statusColors[invoice.status] || 'bg-gray-100 text-gray-700'
-                                                        }`}
+    return (
+        <div className="space-y-6">
+            {/* Header */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Rechnungen</h1>
+                    <p className="text-slate-500 dark:text-slate-400">Verwalten Sie Ihre Ausgangsrechnungen</p>
+                </div>
+                <Link to="/invoices/create">
+                    <Button className="gap-2 shadow-lg shadow-primary/20">
+                        <Plus className="w-4 h-4" />
+                        Neue Rechnung
+                    </Button>
+                </Link>
+            </div>
+
+            {/* Filters */}
+            <div className="flex items-center gap-4">
+                <div className="relative flex-1 max-w-sm">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <Input
+                        placeholder="Suchen nach Nummer oder Kunde..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-9 bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800"
+                    />
+                </div>
+                {/* Future: Add more filters here */}
+            </div>
+
+            {/* Invoice List */}
+            <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm overflow-hidden">
+                {isLoading ? (
+                    <CardContent className="p-12 flex justify-center">
+                        <div className="animate-pulse flex flex-col items-center">
+                            <div className="h-12 w-12 bg-slate-200 dark:bg-slate-800 rounded-full mb-4"></div>
+                            <div className="h-4 w-48 bg-slate-200 dark:bg-slate-800 rounded"></div>
+                        </div>
+                    </CardContent>
+                ) : filteredInvoices && filteredInvoices.length === 0 ? (
+                    <CardContent className="p-12 text-center text-slate-500 dark:text-slate-400">
+                        <div className="w-16 h-16 bg-slate-100 dark:bg-slate-800/50 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <FileText className="w-8 h-8 text-slate-400 dark:text-slate-500" />
+                        </div>
+                        <h3 className="text-lg font-medium text-slate-900 dark:text-slate-100 mb-1">Keine Rechnungen gefunden</h3>
+                        <p className="mb-6">Erstellen Sie Ihre erste Rechnung, um loszulegen.</p>
+                        <Link to="/invoices/create">
+                            <Button variant="outline">Erste Rechnung erstellen</Button>
+                        </Link>
+                    </CardContent>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left">
+                            <thead className="bg-slate-50/50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
+                                <tr>
+                                    <th className="px-6 py-4 font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider text-xs">
+                                        Nr.
+                                    </th>
+                                    <th className="px-6 py-4 font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider text-xs">
+                                        Kunde
+                                    </th>
+                                    <th className="px-6 py-4 font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider text-xs">
+                                        Datum
+                                    </th>
+                                    <th className="px-6 py-4 font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider text-xs">
+                                        Fällig
+                                    </th>
+                                    <th className="px-6 py-4 text-right font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider text-xs">
+                                        Betrag
+                                    </th>
+                                    <th className="px-6 py-4 font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider text-xs">
+                                        Status
+                                    </th>
+                                    <th className="px-6 py-4 text-right font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider text-xs">
+                                        Aktionen
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                {filteredInvoices?.map((invoice) => (
+                                    <tr key={invoice.id} className="group hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
+                                        <td className="px-6 py-4 font-mono font-medium text-slate-900 dark:text-slate-100">
+                                            {invoice.invoice_number}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="font-medium text-slate-900 dark:text-slate-100">{invoice.contact.name}</div>
+                                        </td>
+                                        <td className="px-6 py-4 text-slate-500 dark:text-slate-400">
+                                            {new Date(invoice.invoice_date).toLocaleDateString('de-DE')}
+                                        </td>
+                                        <td className="px-6 py-4 text-slate-500 dark:text-slate-400">
+                                            {new Date(invoice.due_date).toLocaleDateString('de-DE')}
+                                        </td>
+                                        <td className="px-6 py-4 text-right font-semibold text-slate-900 dark:text-slate-100">
+                                            {formatCurrency(invoice.total)}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <Badge variant="outline" className={`font-normal ${statusStyles[invoice.status] || 'bg-slate-100 text-slate-700 border-slate-200'}`}>
+                                                {statusLabels[invoice.status] || invoice.status}
+                                            </Badge>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <div className="flex justify-end items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                {/* View Button - Always */}
+                                                <Button
+                                                    size="icon"
+                                                    variant="ghost"
+                                                    className="h-8 w-8 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                                                    onClick={() => navigate(`/invoices/${invoice.id}/preview`)}
+                                                    title="Ansehen"
                                                 >
-                                                    {statusLabels[invoice.status] || invoice.status}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4 text-right">
-                                                <div className="flex justify-end gap-2">
-                                                    {/* View Button - Always */}
+                                                    <Eye className="w-4 h-4" />
+                                                </Button>
+
+                                                {invoice.status === 'draft' && (
+                                                    <>
+                                                        <Button
+                                                            size="icon"
+                                                            variant="ghost"
+                                                            className="h-8 w-8 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                                                            onClick={() => handleBook(invoice.id)}
+                                                            disabled={bookMutation.isPending}
+                                                            title="Buchen"
+                                                        >
+                                                            <Send className="w-4 h-4" />
+                                                        </Button>
+                                                        <Button
+                                                            size="icon"
+                                                            variant="ghost"
+                                                            className="h-8 w-8 text-slate-500 hover:text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20"
+                                                            onClick={() => navigate(`/invoices/${invoice.id}/edit`)}
+                                                            title="Bearbeiten"
+                                                        >
+                                                            <Edit className="w-4 h-4" />
+                                                        </Button>
+                                                        <Button
+                                                            size="icon"
+                                                            variant="ghost"
+                                                            className="h-8 w-8 text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20"
+                                                            onClick={() => handleDelete(invoice.id)}
+                                                            disabled={deleteMutation.isPending}
+                                                            title="Löschen"
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </Button>
+                                                    </>
+                                                )}
+                                                {(invoice.status === 'booked' || invoice.status === 'sent') && (
                                                     <Button
                                                         size="sm"
-                                                        variant="outline"
-                                                        onClick={() => navigate(`/invoices/${invoice.id}/preview`)}
+                                                        variant="ghost"
+                                                        className="h-8 px-2 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                                                        onClick={() => setPaymentDialog({ open: true, invoice })}
                                                     >
-                                                        <Eye className="w-4 h-4" />
+                                                        <Euro className="w-4 h-4 mr-1" />
+                                                        <span className="text-xs font-medium">Zahlung</span>
                                                     </Button>
+                                                )}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </Card>
 
-                                                    {invoice.status === 'draft' && (
-                                                        <>
-                                                            <Button
-                                                                size="sm"
-                                                                onClick={() => handleBook(invoice.id)}
-                                                                disabled={bookMutation.isPending}
-                                                            >
-                                                                <Send className="w-4 h-4" />
-                                                            </Button>
-                                                            <Button
-                                                                size="sm"
-                                                                variant="outline"
-                                                                onClick={() => navigate(`/invoices/${invoice.id}/edit`)}
-                                                            >
-                                                                <Edit className="w-4 h-4" />
-                                                            </Button>
-                                                            <Button
-                                                                size="sm"
-                                                                variant="outline"
-                                                                onClick={() => handleDelete(invoice.id)}
-                                                                disabled={deleteMutation.isPending}
-                                                            >
-                                                                <Trash2 className="w-4 h-4 text-red-600" />
-                                                            </Button>
-                                                        </>
-                                                    )}
-                                                    {(invoice.status === 'booked' || invoice.status === 'sent') && (
-                                                        <Button
-                                                            size="sm"
-                                                            variant="outline"
-                                                            className="gap-1"
-                                                            onClick={() => setPaymentDialog({ open: true, invoice })}
-                                                        >
-                                                            <Euro className="w-4 h-4" />
-                                                            Zahlung
-                                                        </Button>
-                                                    )}
-                                                </div>
-                                            </td>
-                                        </tr>
+            {/* Payment Dialog */}
+            <Dialog open={paymentDialog.open} onOpenChange={(open) => !open && setPaymentDialog({ open: false, invoice: null })}>
+                <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                        <DialogTitle>Zahlung erfassen</DialogTitle>
+                        <DialogDescription>
+                            Verbuchen Sie einen Zahlungseingang für diese Rechnung.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-lg space-y-2">
+                            <div className="flex justify-between text-sm">
+                                <span className="text-slate-500">Rechnung:</span>
+                                <span className="font-mono font-medium">{paymentDialog.invoice?.invoice_number}</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                                <span className="text-slate-500">Offener Betrag:</span>
+                                <span className="font-bold text-slate-900 dark:text-slate-100">{paymentDialog.invoice && formatCurrency(paymentDialog.invoice.total)}</span>
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                Zahlungseingang auf Konto *
+                            </label>
+                            <Select value={paymentAccount} onValueChange={setPaymentAccount}>
+                                <SelectTrigger className="bg-white dark:bg-slate-950">
+                                    <SelectValue placeholder="Konto auswählen..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {cashAndBankAccounts.map((account: any) => (
+                                        <SelectItem key={account.id} value={account.id.toString()}>
+                                            <span className="font-mono text-slate-500 mr-2">{account.code}</span>
+                                            {account.name}
+                                        </SelectItem>
                                     ))}
-                                </tbody>
-                            </table>
+                                </SelectContent>
+                            </Select>
                         </div>
-                    )}
-                </Card>
 
-                {/* Payment Dialog */}
-                <Dialog open={paymentDialog.open} onOpenChange={(open) => !open && setPaymentDialog({ open: false, invoice: null })}>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>Zahlung erfassen</DialogTitle>
-                        </DialogHeader>
-                        <div className="space-y-4 py-4">
-                            <div>
-                                <p className="text-sm text-slate-600 mb-2">
-                                    Rechnung: <span className="font-mono font-semibold">{paymentDialog.invoice?.invoice_number}</span>
-                                </p>
-                                <p className="text-sm text-slate-600">
-                                    Betrag: <span className="font-semibold">{paymentDialog.invoice && formatCurrency(paymentDialog.invoice.total)}</span>
-                                </p>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">
-                                    Zahlungseingang auf Konto *
-                                </label>
-                                <Select value={paymentAccount} onValueChange={setPaymentAccount}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Konto auswählen..." />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {cashAndBankAccounts.map((account: any) => (
-                                            <SelectItem key={account.id} value={account.id.toString()}>
-                                                {account.code} - {account.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">
-                                    Zahlungsdatum *
-                                </label>
-                                <Input
-                                    type="date"
-                                    value={paymentDate}
-                                    onChange={(e) => setPaymentDate(e.target.value)}
-                                />
-                            </div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                Zahlungsdatum *
+                            </label>
+                            <Input
+                                type="date"
+                                value={paymentDate}
+                                onChange={(e) => setPaymentDate(e.target.value)}
+                                className="bg-white dark:bg-slate-950"
+                            />
                         </div>
-                        <DialogFooter>
-                            <Button variant="outline" onClick={() => setPaymentDialog({ open: false, invoice: null })}>
-                                Abbrechen
-                            </Button>
-                            <Button onClick={handlePayment} disabled={!paymentAccount || paymentMutation.isPending}>
-                                {paymentMutation.isPending ? 'Erfasse...' : 'Zahlung erfassen'}
-                            </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
-            </div>
-        </Navigation>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setPaymentDialog({ open: false, invoice: null })}>
+                            Abbrechen
+                        </Button>
+                        <Button onClick={handlePayment} disabled={!paymentAccount || paymentMutation.isPending}>
+                            {paymentMutation.isPending ? 'Erfasse...' : 'Zahlung buchen'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </div>
     );
 }

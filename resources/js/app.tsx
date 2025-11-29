@@ -12,6 +12,8 @@ import { InvoicesList } from './pages/InvoicesList';
 import { InvoiceCreate } from './pages/InvoiceCreate';
 import { InvoicePreview } from './pages/InvoicePreview';
 import { Settings } from './pages/Settings';
+import { MainLayout } from '@/components/layout/main-layout';
+import { ThemeProvider } from '@/components/theme-provider';
 import '../css/app.css';
 
 const queryClient = new QueryClient({
@@ -26,21 +28,25 @@ const queryClient = new QueryClient({
 function App() {
     return (
         <QueryClientProvider client={queryClient}>
-            <BrowserRouter>
-                <Routes>
-                    <Route path="/" element={<Dashboard />} />
-                    <Route path="/accounts" element={<AccountsList />} />
-                    <Route path="/accounts/create" element={<AccountCreate />} />
-                    <Route path="/contacts" element={<ContactsList />} />
-                    <Route path="/invoices" element={<InvoicesList />} />
-                    <Route path="/invoices/create" element={<InvoiceCreate />} />
-                    <Route path="/invoices/:id/preview" element={<InvoicePreview />} />
-                    <Route path="/invoices/:id/edit" element={<InvoiceCreate />} />
-                    <Route path="/bookings" element={<JournalList />} />
-                    <Route path="/bookings/create" element={<BookingCreate />} />
-                    <Route path="/settings" element={<Settings />} />
-                </Routes>
-            </BrowserRouter>
+            <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
+                <BrowserRouter>
+                    <MainLayout>
+                        <Routes>
+                            <Route path="/" element={<Dashboard />} />
+                            <Route path="/accounts" element={<AccountsList />} />
+                            <Route path="/accounts/create" element={<AccountCreate />} />
+                            <Route path="/contacts" element={<ContactsList />} />
+                            <Route path="/invoices" element={<InvoicesList />} />
+                            <Route path="/invoices/create" element={<InvoiceCreate />} />
+                            <Route path="/invoices/:id/preview" element={<InvoicePreview />} />
+                            <Route path="/invoices/:id/edit" element={<InvoiceCreate />} />
+                            <Route path="/bookings" element={<JournalList />} />
+                            <Route path="/bookings/create" element={<BookingCreate />} />
+                            <Route path="/settings" element={<Settings />} />
+                        </Routes>
+                    </MainLayout>
+                </BrowserRouter>
+            </ThemeProvider>
         </QueryClientProvider>
     );
 }

@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Navigation } from '@/components/Layout/Navigation';
-import { Plus, Eye, Pencil, Trash2, X } from 'lucide-react';
+import { Plus, Eye, Pencil, Trash2, Search, User, FileText } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,11 +9,11 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
-    DialogTrigger,
     DialogFooter,
     DialogDescription,
 } from '@/components/ui/dialog';
 import { ContactForm, ContactFormValues } from '@/components/ContactForm';
+import { Badge } from '@/components/ui/badge';
 
 interface Contact {
     id: number;
@@ -112,219 +111,249 @@ export function ContactsList() {
     });
 
     return (
-        <Navigation>
-            <div className="space-y-6">
-                {/* Header */}
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h1 className="text-4xl font-bold text-slate-900">Kontakte</h1>
-                        <p className="text-slate-600">Debitoren & Kreditoren verwalten</p>
-                    </div>
-
-                    <Button className="gap-2" onClick={() => setIsCreateOpen(true)}>
-                        <Plus className="w-4 h-4" />
-                        Neuer Kontakt
-                    </Button>
+        <div className="space-y-6">
+            {/* Header */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Kontakte</h1>
+                    <p className="text-slate-500 dark:text-slate-400">Debitoren & Kreditoren verwalten</p>
                 </div>
 
-                {/* Search */}
-                <Card className="shadow-lg mb-4">
-                    <CardContent className="p-4">
-                        <Input
-                            type="text"
-                            placeholder="Suche nach Name, E-Mail oder Telefon..."
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                        />
-                    </CardContent>
-                </Card>
+                <Button className="gap-2 shadow-lg shadow-primary/20" onClick={() => setIsCreateOpen(true)}>
+                    <Plus className="w-4 h-4" />
+                    Neuer Kontakt
+                </Button>
+            </div>
 
-                {/* List */}
-                <Card className="shadow-lg">
-                    {isLoading ? (
-                        <CardContent className="p-8 text-center">Lade Kontakte...</CardContent>
-                    ) : filteredContacts?.length === 0 ? (
-                        <CardContent className="p-8 text-center text-slate-500">
-                            Keine Kontakte gefunden.
-                        </CardContent>
-                    ) : (
-                        <div className="overflow-x-auto">
-                            <table className="w-full">
-                                <thead className="bg-slate-100 border-b border-slate-200">
-                                    <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-700 uppercase">Name</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-700 uppercase">Typ</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-700 uppercase">Steuernummer</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-700 uppercase">Kontakt</th>
-                                        <th className="px-6 py-3 text-right text-xs font-medium text-slate-700 uppercase">Saldo</th>
-                                        <th className="px-6 py-3 text-right text-xs font-medium text-slate-700 uppercase">Aktionen</th>
+            {/* Search */}
+            <div className="flex items-center gap-4">
+                <div className="relative flex-1 max-w-sm">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <Input
+                        type="text"
+                        placeholder="Suche nach Name, E-Mail oder Telefon..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        className="pl-9 bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800"
+                    />
+                </div>
+            </div>
+
+            {/* List */}
+            <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm overflow-hidden">
+                {isLoading ? (
+                    <CardContent className="p-12 flex justify-center">
+                        <div className="animate-pulse flex flex-col items-center">
+                            <div className="h-12 w-12 bg-slate-200 dark:bg-slate-800 rounded-full mb-4"></div>
+                            <div className="h-4 w-48 bg-slate-200 dark:bg-slate-800 rounded"></div>
+                        </div>
+                    </CardContent>
+                ) : filteredContacts?.length === 0 ? (
+                    <CardContent className="p-12 text-center text-slate-500 dark:text-slate-400">
+                        <div className="w-16 h-16 bg-slate-100 dark:bg-slate-800/50 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <User className="w-8 h-8 text-slate-400 dark:text-slate-500" />
+                        </div>
+                        <h3 className="text-lg font-medium text-slate-900 dark:text-slate-100 mb-1">Keine Kontakte gefunden</h3>
+                        <p className="mb-6">Erstellen Sie Ihren ersten Kontakt.</p>
+                        <Button variant="outline" onClick={() => setIsCreateOpen(true)}>Neuen Kontakt erstellen</Button>
+                    </CardContent>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left">
+                            <thead className="bg-slate-50/50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
+                                <tr>
+                                    <th className="px-6 py-4 font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider text-xs">Name</th>
+                                    <th className="px-6 py-4 font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider text-xs">Typ</th>
+                                    <th className="px-6 py-4 font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider text-xs">Steuernummer</th>
+                                    <th className="px-6 py-4 font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider text-xs">Kontakt</th>
+                                    <th className="px-6 py-4 text-right font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider text-xs">Saldo</th>
+                                    <th className="px-6 py-4 text-right font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider text-xs">Aktionen</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                {filteredContacts?.map((contact) => (
+                                    <tr key={contact.id} className="group hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
+                                        <td className="px-6 py-4 font-medium text-slate-900 dark:text-slate-100">{contact.name}</td>
+                                        <td className="px-6 py-4">
+                                            <Badge variant="outline" className={`font-normal ${contact.type === 'customer'
+                                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
+                                                : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-800'
+                                                }`}>
+                                                {contact.type === 'customer' ? 'Kunde' : 'Lieferant'}
+                                            </Badge>
+                                        </td>
+                                        <td className="px-6 py-4 text-slate-500 dark:text-slate-400 font-mono text-xs">{contact.tax_number || '-'}</td>
+                                        <td className="px-6 py-4 text-slate-500 dark:text-slate-400">
+                                            {contact.email && <div className="flex items-center gap-2">{contact.email}</div>}
+                                            {contact.phone && <div className="text-xs opacity-75">{contact.phone}</div>}
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <span className={`font-semibold ${contact.balance && contact.balance > 0
+                                                ? (contact.type === 'customer' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')
+                                                : (contact.type === 'customer' ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')
+                                                }`}>
+                                                {contact.balance_formatted || '0,00 €'}
+                                            </span>
+                                            <div className="text-xs text-slate-400">
+                                                {contact.balance && contact.balance > 0
+                                                    ? (contact.type === 'customer' ? 'Forderung' : 'Guthaben')
+                                                    : (contact.type === 'customer' ? 'Guthaben' : 'Verbindlichkeit')}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <div className="flex justify-end items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                                                    onClick={() => setViewContact(contact)}
+                                                    title="Ansehen"
+                                                >
+                                                    <Eye className="w-4 h-4" />
+                                                </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                                                    onClick={() => setEditContact(contact)}
+                                                    title="Bearbeiten"
+                                                >
+                                                    <Pencil className="w-4 h-4" />
+                                                </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20"
+                                                    onClick={() => setDeleteContact(contact)}
+                                                    title="Löschen"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </Button>
+                                            </div>
+                                        </td>
                                     </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-200">
-                                    {filteredContacts?.map((contact) => (
-                                        <tr key={contact.id} className="hover:bg-slate-50">
-                                            <td className="px-6 py-4 font-medium">{contact.name}</td>
-                                            <td className="px-6 py-4">
-                                                <span className={`px-2 py-1 text-xs rounded-full ${contact.type === 'customer'
-                                                    ? 'bg-green-100 text-green-700'
-                                                    : 'bg-blue-100 text-blue-700'
-                                                    }`}>
-                                                    {contact.type === 'customer' ? 'Kunde' : 'Lieferant'}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4 text-slate-600">{contact.tax_number || '-'}</td>
-                                            <td className="px-6 py-4 text-slate-600">
-                                                {contact.email && <div>{contact.email}</div>}
-                                                {contact.phone && <div className="text-xs">{contact.phone}</div>}
-                                            </td>
-                                            <td className="px-6 py-4 text-right">
-                                                <span className={`font-semibold ${contact.balance && contact.balance > 0
-                                                    ? (contact.type === 'customer' ? 'text-green-600' : 'text-red-600')
-                                                    : (contact.type === 'customer' ? 'text-red-600' : 'text-green-600')
-                                                    }`}>
-                                                    {contact.balance_formatted || '0,00 €'}
-                                                </span>
-                                                <div className="text-xs text-slate-500">
-                                                    {contact.balance && contact.balance > 0
-                                                        ? (contact.type === 'customer' ? 'Forderung' : 'Guthaben')
-                                                        : (contact.type === 'customer' ? 'Guthaben' : 'Verbindlichkeit')}
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4 text-right space-x-2">
-                                                <Button variant="ghost" size="icon" onClick={() => setViewContact(contact)}>
-                                                    <Eye className="w-4 h-4 text-slate-500" />
-                                                </Button>
-                                                <Button variant="ghost" size="icon" onClick={() => setEditContact(contact)}>
-                                                    <Pencil className="w-4 h-4 text-blue-500" />
-                                                </Button>
-                                                <Button variant="ghost" size="icon" onClick={() => setDeleteContact(contact)}>
-                                                    <Trash2 className="w-4 h-4 text-red-500" />
-                                                </Button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </Card>
+
+            {/* Create Dialog */}
+            <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+                <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>Neuen Kontakt erstellen</DialogTitle>
+                    </DialogHeader>
+                    <ContactForm
+                        onSubmit={(data) => createMutation.mutate(data)}
+                        isSubmitting={createMutation.isPending}
+                    />
+                </DialogContent>
+            </Dialog>
+
+            {/* Edit Dialog */}
+            <Dialog open={!!editContact} onOpenChange={(open) => !open && setEditContact(null)}>
+                <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>Kontakt bearbeiten</DialogTitle>
+                    </DialogHeader>
+                    {editContact && (
+                        <ContactForm
+                            defaultValues={{
+                                name: editContact.name,
+                                type: editContact.type,
+                                tax_number: editContact.tax_number || '',
+                                address: editContact.address || '',
+                                email: editContact.email || '',
+                                phone: editContact.phone || '',
+                                notice: editContact.notice || '',
+                                bank_account: editContact.bank_account || '',
+                                contact_person: editContact.contact_person || '',
+                            }}
+                            onSubmit={(data) => updateMutation.mutate(data)}
+                            isSubmitting={updateMutation.isPending}
+                        />
+                    )}
+                </DialogContent>
+            </Dialog>
+
+            {/* View Dialog */}
+            <Dialog open={!!viewContact} onOpenChange={(open) => !open && setViewContact(null)}>
+                <DialogContent className="sm:max-w-[500px]">
+                    <DialogHeader>
+                        <DialogTitle>Kontakt Details</DialogTitle>
+                    </DialogHeader>
+                    {viewContact && (
+                        <div className="space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Name</label>
+                                    <div className="font-medium text-slate-900 dark:text-slate-100">{viewContact.name}</div>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Typ</label>
+                                    <div>{viewContact.type === 'customer' ? 'Kunde' : 'Lieferant'}</div>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Steuernummer</label>
+                                    <div>{viewContact.tax_number || '-'}</div>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Telefon</label>
+                                    <div>{viewContact.phone || '-'}</div>
+                                </div>
+                                <div className="col-span-2">
+                                    <label className="text-xs font-medium text-slate-500 dark:text-slate-400">E-Mail</label>
+                                    <div>{viewContact.email || '-'}</div>
+                                </div>
+                                <div className="col-span-2">
+                                    <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Adresse</label>
+                                    <div className="whitespace-pre-wrap">{viewContact.address || '-'}</div>
+                                </div>
+                                <div className="col-span-2">
+                                    <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Bankkonto</label>
+                                    <div>{viewContact.bank_account || '-'}</div>
+                                </div>
+                                <div className="col-span-2">
+                                    <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Ansprechpartner</label>
+                                    <div>{viewContact.contact_person || '-'}</div>
+                                </div>
+                                <div className="col-span-2">
+                                    <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Notiz</label>
+                                    <div className="whitespace-pre-wrap text-sm bg-slate-50 dark:bg-slate-900 p-2 rounded">{viewContact.notice || '-'}</div>
+                                </div>
+                            </div>
+                            <DialogFooter>
+                                <Button variant="outline" onClick={() => setViewContact(null)}>Schließen</Button>
+                            </DialogFooter>
                         </div>
                     )}
-                </Card>
+                </DialogContent>
+            </Dialog>
 
-                {/* Create Dialog */}
-                <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-                    <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
-                        <DialogHeader>
-                            <DialogTitle>Neuen Kontakt erstellen</DialogTitle>
-                        </DialogHeader>
-                        <ContactForm
-                            onSubmit={(data) => createMutation.mutate(data)}
-                            isSubmitting={createMutation.isPending}
-                        />
-                    </DialogContent>
-                </Dialog>
-
-                {/* Edit Dialog */}
-                <Dialog open={!!editContact} onOpenChange={(open) => !open && setEditContact(null)}>
-                    <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
-                        <DialogHeader>
-                            <DialogTitle>Kontakt bearbeiten</DialogTitle>
-                        </DialogHeader>
-                        {editContact && (
-                            <ContactForm
-                                defaultValues={{
-                                    name: editContact.name,
-                                    type: editContact.type,
-                                    tax_number: editContact.tax_number || '',
-                                    address: editContact.address || '',
-                                    email: editContact.email || '',
-                                    phone: editContact.phone || '',
-                                    notice: editContact.notice || '',
-                                    bank_account: editContact.bank_account || '',
-                                    contact_person: editContact.contact_person || '',
-                                }}
-                                onSubmit={(data) => updateMutation.mutate(data)}
-                                isSubmitting={updateMutation.isPending}
-                            />
-                        )}
-                    </DialogContent>
-                </Dialog>
-
-                {/* View Dialog */}
-                <Dialog open={!!viewContact} onOpenChange={(open) => !open && setViewContact(null)}>
-                    <DialogContent className="sm:max-w-[500px]">
-                        <DialogHeader>
-                            <DialogTitle>Kontakt Details</DialogTitle>
-                        </DialogHeader>
-                        {viewContact && (
-                            <div className="space-y-4">
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="text-xs font-medium text-slate-500">Name</label>
-                                        <div className="font-medium">{viewContact.name}</div>
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-medium text-slate-500">Typ</label>
-                                        <div>{viewContact.type === 'customer' ? 'Kunde' : 'Lieferant'}</div>
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-medium text-slate-500">Steuernummer</label>
-                                        <div>{viewContact.tax_number || '-'}</div>
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-medium text-slate-500">Telefon</label>
-                                        <div>{viewContact.phone || '-'}</div>
-                                    </div>
-                                    <div className="col-span-2">
-                                        <label className="text-xs font-medium text-slate-500">E-Mail</label>
-                                        <div>{viewContact.email || '-'}</div>
-                                    </div>
-                                    <div className="col-span-2">
-                                        <label className="text-xs font-medium text-slate-500">Adresse</label>
-                                        <div className="whitespace-pre-wrap">{viewContact.address || '-'}</div>
-                                    </div>
-                                    <div className="col-span-2">
-                                        <label className="text-xs font-medium text-slate-500">Bankkonto</label>
-                                        <div>{viewContact.bank_account || '-'}</div>
-                                    </div>
-                                    <div className="col-span-2">
-                                        <label className="text-xs font-medium text-slate-500">Ansprechpartner</label>
-                                        <div>{viewContact.contact_person || '-'}</div>
-                                    </div>
-                                    <div className="col-span-2">
-                                        <label className="text-xs font-medium text-slate-500">Notiz</label>
-                                        <div className="whitespace-pre-wrap text-sm bg-slate-50 p-2 rounded">{viewContact.notice || '-'}</div>
-                                    </div>
-                                </div>
-                                <DialogFooter>
-                                    <Button variant="outline" onClick={() => setViewContact(null)}>Schließen</Button>
-                                </DialogFooter>
-                            </div>
-                        )}
-                    </DialogContent>
-                </Dialog>
-
-                {/* Delete Confirmation Dialog */}
-                <Dialog open={!!deleteContact} onOpenChange={(open) => !open && setDeleteContact(null)}>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>Kontakt löschen?</DialogTitle>
-                            <DialogDescription>
-                                Möchten Sie den Kontakt "{deleteContact?.name}" wirklich löschen?
-                                Dies ist nur möglich, wenn keine Buchungen für diesen Kontakt existieren.
-                            </DialogDescription>
-                        </DialogHeader>
-                        <DialogFooter>
-                            <Button variant="outline" onClick={() => setDeleteContact(null)}>Abbrechen</Button>
-                            <Button
-                                variant="destructive"
-                                onClick={() => deleteContact && deleteMutation.mutate(deleteContact.id)}
-                                disabled={deleteMutation.isPending}
-                            >
-                                {deleteMutation.isPending ? 'Löscht...' : 'Löschen'}
-                            </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
-            </div>
-        </Navigation>
+            {/* Delete Confirmation Dialog */}
+            <Dialog open={!!deleteContact} onOpenChange={(open) => !open && setDeleteContact(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Kontakt löschen?</DialogTitle>
+                        <DialogDescription>
+                            Möchten Sie den Kontakt "{deleteContact?.name}" wirklich löschen?
+                            Dies ist nur möglich, wenn keine Buchungen für diesen Kontakt existieren.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setDeleteContact(null)}>Abbrechen</Button>
+                        <Button
+                            variant="destructive"
+                            onClick={() => deleteContact && deleteMutation.mutate(deleteContact.id)}
+                            disabled={deleteMutation.isPending}
+                        >
+                            {deleteMutation.isPending ? 'Löscht...' : 'Löschen'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </div>
     );
 }
