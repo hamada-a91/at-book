@@ -1,6 +1,7 @@
+
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Eye, Pencil, Trash2, Search, User, FileText } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, Eye, User } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -178,7 +179,7 @@ export function ContactsList() {
                                             <Badge variant="outline" className={`font-normal ${contact.type === 'customer'
                                                 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
                                                 : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-800'
-                                                }`}>
+                                                } `}>
                                                 {contact.type === 'customer' ? 'Kunde' : 'Lieferant'}
                                             </Badge>
                                         </td>
@@ -191,7 +192,7 @@ export function ContactsList() {
                                             <span className={`font-semibold ${contact.balance && contact.balance > 0
                                                 ? (contact.type === 'customer' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')
                                                 : (contact.type === 'customer' ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')
-                                                }`}>
+                                                } `}>
                                                 {contact.balance_formatted || '0,00 €'}
                                             </span>
                                             <div className="text-xs text-slate-400">

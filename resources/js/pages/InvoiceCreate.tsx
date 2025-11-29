@@ -348,7 +348,7 @@ export function InvoiceCreate() {
                                                 key={contact.id}
                                                 type="button"
                                                 onClick={() => handleCustomerSelect(contact)}
-                                                className="w-full px-4 py-2 text-left hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-between"
+                                                className="px-4 py-2 text-left hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-between"
                                             >
                                                 <span className="text-slate-900 dark:text-slate-100">{contact.name}</span>
                                                 <span className="text-xs text-slate-500 dark:text-slate-400">Vorhanden</span>

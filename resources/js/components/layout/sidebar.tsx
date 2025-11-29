@@ -10,8 +10,6 @@ import {
     Menu,
     CreditCard,
     BookOpen,
-    Building2,
-    PlusCircle
 } from "lucide-react"
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
@@ -50,10 +48,10 @@ export function Sidebar({ className }: SidebarProps) {
             active: pathname.startsWith("/accounts"),
         },
         {
-            label: "Journal & Berichte",
+            label: "Journal",
             icon: FileText,
-            href: "/reports", // Assuming reports or journal
-            active: pathname.startsWith("/reports"),
+            href: "/journal",
+            active: pathname.startsWith("/journal"),
         },
         {
             label: "Kontakte",
@@ -70,20 +68,27 @@ export function Sidebar({ className }: SidebarProps) {
     ]
 
     return (
-        <div className={cn("pb-12 bg-slate-50/50 dark:bg-slate-900/50 border-r h-full", className)}>
-            <div className="space-y-4 py-4">
+        <div className={cn("pb-12 h-screen overflow-y-auto bg-gradient-to-b from-blue-50 to-blue-100 dark:from-blue-950 dark:to-slate-950 border-r border-blue-200 dark:border-blue-900", className)}>
+            <div className="space-y-4 py-4 flex flex-col h-full">
                 <div className="px-3 py-2">
-                    <div className="flex items-center px-4 mb-8">
-                        {settings?.logo_url ? (
-                            <img src={settings.logo_url} alt="Logo" className="h-8 w-auto mr-2" />
+                    <div className="flex items-center mb-6 px-2">
+                        {settings?.logo_path ? (
+                            <img
+                                src={`/storage/${settings.logo_path}`}
+                                alt="Company Logo"
+                                className="h-10 w-10 object-contain mr-3 rounded-lg"
+                            />
                         ) : (
-                            <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center mr-2">
-                                <Building2 className="h-5 w-5 text-primary-foreground" />
+                            <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mr-3 shadow-lg">
+                                <BookOpen className="h-6 w-6 text-white" />
                             </div>
                         )}
-                        <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-                            {settings?.company_name || 'AT-Book'}
-                        </h2>
+                        <div>
+                            <h2 className="text-xl font-bold tracking-tight bg-gradient-to-r from-blue-600 to-blue-800 dark:from-blue-400 dark:to-blue-600 bg-clip-text text-transparent">
+                                {settings?.company_name || 'AT-Book'}
+                            </h2>
+                            <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Buchhaltung</p>
+                        </div>
                     </div>
                     <div className="space-y-1">
                         {routes.map((route) => (
@@ -93,13 +98,13 @@ export function Sidebar({ className }: SidebarProps) {
                                 className={cn(
                                     "w-full justify-start text-base font-medium transition-all duration-200",
                                     route.active
-                                        ? "bg-white dark:bg-slate-800 shadow-sm text-primary translate-x-1"
-                                        : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100"
+                                        ? "bg-blue-600 dark:bg-blue-700 shadow-lg text-white hover:bg-blue-700 dark:hover:bg-blue-800 scale-105"
+                                        : "text-blue-900 dark:text-blue-100 hover:bg-blue-200 dark:hover:bg-blue-900 hover:text-blue-950 dark:hover:text-white"
                                 )}
                                 asChild
                             >
                                 <Link to={route.href}>
-                                    <route.icon className={cn("mr-3 h-5 w-5", route.active ? "text-primary" : "text-slate-500")} />
+                                    <route.icon className={cn("mr-3 h-5 w-5", route.active ? "text-white" : "text-blue-600 dark:text-blue-400")} />
                                     {route.label}
                                 </Link>
                             </Button>
@@ -111,13 +116,13 @@ export function Sidebar({ className }: SidebarProps) {
                     <Button
                         variant="ghost"
                         className={cn(
-                            "w-full justify-start text-base font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800",
-                            pathname.startsWith("/settings") && "bg-white dark:bg-slate-800 shadow-sm text-primary"
+                            "w-full justify-start text-base font-medium text-blue-900 dark:text-blue-100 hover:bg-blue-200 dark:hover:bg-blue-900",
+                            pathname.startsWith("/settings") && "bg-blue-600 dark:bg-blue-700 shadow-lg text-white hover:bg-blue-700 dark:hover:bg-blue-800"
                         )}
                         asChild
                     >
                         <Link to="/settings">
-                            <Settings className="mr-3 h-5 w-5" />
+                            <Settings className={cn("mr-3 h-5 w-5", pathname.startsWith("/settings") ? "text-white" : "text-blue-600 dark:text-blue-400")} />
                             Einstellungen
                         </Link>
                     </Button>
@@ -138,8 +143,8 @@ export function MobileSidebar() {
                     <span className="sr-only">Toggle Menu</span>
                 </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="p-0 w-72">
-                <Sidebar className="w-full" />
+            <SheetContent side="left" className="p-0 w-72 bg-gradient-to-b from-blue-50 to-blue-100 dark:from-blue-950 dark:to-slate-950">
+                <Sidebar className="w-full border-none" />
             </SheetContent>
         </Sheet>
     )
