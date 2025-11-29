@@ -93,17 +93,155 @@ class InvoiceController extends Controller
     }
 
     /**
-     * Book invoice - creates journal entry
+     * Book invoice - creates journal entry (Forderung)
+     * Soll: Debitor (Kundenkonto) - Bruttobetrag
+     * Haben: Erlöse - Nettobetrag (pro Position)
+     * Haben: Umsatzsteuer - Steuerbetrag
      */
     public function book(Invoice $invoice)
     {
-        if ($invoice->status !== 'draft') {
-            return response()->json(['error' => 'Rechnung ist bereits gebucht'], 400);
+        try {
+            if ($invoice->status !== 'draft') {
+                return response()->json(['error' => 'Rechnung ist bereits gebucht'], 400);
+            }
+
+            // Load relationships
+            $invoice->load(['contact.account', 'lines.account']);
+
+            // Check if contact exists and has name
+            if (!$invoice->contact) {
+                return response()->json(['error' => 'Kunde nicht gefunden'], 400);
+            }
+
+            // Check if contact has an account
+            if (!$invoice->contact->account_id) {
+                return response()->json(['error' => "Kunde '{$invoice->contact->name}' hat kein Debitorenkonto. Bitte Kunden neu anlegen."], 400);
+            }
+
+            // Create journal entry
+            $journalEntry = \App\Modules\Accounting\Models\JournalEntry::create([
+                'booking_date' => $invoice->invoice_date,
+                'description' => "Rechnung {$invoice->invoice_number} - {$invoice->contact->name}",
+                'contact_id' => $invoice->contact_id,
+                'status' => 'posted',
+            ]);
+
+            // 1. Soll: Debitor (customer account) - Bruttobetrag
+            \App\Modules\Accounting\Models\JournalEntryLine::create([
+                'journal_entry_id' => $journalEntry->id,
+                'account_id' => $invoice->contact->account_id,
+                'type' => 'debit',
+                'amount' => $invoice->total,
+            ]);
+
+            // 2. Haben: Erlöse (per line) - Nettobetrag
+            // Group by account and tax rate
+            $revenueGroups = [];
+            foreach ($invoice->lines as $line) {
+                $key = $line->account_id . '_' . $line->tax_rate;
+                if (!isset($revenueGroups[$key])) {
+                    $revenueGroups[$key] = [
+                        'account_id' => $line->account_id,
+                        'tax_rate' => $line->tax_rate,
+                        'subtotal' => 0,
+                    ];
+                }
+                $revenueGroups[$key]['subtotal'] += $line->line_total;
+            }
+
+            foreach ($revenueGroups as $group) {
+                \App\Modules\Accounting\Models\JournalEntryLine::create([
+                    'journal_entry_id' => $journalEntry->id,
+                    'account_id' => $group['account_id'],
+                    'type' => 'credit',
+                    'amount' => $group['subtotal'],
+                ]);
+            }
+
+            // 3. Haben: Umsatzsteuer (if applicable)
+            if ($invoice->tax_total > 0) {
+                // Find tax account based on tax rate
+                // Assuming account codes: 1776 (19% USt), 1771 (7% USt)
+                $taxAccount = \App\Modules\Accounting\Models\Account::where('code', '1776')->first();
+                
+                if (!$taxAccount) {
+                    // Try to find any tax account
+                    $taxAccount = \App\Modules\Accounting\Models\Account::where('code', 'like', '177%')->first();
+                }
+                
+                if ($taxAccount) {
+                    \App\Modules\Accounting\Models\JournalEntryLine::create([
+                        'journal_entry_id' => $journalEntry->id,
+                        'account_id' => $taxAccount->id,
+                        'type' => 'credit',
+                        'amount' => $invoice->tax_total,
+                    ]);
+                }
+            }
+
+            // Update invoice with journal entry reference
+            $invoice->update([
+                'status' => 'booked',
+                'journal_entry_id' => $journalEntry->id,
+            ]);
+
+            return response()->json($invoice->load(['contact', 'lines', 'journalEntry']));
+            
+        } catch (\Exception $e) {
+            \Log::error('Invoice booking failed', [
+                'invoice_id' => $invoice->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'error' => 'Fehler beim Buchen der Rechnung: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Record payment for invoice
+     * Soll: Kasse/Bank - Bruttobetrag
+     * Haben: Debitor - Bruttobetrag
+     */
+    public function recordPayment(Request $request, Invoice $invoice)
+    {
+        $validated = $request->validate([
+            'payment_account_id' => 'required|exists:accounts,id', // Kasse oder Bank
+            'payment_date' => 'required|date',
+        ]);
+
+        if ($invoice->status !== 'booked' && $invoice->status !== 'sent') {
+            return response()->json(['error' => 'Nur gebuchte/versendete Rechnungen können bezahlt werden'], 400);
         }
 
-        // TODO: Create journal entry logic here
-        // For now, just update status
-        $invoice->update(['status' => 'booked']);
+        // Create payment journal entry
+        $journalEntry = \App\Modules\Accounting\Models\JournalEntry::create([
+            'booking_date' => $validated['payment_date'],
+            'description' => "Zahlung Rechnung {$invoice->invoice_number} - {$invoice->contact->name}",
+            'contact_id' => $invoice->contact_id,
+            'status' => 'posted',
+        ]);
+
+        // Soll: Kasse/Bank
+        \App\Modules\Accounting\Models\JournalEntryLine::create([
+            'journal_entry_id' => $journalEntry->id,
+            'account_id' => $validated['payment_account_id'],
+            'type' => 'debit',
+            'amount' => $invoice->total,
+        ]);
+
+        // Haben: Debitor
+        \App\Modules\Accounting\Models\JournalEntryLine::create([
+            'journal_entry_id' => $journalEntry->id,
+            'account_id' => $invoice->contact->account_id,
+            'type' => 'credit',
+            'amount' => $invoice->total,
+        ]);
+
+        // Mark invoice as paid
+        $invoice->update(['status' => 'paid']);
 
         return response()->json($invoice->load(['contact', 'lines']));
     }

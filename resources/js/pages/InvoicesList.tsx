@@ -4,7 +4,10 @@ import { Link } from 'react-router-dom';
 import { Navigation } from '@/components/Layout/Navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Plus, FileText, Trash2, Send } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Plus, FileText, Trash2, Send, Euro } from 'lucide-react';
 
 interface Invoice {
     id: number;
@@ -21,6 +24,9 @@ interface Invoice {
 
 export function InvoicesList() {
     const queryClient = useQueryClient();
+    const [paymentDialog, setPaymentDialog] = useState<{ open: boolean; invoice: Invoice | null }>({ open: false, invoice: null });
+    const [paymentAccount, setPaymentAccount] = useState('');
+    const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
 
     const { data: invoices, isLoading } = useQuery<Invoice[]>({
         queryKey: ['invoices'],
@@ -52,6 +58,32 @@ export function InvoicesList() {
         },
     });
 
+    // Get accounts for payment (Kasse/Bank)
+    const { data: accounts } = useQuery({
+        queryKey: ['accounts'],
+        queryFn: async () => {
+            const res = await fetch('/api/accounts');
+            return res.json();
+        },
+    });
+
+    const paymentMutation = useMutation({
+        mutationFn: async ({ invoiceId, data }: { invoiceId: number; data: any }) => {
+            const res = await fetch(`/api/invoices/${invoiceId}/payment`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+            if (!res.ok) throw new Error('Fehler beim Erfassen der Zahlung');
+            return res.json();
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['invoices'] });
+            setPaymentDialog({ open: false, invoice: null });
+            setPaymentAccount('');
+        },
+    });
+
     const formatCurrency = (cents: number) => {
         return new Intl.NumberFormat('de-DE', {
             style: 'currency',
@@ -73,6 +105,20 @@ export function InvoicesList() {
         sent: 'Versendet',
         paid: 'Bezahlt',
         cancelled: 'Storniert',
+    };
+
+    const cashAndBankAccounts = accounts?.filter((a: any) => a.type === 'asset' && (a.code.startsWith('10') || a.code.startsWith('12'))) || [];
+
+    const handlePayment = () => {
+        if (!paymentDialog.invoice || !paymentAccount) return;
+
+        paymentMutation.mutate({
+            invoiceId: paymentDialog.invoice.id,
+            data: {
+                payment_account_id: parseInt(paymentAccount),
+                payment_date: paymentDate,
+            },
+        });
     };
 
     return (
@@ -172,7 +218,7 @@ export function InvoicesList() {
                                                                 size="sm"
                                                                 variant="outline"
                                                                 onClick={() => {
-                                                                    if (confirm('Rechnung wirklich löschen?')) {
+                                                                    if (confirm('Rechnung wirklich l\u00f6schen?')) {
                                                                         deleteMutation.mutate(invoice.id);
                                                                     }
                                                                 }}
@@ -181,6 +227,17 @@ export function InvoicesList() {
                                                                 <Trash2 className="w-4 h-4 text-red-600" />
                                                             </Button>
                                                         </>
+                                                    )}
+                                                    {(invoice.status === 'booked' || invoice.status === 'sent') && (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            className="gap-1"
+                                                            onClick={() => setPaymentDialog({ open: true, invoice })}
+                                                        >
+                                                            <Euro className="w-4 h-4" />
+                                                            Zahlung
+                                                        </Button>
                                                     )}
                                                 </div>
                                             </td>
@@ -191,6 +248,60 @@ export function InvoicesList() {
                         </div>
                     )}
                 </Card>
+
+                {/* Payment Dialog */}
+                <Dialog open={paymentDialog.open} onOpenChange={(open) => !open && setPaymentDialog({ open: false, invoice: null })}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Zahlung erfassen</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4 py-4">
+                            <div>
+                                <p className="text-sm text-slate-600 mb-2">
+                                    Rechnung: <span className="font-mono font-semibold">{paymentDialog.invoice?.invoice_number}</span>
+                                </p>
+                                <p className="text-sm text-slate-600">
+                                    Betrag: <span className="font-semibold">{paymentDialog.invoice && formatCurrency(paymentDialog.invoice.total)}</span>
+                                </p>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-2">
+                                    Zahlungseingang auf Konto *
+                                </label>
+                                <Select value={paymentAccount} onValueChange={setPaymentAccount}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Konto auswählen..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {cashAndBankAccounts.map((account: any) => (
+                                            <SelectItem key={account.id} value={account.id.toString()}>
+                                                {account.code} - {account.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-2">
+                                    Zahlungsdatum *
+                                </label>
+                                <Input
+                                    type="date"
+                                    value={paymentDate}
+                                    onChange={(e) => setPaymentDate(e.target.value)}
+                                />
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => setPaymentDialog({ open: false, invoice: null })}>
+                                Abbrechen
+                            </Button>
+                            <Button onClick={handlePayment} disabled={!paymentAccount || paymentMutation.isPending}>
+                                {paymentMutation.isPending ? 'Erfasse...' : 'Zahlung erfassen'}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
             </div>
         </Navigation>
     );

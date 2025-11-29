@@ -28,6 +28,7 @@ Route::middleware(['api'])->group(function () {
     // Invoices
     Route::apiResource('invoices', \App\Http\Controllers\Api\InvoiceController::class);
     Route::post('/invoices/{invoice}/book', [\App\Http\Controllers\Api\InvoiceController::class, 'book']);
+    Route::post('/invoices/{invoice}/payment', [\App\Http\Controllers\Api\InvoiceController::class, 'recordPayment']);
 
     // Journal Entries
     Route::get('/bookings', [JournalEntryController::class, 'index']);
