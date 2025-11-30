@@ -21,7 +21,7 @@ export function Sidebar({ className }: SidebarProps) {
     const pathname = location.pathname
 
     const { data: settings } = useQuery({
-        queryKey: ['company-settings'],
+        queryKey: ['settings'],
         queryFn: async () => {
             const res = await fetch('/api/settings');
             return res.json();
@@ -48,10 +48,10 @@ export function Sidebar({ className }: SidebarProps) {
             active: pathname.startsWith("/accounts"),
         },
         {
-            label: "Journal",
+            label: "Journal & Berichte",
             icon: FileText,
-            href: "/journal",
-            active: pathname.startsWith("/journal"),
+            href: "/reports",
+            active: pathname.startsWith("/reports"),
         },
         {
             label: "Kontakte",

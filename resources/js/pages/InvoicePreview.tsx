@@ -53,7 +53,7 @@ export function InvoicePreview() {
     });
 
     const { data: settings } = useQuery<CompanySetting>({
-        queryKey: ['company-settings'],
+        queryKey: ['settings'],
         queryFn: async () => {
             const res = await fetch('/api/settings');
             return res.json();

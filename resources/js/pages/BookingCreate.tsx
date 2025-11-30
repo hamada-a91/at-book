@@ -539,21 +539,14 @@ export function BookingCreate() {
                                                             render={({ field }) => (
                                                                 <FormItem>
                                                                     <FormLabel className="text-xs text-slate-500 dark:text-slate-400">Konto</FormLabel>
-                                                                    <Select onValueChange={field.onChange} value={field.value}>
-                                                                        <FormControl>
-                                                                            <SelectTrigger className="bg-white dark:bg-slate-950 h-10">
-                                                                                <SelectValue placeholder="Konto wählen..." />
-                                                                            </SelectTrigger>
-                                                                        </FormControl>
-                                                                        <SelectContent>
-                                                                            {accounts?.map((acc) => (
-                                                                                <SelectItem key={acc.id} value={String(acc.id)}>
-                                                                                    <span className="font-mono text-slate-500 mr-2">{acc.code}</span>
-                                                                                    {acc.name}
-                                                                                </SelectItem>
-                                                                            ))}
-                                                                        </SelectContent>
-                                                                    </Select>
+                                                                    <FormControl>
+                                                                        <AccountSelector
+                                                                            accounts={accounts}
+                                                                            value={field.value}
+                                                                            onChange={field.onChange}
+                                                                            placeholder="Konto wählen..."
+                                                                        />
+                                                                    </FormControl>
                                                                     <FormMessage />
                                                                 </FormItem>
                                                             )}

@@ -260,7 +260,7 @@ http://localhost/bookings
 curl http://localhost/api/accounts
 
 # Alle Buchungen
-curl http://localhost/api/bookings
+curl http://localhost/api
 ```
 
 ---

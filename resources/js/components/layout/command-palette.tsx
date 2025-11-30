@@ -76,11 +76,11 @@ export function CommandPalette() {
                         <span>Konten</span>
                     </CommandItem>
                     <CommandItem
-                        onSelect={() => runCommand(() => navigate('/journal'))}
+                        onSelect={() => runCommand(() => navigate('/reports'))}
                         className="gap-2"
                     >
                         <BookOpen className="w-4 h-4" />
-                        <span>Journal</span>
+                        <span>Journal & Berichte</span>
                     </CommandItem>
                     <CommandItem
                         onSelect={() => runCommand(() => navigate('/settings'))}

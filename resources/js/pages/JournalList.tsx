@@ -157,7 +157,7 @@ export function JournalList() {
                     </p>
                 </div>
                 <Link to="/bookings/create">
-                    <Button className="shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30 transition-all duration-300 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600">
+                    <Button className="shadow-lg shadow-blue-100/20 hover:shadow-blue-200/30 transition-all duration-300 bg-gradient-to-r from-blue-300 to-blue-500 hover:from-blue-700 hover:to-blue-600">
                         <Plus className="w-4 h-4 mr-2" />
                         Neue Buchung
                     </Button>

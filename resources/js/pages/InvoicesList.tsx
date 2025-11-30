@@ -172,7 +172,7 @@ export function InvoicesList() {
             </div>
 
             {/* Invoice List */}
-            <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm overflow-hidden">
+            <Card className="w-full shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm overflow-hidden">
                 {isLoading ? (
                     <CardContent className="p-12 flex justify-center">
                         <div className="animate-pulse flex flex-col items-center">
@@ -193,7 +193,7 @@ export function InvoicesList() {
                     </CardContent>
                 ) : (
                     <div className="overflow-x-auto">
-                        <table className="text-sm text-left">
+                        <table className="w-full text-sm text-left">
                             <thead className="bg-slate-50/50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
                                 <tr>
                                     <th className="px-6 py-4 font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider text-xs">

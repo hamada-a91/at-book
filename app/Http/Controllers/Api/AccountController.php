@@ -42,6 +42,83 @@ class AccountController extends Controller
 
         return response()->json($account, 201);
     }
+
+    /**
+     * Display the specified account with transaction history
+     */
+    public function show(Request $request, int $id): JsonResponse
+    {
+        $account = Account::findOrFail($id);
+        
+        // Get date range from request or use defaults
+        $fromDate = $request->input('from_date');
+        $toDate = $request->input('to_date');
+        
+        // Get all journal entry lines for this account
+        $query = $account->journalEntryLines()
+            ->with(['journalEntry' => function($q) {
+                $q->with('contact');
+            }])
+            ->join('journal_entries', 'journal_entry_lines.journal_entry_id', '=', 'journal_entries.id')
+            ->select('journal_entry_lines.*', 'journal_entries.booking_date')
+            ->orderBy('journal_entries.booking_date', 'asc')
+            ->orderBy('journal_entry_lines.id', 'asc');
+        
+        if ($fromDate) {
+            $query->where('journal_entries.booking_date', '>=', $fromDate);
+        }
+        
+        if ($toDate) {
+            $query->where('journal_entries.booking_date', '<=', $toDate);
+        }
+        
+        $lines = $query->get();
+        
+        // Calculate running balance and format transactions
+        $runningBalance = 0;
+        $totalDebit = 0;
+        $totalCredit = 0;
+        
+        $transactions = $lines->map(function ($line) use (&$runningBalance, &$totalDebit, &$totalCredit, $account) {
+            $debit = $line->type === 'debit' ? $line->amount : 0;
+            $credit = $line->type === 'credit' ? $line->amount : 0;
+            
+            $totalDebit += $debit;
+            $totalCredit += $credit;
+            
+            // Calculate running balance based on account type
+            if (in_array($account->type, ['asset', 'expense'])) {
+                $runningBalance += ($debit - $credit);
+            } else {
+                $runningBalance += ($credit - $debit);
+            }
+            
+            return [
+                'id' => $line->id,
+                'date' => $line->journalEntry->booking_date,
+                'description' => $line->journalEntry->description,
+                'reference' => $line->journalEntry->reference_number,
+                'contact' => $line->journalEntry->contact ? $line->journalEntry->contact->name : null,
+                'debit' => $debit,
+                'credit' => $credit,
+                'balance' => $runningBalance,
+            ];
+        });
+        
+        return response()->json([
+            'account' => $account,
+            'transactions' => $transactions,
+            'summary' => [
+                'total_debit' => $totalDebit,
+                'total_credit' => $totalCredit,
+                'current_balance' => $runningBalance,
+            ],
+            'period' => [
+                'from' => $fromDate,
+                'to' => $toDate,
+            ],
+        ]);
+    }
     
     /**
      * Calculate balance for an account

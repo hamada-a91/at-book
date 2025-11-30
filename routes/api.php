@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\AccountBalanceController;
 use App\Http\Controllers\Api\JournalEntryController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\CompanySettingController;
+use App\Http\Controllers\Api\ReportsController;
 
 Route::middleware(['api'])->group(function () {
     // Dashboard
@@ -18,6 +19,7 @@ Route::middleware(['api'])->group(function () {
     // Accounts
     Route::get('/accounts', [AccountController::class, 'index']);
     Route::post('/accounts', [AccountController::class, 'store']);
+    Route::get('/accounts/{id}', [AccountController::class, 'show']);
     
     // Account Balances
     Route::get('/accounts/balances', [AccountBalanceController::class, 'index']);
@@ -26,15 +28,22 @@ Route::middleware(['api'])->group(function () {
     // Contacts
     Route::apiResource('contacts', ContactController::class);
     
+    // Reports Routes
+    Route::prefix('reports')->group(function () {
+        Route::get('/trial-balance', [ReportsController::class, 'trialBalance']);
+        Route::get('/profit-loss', [ReportsController::class, 'profitAndLoss']);
+        Route::get('/balance-sheet', [ReportsController::class, 'balanceSheet']);
+        Route::get('/journal-export', [ReportsController::class, 'journalExport']);
+        Route::get('/account-movements', [ReportsController::class, 'accountMovements']);
+        Route::get('/tax-report', [ReportsController::class, 'taxReport']);
+    });
+
     // Invoices
     Route::apiResource('invoices', \App\Http\Controllers\Api\InvoiceController::class);
     Route::put('/invoices/{invoice}', [\App\Http\Controllers\Api\InvoiceController::class, 'update']);
     Route::post('/invoices/{invoice}/book', [\App\Http\Controllers\Api\InvoiceController::class, 'book']);
     Route::post('/invoices/{invoice}/payment', [\App\Http\Controllers\Api\InvoiceController::class, 'recordPayment']);
     Route::get('/invoices/{invoice}/pdf', [\App\Http\Controllers\Api\InvoiceController::class, 'downloadPDF']);
-
-    // Company Settings
-    Route::get('/settings', [CompanySettingController::class, 'index']);
 
     // Journal Entries
     Route::get('/bookings', [JournalEntryController::class, 'index']);

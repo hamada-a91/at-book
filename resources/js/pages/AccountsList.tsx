@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Search, Plus, FileText } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -35,6 +35,7 @@ const accountTypeStyles: Record<string, string> = {
 };
 
 export function AccountsList() {
+    const navigate = useNavigate();
     const [search, setSearch] = useState('');
     const [typeFilter, setTypeFilter] = useState('all');
 
@@ -66,8 +67,9 @@ export function AccountsList() {
                     <p className="text-slate-500 dark:text-slate-400">Übersicht aller Sachkonten</p>
                 </div>
                 <Link to="/accounts/create">
-                    <Button className="gap-2 shadow-lg shadow-primary/20">
-                        <Plus className="w-4 h-4" />
+
+                    <Button className="shadow-lg shadow-blue-100/20 hover:shadow-blue-200/30 transition-all duration-300 bg-gradient-to-r from-blue-300 to-blue-500 hover:from-blue-700 hover:to-blue-600">
+                        <Plus className="w-4 h-4 mr-2" />
                         Neues Konto
                     </Button>
                 </Link>
@@ -142,7 +144,11 @@ export function AccountsList() {
                                 </thead>
                                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                                     {filteredAccounts?.map((account) => (
-                                        <tr key={account.id} className="group hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
+                                        <tr
+                                            key={account.id}
+                                            className="group hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
+                                            onClick={() => navigate(`/accounts/${account.id}`)}
+                                        >
                                             <td className="px-6 py-4">
                                                 <span className="font-mono font-bold text-slate-900 dark:text-slate-100 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">
                                                     {account.code}
