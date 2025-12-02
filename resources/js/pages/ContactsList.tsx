@@ -120,7 +120,10 @@ export function ContactsList() {
                     <p className="text-slate-500 dark:text-slate-400">Debitoren & Kreditoren verwalten</p>
                 </div>
 
-                <Button className="gap-2 shadow-lg shadow-primary/20" onClick={() => setIsCreateOpen(true)}>
+                <Button
+                    className="shadow-lg shadow-green-100/20 hover:shadow-green-200/30 transition-all duration-300 bg-gradient-to-r from-green-300 to-green-500 hover:from-green-700 hover:to-green-600"
+                    onClick={() => setIsCreateOpen(true)}
+                >
                     <Plus className="w-4 h-4" />
                     Neuer Kontakt
                 </Button>

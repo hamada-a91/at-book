@@ -31,4 +31,9 @@ class JournalEntry extends Model
     {
         return $this->belongsTo(\App\Modules\Contacts\Models\Contact::class);
     }
+
+    public function belege()
+    {
+        return $this->hasMany(\App\Models\Beleg::class);
+    }
 }

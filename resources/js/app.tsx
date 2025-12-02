@@ -14,6 +14,9 @@ import { InvoiceCreate } from './pages/InvoiceCreate';
 import { InvoicePreview } from './pages/InvoicePreview';
 import { Reports } from './pages/Reports';
 import { Settings } from './pages/Settings';
+import { BelegeList } from './pages/BelegeList';
+import { BelegCreate } from './pages/BelegCreate';
+import { BelegView } from './pages/BelegView';
 import { MainLayout } from '@/components/layout/main-layout';
 import { ThemeProvider } from '@/components/theme-provider';
 import '../css/app.css';
@@ -43,6 +46,10 @@ function App() {
                             <Route path="/invoices/create" element={<InvoiceCreate />} />
                             <Route path="/invoices/:id/preview" element={<InvoicePreview />} />
                             <Route path="/invoices/:id/edit" element={<InvoiceCreate />} />
+                            <Route path="/belege" element={<BelegeList />} />
+                            <Route path="/belege/create" element={<BelegCreate />} />
+                            <Route path="/belege/:id" element={<BelegView />} />
+                            <Route path="/belege/:id/edit" element={<BelegCreate />} />
                             <Route path="/reports" element={<Reports />} />
                             <Route path="/journal" element={<Navigate to="/reports" replace />} />
                             <Route path="/bookings" element={<JournalList />} />

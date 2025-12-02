@@ -10,6 +10,7 @@ import {
     Menu,
     CreditCard,
     BookOpen,
+    Receipt,
 } from "lucide-react"
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
@@ -64,6 +65,12 @@ export function Sidebar({ className }: SidebarProps) {
             icon: FileText,
             href: "/invoices",
             active: pathname.startsWith("/invoices"),
+        },
+        {
+            label: "Belege",
+            icon: Receipt,
+            href: "/belege",
+            active: pathname.startsWith("/belege"),
         },
     ]
 

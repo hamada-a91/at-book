@@ -45,6 +45,13 @@ Route::middleware(['api'])->group(function () {
     Route::post('/invoices/{invoice}/payment', [\App\Http\Controllers\Api\InvoiceController::class, 'recordPayment']);
     Route::get('/invoices/{invoice}/pdf', [\App\Http\Controllers\Api\InvoiceController::class, 'downloadPDF']);
 
+    // Belege (Documents/Receipts)
+    Route::apiResource('belege', \App\Http\Controllers\Api\BelegController::class)->parameters(['belege' => 'beleg']);
+    Route::post('/belege/{beleg}/book', [\App\Http\Controllers\Api\BelegController::class, 'book']);
+    Route::post('/belege/{beleg}/upload', [\App\Http\Controllers\Api\BelegController::class, 'uploadFile']);
+    Route::get('/belege/{beleg}/download', [\App\Http\Controllers\Api\BelegController::class, 'downloadFile']);
+
+
     // Journal Entries
     Route::get('/bookings', [JournalEntryController::class, 'index']);
     Route::get('/bookings/{id}', [JournalEntryController::class, 'show']);

@@ -150,7 +150,7 @@ export function InvoicesList() {
                     <p className="text-slate-500 dark:text-slate-400">Verwalten Sie Ihre Ausgangsrechnungen</p>
                 </div>
                 <Link to="/invoices/create">
-                    <Button className="gap-2 shadow-lg shadow-primary/20">
+                    <Button className="gap-2 shadow-lg shadow-primary/20 bg-gradient-to-r from-purple-300 to-purple-500 hover:from-purple-700 hover:to-purple-600">
                         <Plus className="w-4 h-4" />
                         Neue Rechnung
                     </Button>

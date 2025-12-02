@@ -96,6 +96,16 @@ export function BookingCreate() {
         },
     });
 
+    const { data: belege } = useQuery({
+        queryKey: ['belege'],
+        queryFn: async () => {
+            const res = await fetch('/api/belege');
+            return res.json();
+        },
+    });
+
+    const [selectedBelegId, setSelectedBelegId] = useState<string>('');
+
     const form = useForm<BookingFormValues>({
         resolver: zodResolver(bookingSchema),
         defaultValues: {
@@ -511,6 +521,38 @@ export function BookingCreate() {
                                                 </FormItem>
                                             )}
                                         />
+                                    </div>
+
+                                    {/* Beleg Selection */}
+                                    <div className="grid grid-cols-1 gap-6 pt-4 border-t border-slate-200 dark:border-slate-800">
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                                Beleg verknüpfen (optional)
+                                            </label>
+                                            <Select value={selectedBelegId} onValueChange={setSelectedBelegId}>
+                                                <SelectTrigger className="bg-white dark:bg-slate-950">
+                                                    <SelectValue placeholder="Beleg auswählen..." />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="none">Kein Beleg</SelectItem>
+                                                    {belege?.map((beleg: any) => (
+                                                        <SelectItem key={beleg.id} value={beleg.id.toString()}>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="font-mono text-xs">{beleg.document_number}</span>
+                                                                <span>-</span>
+                                                                <span>{beleg.title}</span>
+                                                                <span className="text-xs text-slate-500">
+                                                                    ({(beleg.amount / 100).toFixed(2)} €)
+                                                                </span>
+                                                            </div>
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                                Verknüpfen Sie diese Buchung mit einem Beleg
+                                            </p>
+                                        </div>
                                     </div>
 
                                     {/* Lines */}
