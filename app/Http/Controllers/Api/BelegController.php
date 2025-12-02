@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Beleg;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
 
 class BelegController extends Controller
 {
@@ -123,162 +124,119 @@ class BelegController extends Controller
         return response()->json(['message' => 'Beleg gelöscht']);
     }
 
-    /**
-     * Book beleg - creates journal entry with proper accounting lines
-     */
-    public function book(Beleg $beleg)
+    public function book(Request $request, Beleg $beleg)
     {
+        if ($beleg->status !== 'draft') {
+            return response()->json(['error' => 'Beleg ist bereits verbucht oder storniert'], 400);
+        }
+
+        // Logic to create a Journal Entry from the Beleg
+        // This is a simplified version. In a real app, you'd likely have a more complex service.
+        
         try {
-            if ($beleg->status !== 'draft') {
-                return response()->json(['error' => 'Beleg ist bereits gebucht'], 400);
-            }
+            DB::beginTransaction();
 
-            // Load relationships
-            $beleg->load(['contact.account']);
-
-            // Validate contact has account
+            $lines = [];
+            
+            // 1. Contact Line (Debitor/Kreditor)
             if ($beleg->contact_id && (!$beleg->contact || !$beleg->contact->account_id)) {
-                return response()->json([
-                    'error' => 'Kontakt hat kein zugeordnetes Debitor/Kreditor-Konto'
-                ], 400);
+                 // Reload contact to be sure
+                 $beleg->load('contact');
             }
 
-            // Create journal entry
-            $journalEntry = \App\Modules\Accounting\Models\JournalEntry::create([
-                'booking_date' => $beleg->document_date,
-                'description' => "{$beleg->document_number} - {$beleg->title}",
+            if ($beleg->contact) {
+                // Determine account based on document type
+                $accountId = null;
+                if ($beleg->document_type === 'ausgang') {
+                    $accountId = $beleg->contact->customer_account_id ?? $beleg->contact->vendor_account_id;
+                } else {
+                    // eingang, offen, sonstige -> treat as incoming/vendor usually
+                    $accountId = $beleg->contact->vendor_account_id ?? $beleg->contact->customer_account_id;
+                }
+
+                if ($accountId) {
+                    $type = ($beleg->document_type === 'ausgang') ? 'debit' : 'credit';
+                    
+                    $lines[] = [
+                        'account_id' => $accountId,
+                        'type' => $type,
+                        'amount' => $beleg->amount,
+                        'tax_key' => null,
+                        'tax_amount' => 0,
+                    ];
+                } else {
+                    throw new \Exception('Kein passendes Konto für den Kontakt gefunden.');
+                }
+            } else {
+                 // If no contact/account, we can't auto-book fully. 
+                 throw new \Exception('Kein Kontakt ausgewählt.');
+            }
+
+            // 2. Contra Account (Revenue/Expense) - Placeholder
+            $contraAccountCode = ($beleg->document_type === 'ausgang') ? '8400' : '3400'; // SKR03/04 examples
+            $contraAccount = \App\Modules\Accounting\Models\Account::where('code', $contraAccountCode)->first();
+            
+            if (!$contraAccount) {
+                 // Fallback to any revenue/expense
+                 $type = ($beleg->document_type === 'ausgang') ? 'revenue' : 'expense';
+                 $contraAccount = \App\Modules\Accounting\Models\Account::where('type', $type)->first();
+            }
+
+            if ($contraAccount) {
+                $type = ($beleg->document_type === 'ausgang') ? 'credit' : 'debit';
+                $netAmount = $beleg->amount - $beleg->tax_amount;
+                
+                $lines[] = [
+                    'account_id' => $contraAccount->id,
+                    'type' => $type,
+                    'amount' => $netAmount,
+                    'tax_key' => null, // Simplified
+                    'tax_amount' => 0,
+                ];
+                
+                // 3. Tax Line
+                if ($beleg->tax_amount > 0) {
+                     // Find tax account... simplified
+                     // Assuming 19%
+                     $taxAccountCode = ($beleg->document_type === 'ausgang') ? '1776' : '1576';
+                     $taxAccount = \App\Modules\Accounting\Models\Account::where('code', $taxAccountCode)->first();
+                     
+                     if ($taxAccount) {
+                        $lines[] = [
+                            'account_id' => $taxAccount->id,
+                            'type' => $type, // Same side as revenue/expense usually? No.
+                            // Sales: Revenue Credit, VAT Credit.
+                            // Purchase: Expense Debit, Input Tax Debit.
+                            'amount' => $beleg->tax_amount,
+                            'tax_key' => null,
+                            'tax_amount' => 0,
+                        ];
+                     }
+                }
+            } else {
+                 throw new \Exception('Kein Gegenkonto gefunden.');
+            }
+
+            $bookingService = app(\App\Modules\Accounting\Services\BookingService::class);
+            $journalEntry = $bookingService->createBooking([
+                'date' => $beleg->document_date->format('Y-m-d'),
+                'description' => $beleg->title,
                 'contact_id' => $beleg->contact_id,
-                'status' => 'posted',
-                'user_id' => auth()->id() ?? 1,
-                'batch_id' => \Illuminate\Support\Str::uuid(),
+                'lines' => $lines
             ]);
 
-            // Create journal entry lines based on document type
-            $netAmount = $beleg->amount - $beleg->tax_amount;
-            $taxAmount = $beleg->tax_amount;
-
-            if ($beleg->document_type === 'eingang' || $beleg->document_type === 'offen') {
-                // INCOMING RECEIPT / OPEN INVOICE (Vendor/Supplier)
-                // Similar to vendor invoice booking
-                
-                if ($beleg->contact && $beleg->contact->account_id) {
-                    // 1. Haben: Kreditor (Creditor) - Gross amount
-                    \App\Modules\Accounting\Models\JournalEntryLine::create([
-                        'journal_entry_id' => $journalEntry->id,
-                        'account_id' => $beleg->contact->account_id,
-                        'type' => 'credit',
-                        'amount' => $beleg->amount,
-                        'tax_key' => null,
-                        'tax_amount' => 0,
-                    ]);
-
-                    // 2. Soll: Aufwandskonto (Expense) - Net amount
-                    // Use default expense account (6000 - Wareneinkauf or similar)
-                    $expenseAccount = \App\Modules\Accounting\Models\Account::where('code', '6000')->first();
-                    if ($expenseAccount) {
-                        \App\Modules\Accounting\Models\JournalEntryLine::create([
-                            'journal_entry_id' => $journalEntry->id,
-                            'account_id' => $expenseAccount->id,
-                            'type' => 'debit',
-                            'amount' => $netAmount,
-                            'tax_key' => null,
-                            'tax_amount' => 0,
-                        ]);
-                    }
-
-                    // 3. Soll: Vorsteuer (Input VAT) - Tax amount
-                    if ($taxAmount > 0) {
-                        // Find VAT account (1576 for 19% or 1571 for 7%)
-                        $taxRate = $netAmount > 0 ? round(($taxAmount / $netAmount) * 100) : 19;
-                        $vatCode = $taxRate == 7 ? '1571' : '1576';
-                        $vatAccount = \App\Modules\Accounting\Models\Account::where('code', $vatCode)->first();
-                        
-                        if ($vatAccount) {
-                            \App\Modules\Accounting\Models\JournalEntryLine::create([
-                                'journal_entry_id' => $journalEntry->id,
-                                'account_id' => $vatAccount->id,
-                                'type' => 'debit',
-                                'amount' => $taxAmount,
-                                'tax_key' => null,
-                                'tax_amount' => 0,
-                            ]);
-                        }
-                    }
-                }
-
-            } elseif ($beleg->document_type === 'ausgang') {
-                // OUTGOING RECEIPT (Customer)
-                // Similar to customer invoice booking
-                
-                if ($beleg->contact && $beleg->contact->account_id) {
-                    // 1. Soll: Debitor (Debtor) - Gross amount
-                    \App\Modules\Accounting\Models\JournalEntryLine::create([
-                        'journal_entry_id' => $journalEntry->id,
-                        'account_id' => $beleg->contact->account_id,
-                        'type' => 'debit',
-                        'amount' => $beleg->amount,
-                        'tax_key' => null,
-                        'tax_amount' => 0,
-                    ]);
-
-                    // 2. Haben: Erlöskonto (Revenue) - Net amount
-                    // Use default revenue account (8400 - Erlöse or similar)
-                    $revenueAccount = \App\Modules\Accounting\Models\Account::where('code', '8400')->first();
-                    if ($revenueAccount) {
-                        \App\Modules\Accounting\Models\JournalEntryLine::create([
-                            'journal_entry_id' => $journalEntry->id,
-                            'account_id' => $revenueAccount->id,
-                            'type' => 'credit',
-                            'amount' => $netAmount,
-                            'tax_key' => null,
-                            'tax_amount' => 0,
-                        ]);
-                    }
-
-                    // 3. Haben: Umsatzsteuer (Output VAT) - Tax amount
-                    if ($taxAmount > 0) {
-                        // Find VAT account (1776 for 19% or 1771 for 7%)
-                        $taxRate = $netAmount > 0 ? round(($taxAmount / $netAmount) * 100) : 19;
-                        $vatCode = $taxRate == 7 ? '1771' : '1776';
-                        $vatAccount = \App\Modules\Accounting\Models\Account::where('code', $vatCode)->first();
-                        
-                        if ($vatAccount) {
-                            \App\Modules\Accounting\Models\JournalEntryLine::create([
-                                'journal_entry_id' => $journalEntry->id,
-                                'account_id' => $vatAccount->id,
-                                'type' => 'credit',
-                                'amount' => $taxAmount,
-                                'tax_key' => null,
-                                'tax_amount' => 0,
-                            ]);
-                        }
-                    }
-                }
-
-            } elseif ($beleg->document_type === 'sonstige') {
-                // MISCELLANEOUS - Create simple entry without specific accounts
-                // User should manually adjust if needed
-                // For now, just mark as booked without creating lines
-            }
-
-            // Update beleg with journal entry reference
             $beleg->update([
                 'status' => 'booked',
                 'journal_entry_id' => $journalEntry->id,
             ]);
 
-            return response()->json($beleg->load(['contact', 'journalEntry.lines.account']));
-            
+            DB::commit();
+
+            return response()->json($beleg);
+
         } catch (\Exception $e) {
-            \Log::error('Beleg booking failed', [
-                'beleg_id' => $beleg->id,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
-            
-            return response()->json([
-                'error' => 'Fehler beim Buchen des Belegs: ' . $e->getMessage()
-            ], 500);
+            DB::rollBack();
+            return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 

@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Search, Pencil, Trash2, Eye, User } from 'lucide-react';
@@ -15,11 +14,14 @@ import {
 } from '@/components/ui/dialog';
 import { ContactForm, ContactFormValues } from '@/components/ContactForm';
 import { Badge } from '@/components/ui/badge';
+import { TableCell } from '@/components/ui/table';
 
 interface Contact {
     id: number;
     name: string;
-    type: 'customer' | 'vendor';
+    type: 'customer' | 'vendor' | 'both' | 'other';
+    customer_account_id?: number;
+    vendor_account_id?: number;
     tax_number: string | null;
     address: string | null;
     email: string | null;
@@ -27,8 +29,10 @@ interface Contact {
     notice: string | null;
     bank_account: string | null;
     contact_person: string | null;
-    balance?: number;
-    balance_formatted?: string;
+    balance: number;
+    balance_formatted: string;
+    customer_balance?: number;
+    vendor_balance?: number;
 }
 
 export function ContactsList() {
@@ -179,30 +183,41 @@ export function ContactsList() {
                                     <tr key={contact.id} className="group hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
                                         <td className="px-6 py-4 font-medium text-slate-900 dark:text-slate-100">{contact.name}</td>
                                         <td className="px-6 py-4">
-                                            <Badge variant="outline" className={`font-normal ${contact.type === 'customer'
-                                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
-                                                : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-800'
-                                                } `}>
-                                                {contact.type === 'customer' ? 'Kunde' : 'Lieferant'}
-                                            </Badge>
+                                            {contact.type === 'customer' && (
+                                                <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800">
+                                                    Kunde
+                                                </Badge>
+                                            )}
+                                            {contact.type === 'vendor' && (
+                                                <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-800">
+                                                    Lieferant
+                                                </Badge>
+                                            )}
+                                            {contact.type === 'both' && (
+                                                <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400 border-purple-200 dark:border-purple-800">
+                                                    Kunde & Lieferant
+                                                </Badge>
+                                            )}
+                                            {contact.type === 'other' && (
+                                                <Badge className="bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-400 border-slate-200 dark:border-slate-700">
+                                                    Sonstiges
+                                                </Badge>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4 text-slate-500 dark:text-slate-400 font-mono text-xs">{contact.tax_number || '-'}</td>
                                         <td className="px-6 py-4 text-slate-500 dark:text-slate-400">
                                             {contact.email && <div className="flex items-center gap-2">{contact.email}</div>}
                                             {contact.phone && <div className="text-xs opacity-75">{contact.phone}</div>}
                                         </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <span className={`font-semibold ${contact.balance && contact.balance > 0
-                                                ? (contact.type === 'customer' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')
-                                                : (contact.type === 'customer' ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')
-                                                } `}>
-                                                {contact.balance_formatted || '0,00 €'}
-                                            </span>
-                                            <div className="text-xs text-slate-400">
-                                                {contact.balance && contact.balance > 0
-                                                    ? (contact.type === 'customer' ? 'Forderung' : 'Guthaben')
-                                                    : (contact.type === 'customer' ? 'Guthaben' : 'Verbindlichkeit')}
+                                        <td className="px-6 py-4 text-right font-mono">
+                                            <div className={contact.balance > 0 ? 'text-emerald-600' : contact.balance < 0 ? 'text-rose-600' : ''}>
+                                                {contact.balance_formatted}
                                             </div>
+                                            {contact.type === 'both' && (
+                                                <div className="text-[10px] text-slate-400 mt-1">
+                                                    Netto Saldo
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex justify-end items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -297,7 +312,12 @@ export function ContactsList() {
                                 </div>
                                 <div>
                                     <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Typ</label>
-                                    <div>{viewContact.type === 'customer' ? 'Kunde' : 'Lieferant'}</div>
+                                    <div>
+                                        {viewContact.type === 'customer' && 'Kunde'}
+                                        {viewContact.type === 'vendor' && 'Lieferant'}
+                                        {viewContact.type === 'both' && 'Kunde & Lieferant'}
+                                        {viewContact.type === 'other' && 'Sonstiges (Neutral)'}
+                                    </div>
                                 </div>
                                 <div>
                                     <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Steuernummer</label>

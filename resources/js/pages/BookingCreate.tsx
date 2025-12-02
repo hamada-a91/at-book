@@ -38,8 +38,10 @@ interface Account {
 interface Contact {
     id: number;
     name: string;
-    type: 'customer' | 'vendor';
+    type: 'customer' | 'vendor' | 'both' | 'other';
     account_id?: number;
+    customer_account_id?: number;
+    vendor_account_id?: number;
 }
 
 const bookingSchema = z.object({
@@ -184,7 +186,13 @@ export function BookingCreate() {
         }
 
         const selectedContact = contacts?.find(c => String(c.id) === contact_id);
-        if (!selectedContact || !selectedContact.account_id) {
+        if (!selectedContact) {
+            alert('Kontakt nicht gefunden.');
+            return;
+        }
+
+        // Check if ANY account is assigned (support for dual accounts)
+        if (!selectedContact.account_id && !selectedContact.customer_account_id && !selectedContact.vendor_account_id && selectedContact.type !== 'other') {
             alert('Kontakt hat kein zugeordnetes Konto.');
             return;
         }
@@ -213,132 +221,221 @@ export function BookingCreate() {
         // ========================================
         // WICHTIG: Bei "Direkt bezahlt" = 5 ZEILEN!
         // ========================================
-        if (is_paid) {
-            // *** PAID: 5 LINES (Invoice 3 + Payment 2) ***
+        // Determine Transaction Type (Customer Sale vs Vendor Purchase)
+        const contraAccount = accounts?.find(a => String(a.id) === contra_account_id);
+        let transactionType: 'customer' | 'vendor' | 'other' = 'vendor'; // Default
 
-            if (selectedContact.type === 'customer') {
-                // === SCHRITT 1: RECHNUNG (3 Zeilen) ===
-
-                // Zeile 1: Soll Debitor 119€
-                newLines.push({
-                    account_id: String(selectedContact.account_id),
-                    type: 'debit' as const,
-                    amount: gross,
-                });
-
-                // Zeile 2: Haben Erlöse 100€
-                newLines.push({
-                    account_id: contra_account_id,
-                    type: 'credit' as const,
-                    amount: net,
-                });
-
-                // Zeile 3: Haben USt 19€
-                if (vatAccount && tax > 0) {
-                    newLines.push({
-                        account_id: String(vatAccount.id),
-                        type: 'credit' as const,
-                        amount: tax,
-                    });
-                }
-
-                // === SCHRITT 2: ZAHLUNG (2 Zeilen) ===
-
-                // Zeile 4: Soll Kasse 119€
-                newLines.push({
-                    account_id: payment_account_id,
-                    type: 'debit' as const,
-                    amount: gross,
-                });
-
-                // Zeile 5: Haben Debitor 119€
-                newLines.push({
-                    account_id: String(selectedContact.account_id),
-                    type: 'credit' as const,
-                    amount: gross,
-                });
-
+        if (selectedContact.type === 'customer') {
+            transactionType = 'customer';
+        } else if (selectedContact.type === 'vendor') {
+            transactionType = 'vendor';
+        } else if (selectedContact.type === 'both') {
+            // If 'both', decide based on Contra Account Type
+            // Revenue -> Customer Sale
+            // Expense -> Vendor Purchase
+            if (contraAccount?.type === 'revenue') {
+                transactionType = 'customer';
             } else {
-                // === VENDOR: SCHRITT 1: RECHNUNG (3 Zeilen) ===
+                transactionType = 'vendor';
+            }
+        } else if (selectedContact.type === 'other') {
+            transactionType = 'other';
+        }
 
-                // Zeile 1: Haben Kreditor
+        // Helper to get correct account ID
+        const getAccountId = (contact: Contact, type: 'customer' | 'vendor' | 'other') => {
+            if (type === 'customer') {
+                return contact.customer_account_id ? String(contact.customer_account_id) : String(contact.account_id); // Fallback
+            } else if (type === 'vendor') {
+                return contact.vendor_account_id ? String(contact.vendor_account_id) : String(contact.account_id); // Fallback
+            } else {
+                // For 'other', we don't have an auto-assigned account.
+                // The user must add it manually or we can try to find one if they added one manually before?
+                // For now, return empty string so validation fails and user has to add it.
+                return '';
+            }
+        };
+
+        const accountId = getAccountId(selectedContact, transactionType);
+
+        if (!accountId && transactionType !== 'other') {
+            alert('Kontakt hat kein passendes Konto (Debitor/Kreditor) zugeordnet.');
+            return;
+        }
+
+        // If 'other' type, we skip auto-generation of the contact line or ask user to select account.
+        // The requirement says: "User macht: 1. Kontakt -> Ahmed (Sonstiges). 2. System erzeugt NICHTS automatisch. 3. User klickt: 'Konto hinzufügen'".
+        // So for 'other', we just populate the contra account line? Or maybe nothing?
+        // "System erzeugt NICHTS automatisch" implies we shouldn't generate lines for the contact part.
+        // But we can generate the contra account part?
+        // Let's generate what we can.
+
+        if (transactionType === 'other') {
+            // Only generate Contra Account line + VAT if applicable?
+            // Or maybe just alert the user that they need to add the account manually?
+            // The user said: "System erzeugt NICHTS automatisch." -> "User klickt: Konto hinzufügen".
+            // So maybe we just don't add the contact line.
+
+            // Let's add the Contra Account line and VAT line (if any), and leave the Contact line for the user to add.
+
+            // Contra Account Line
+            newLines.push({
+                account_id: contra_account_id,
+                type: (contraAccount?.type === 'revenue' ? 'credit' : 'debit') as 'debit' | 'credit',
+                amount: net,
+            });
+
+            // VAT Line
+            if (vatAccount && tax > 0) {
                 newLines.push({
-                    account_id: String(selectedContact.account_id),
-                    type: 'credit' as const,
-                    amount: gross,
+                    account_id: String(vatAccount.id),
+                    type: (contraAccount?.type === 'revenue' ? 'credit' : 'debit') as 'debit' | 'credit',
+                    amount: tax,
                 });
+            }
 
-                // Zeile 2: Soll Aufwand
-                newLines.push({
-                    account_id: contra_account_id,
-                    type: 'debit' as const,
-                    amount: net,
-                });
-
-                // Zeile 3: Soll Vorsteuer
-                if (vatAccount && tax > 0) {
-                    newLines.push({
-                        account_id: String(vatAccount.id),
-                        type: 'debit' as const,
-                        amount: tax,
-                    });
-                }
-
-                // === SCHRITT 2: ZAHLUNG (2 Zeilen) ===
-
-                // Zeile 4: Haben Kasse/Bank
+            // We don't add the contact line. The user has to add it.
+            // But we should probably add the payment line if "is_paid" is true?
+            if (is_paid && payment_account_id) {
                 newLines.push({
                     account_id: payment_account_id,
-                    type: 'credit' as const,
-                    amount: gross,
-                });
-
-                // Zeile 5: Soll Kreditor
-                newLines.push({
-                    account_id: String(selectedContact.account_id),
-                    type: 'debit' as const,
+                    type: (contraAccount?.type === 'revenue' ? 'debit' : 'credit') as 'debit' | 'credit',
                     amount: gross,
                 });
             }
+
         } else {
-            // UNPAID VERSION: Contact account instead of cash/bank
-            if (selectedContact.type === 'customer') {
-                // Customer Sale: Debit Customer, Credit Revenue, Credit VAT
-                newLines.push({
-                    account_id: String(selectedContact.account_id),
-                    type: 'debit' as const,
-                    amount: gross,
-                });
-                newLines.push({
-                    account_id: contra_account_id,
-                    type: 'credit' as const,
-                    amount: net,
-                });
-                if (vatAccount && tax > 0) {
+
+            // ========================================
+            // WICHTIG: Bei "Direkt bezahlt" = 5 ZEILEN!
+            // ========================================
+            if (is_paid) {
+                // *** PAID: 5 LINES (Invoice 3 + Payment 2) ***
+
+                if (transactionType === 'customer') {
+                    // === SCHRITT 1: RECHNUNG (3 Zeilen) ===
+
+                    // Zeile 1: Soll Debitor 119€
                     newLines.push({
-                        account_id: String(vatAccount.id),
+                        account_id: accountId,
+                        type: 'debit' as const,
+                        amount: gross,
+                    });
+
+                    // Zeile 2: Haben Erlöse 100€
+                    newLines.push({
+                        account_id: contra_account_id,
                         type: 'credit' as const,
-                        amount: tax,
+                        amount: net,
+                    });
+
+                    // Zeile 3: Haben USt 19€
+                    if (vatAccount && tax > 0) {
+                        newLines.push({
+                            account_id: String(vatAccount.id),
+                            type: 'credit' as const,
+                            amount: tax,
+                        });
+                    }
+
+                    // === SCHRITT 2: ZAHLUNG (2 Zeilen) ===
+
+                    // Zeile 4: Soll Kasse 119€
+                    newLines.push({
+                        account_id: payment_account_id,
+                        type: 'debit' as const,
+                        amount: gross,
+                    });
+
+                    // Zeile 5: Haben Debitor 119€
+                    newLines.push({
+                        account_id: accountId,
+                        type: 'credit' as const,
+                        amount: gross,
+                    });
+
+                } else {
+                    // === VENDOR: SCHRITT 1: RECHNUNG (3 Zeilen) ===
+
+                    // Zeile 1: Haben Kreditor
+                    newLines.push({
+                        account_id: accountId,
+                        type: 'credit' as const,
+                        amount: gross,
+                    });
+
+                    // Zeile 2: Soll Aufwand
+                    newLines.push({
+                        account_id: contra_account_id,
+                        type: 'debit' as const,
+                        amount: net,
+                    });
+
+                    // Zeile 3: Soll Vorsteuer
+                    if (vatAccount && tax > 0) {
+                        newLines.push({
+                            account_id: String(vatAccount.id),
+                            type: 'debit' as const,
+                            amount: tax,
+                        });
+                    }
+
+                    // === SCHRITT 2: ZAHLUNG (2 Zeilen) ===
+
+                    // Zeile 4: Haben Kasse/Bank
+                    newLines.push({
+                        account_id: payment_account_id,
+                        type: 'credit' as const,
+                        amount: gross,
+                    });
+
+                    // Zeile 5: Soll Kreditor
+                    newLines.push({
+                        account_id: accountId,
+                        type: 'debit' as const,
+                        amount: gross,
                     });
                 }
             } else {
-                // Vendor Purchase: Credit Vendor, Debit Expense, Debit Input VAT
-                newLines.push({
-                    account_id: String(selectedContact.account_id),
-                    type: 'credit' as const,
-                    amount: gross,
-                });
-                newLines.push({
-                    account_id: contra_account_id,
-                    type: 'debit' as const,
-                    amount: net,
-                });
-                if (vatAccount && tax > 0) {
+                // UNPAID VERSION: Contact account instead of cash/bank
+                if (transactionType === 'customer') {
+                    // Customer Sale: Debit Customer, Credit Revenue, Credit VAT
                     newLines.push({
-                        account_id: String(vatAccount.id),
+                        account_id: accountId,
                         type: 'debit' as const,
-                        amount: tax,
+                        amount: gross,
                     });
+                    newLines.push({
+                        account_id: contra_account_id,
+                        type: 'credit' as const,
+                        amount: net,
+                    });
+                    if (vatAccount && tax > 0) {
+                        newLines.push({
+                            account_id: String(vatAccount.id),
+                            type: 'credit' as const,
+                            amount: tax,
+                        });
+                    }
+                } else {
+                    // Vendor Purchase: Credit Vendor, Debit Expense, Debit Input VAT
+                    newLines.push({
+                        account_id: accountId,
+                        type: 'credit' as const,
+                        amount: gross,
+                    });
+                    newLines.push({
+                        account_id: contra_account_id,
+                        type: 'debit' as const,
+                        amount: net,
+                    });
+                    if (vatAccount && tax > 0) {
+                        newLines.push({
+                            account_id: String(vatAccount.id),
+                            type: 'debit' as const,
+                            amount: tax,
+                        });
+                    }
                 }
             }
         }

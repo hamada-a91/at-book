@@ -21,7 +21,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 interface Contact {
     id: number;
     name: string;
-    type: 'customer' | 'vendor';
+    type: 'customer' | 'vendor' | 'both' | 'other';
+    customer_account_id?: number;
+    vendor_account_id?: number;
 }
 
 interface ContactSelectorProps {
@@ -77,7 +79,7 @@ export function ContactSelector({ contacts, value, onChange }: ContactSelectorPr
                     >
                         {selectedContact ? (
                             <span>
-                                {selectedContact.name} <span className="text-muted-foreground text-xs">({selectedContact.type === 'customer' ? 'Kunde' : 'Lieferant'})</span>
+                                {selectedContact.name} <span className="text-muted-foreground text-xs">({selectedContact.type === 'customer' ? 'Kunde' : selectedContact.type === 'vendor' ? 'Lieferant' : selectedContact.type === 'both' ? 'Kunde & Lieferant' : 'Sonstiges'})</span>
                             </span>
                         ) : (
                             "Kontakt wählen..."
@@ -124,7 +126,12 @@ export function ContactSelector({ contacts, value, onChange }: ContactSelectorPr
                                 />
                                 <div className="flex flex-col">
                                     <span>{contact.name}</span>
-                                    <span className="text-xs text-muted-foreground">{contact.type === 'customer' ? 'Kunde' : 'Lieferant'}</span>
+                                    <span className="text-xs text-muted-foreground">
+                                        {contact.type === 'customer' && 'Kunde'}
+                                        {contact.type === 'vendor' && 'Lieferant'}
+                                        {contact.type === 'both' && 'Kunde & Lieferant'}
+                                        {contact.type === 'other' && 'Sonstiges'}
+                                    </span>
                                 </div>
                             </div>
                         ))}

@@ -24,7 +24,7 @@ import {
 
 export const contactSchema = z.object({
     name: z.string().min(2, 'Name muss mindestens 2 Zeichen lang sein'),
-    type: z.enum(['customer', 'vendor']),
+    type: z.enum(['customer', 'vendor', 'both', 'other']),
     tax_number: z.string().optional(),
     address: z.string().optional(),
     email: z.string().email('Ungültige E-Mail').optional().or(z.literal('')),
@@ -97,6 +97,8 @@ export function ContactForm({ onSubmit, isSubmitting = false, defaultValues }: C
                                 <SelectContent>
                                     <SelectItem value="customer">Kunde (Debitor)</SelectItem>
                                     <SelectItem value="vendor">Lieferant (Kreditor)</SelectItem>
+                                    <SelectItem value="both">Kunde & Lieferant</SelectItem>
+                                    <SelectItem value="other">Sonstiges (Neutral)</SelectItem>
                                 </SelectContent>
                             </Select>
                             <FormMessage />

@@ -121,7 +121,7 @@ class InvoiceController extends Controller
             }
 
             // Check if contact has an account
-            if (!$invoice->contact->account_id) {
+            if (!$invoice->contact->customer_account_id) {
                 return response()->json(['error' => "Kunde '{$invoice->contact->name}' hat kein Debitorenkonto. Bitte Kunden neu anlegen."], 400);
             }
 
@@ -136,7 +136,7 @@ class InvoiceController extends Controller
             // 1. Soll: Debitor (customer account) - Bruttobetrag
             \App\Modules\Accounting\Models\JournalEntryLine::create([
                 'journal_entry_id' => $journalEntry->id,
-                'account_id' => $invoice->contact->account_id,
+                'account_id' => $invoice->contact->customer_account_id,
                 'type' => 'debit',
                 'amount' => $invoice->total,
             ]);
@@ -242,7 +242,7 @@ class InvoiceController extends Controller
         // Haben: Debitor
         \App\Modules\Accounting\Models\JournalEntryLine::create([
             'journal_entry_id' => $journalEntry->id,
-            'account_id' => $invoice->contact->account_id,
+            'account_id' => $invoice->contact->customer_account_id,
             'type' => 'credit',
             'amount' => $invoice->total,
         ]);
