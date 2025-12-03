@@ -85,6 +85,11 @@ class ContactController extends Controller
             'notice' => 'nullable|string',
             'bank_account' => 'nullable|string|max:255',
             'contact_person' => 'nullable|string|max:255',
+            'account_id' => 'nullable|exists:accounts,id',
+            // Fields for manual account creation (only for 'other' type)
+            'account_code' => 'nullable|string|unique:accounts,code',
+            'account_name' => 'nullable|string|max:255',
+            'account_type' => 'nullable|in:asset,liability,equity,revenue,expense',
         ]);
 
         $customerAccountId = null;
@@ -100,14 +105,36 @@ class ContactController extends Controller
             $vendorAccountId = $this->createAccount($validated['name'], 'vendor');
         }
         
-        // For 'other' type, no accounts are created automatically.
+        // For 'other' type, handle manual account creation
+        if ($validated['type'] === 'other' && !empty($validated['account_code'])) {
+            // Validate that all required account fields are present
+            if (empty($validated['account_name']) || empty($validated['account_type'])) {
+                return response()->json([
+                    'message' => 'Alle Kontofelder (Konto-Nr., Kontoname, Kontoart) sind erforderlich.',
+                    'errors' => [
+                        'account_code' => empty($validated['account_code']) ? ['Konto-Nr. ist erforderlich.'] : [],
+                        'account_name' => empty($validated['account_name']) ? ['Kontoname ist erforderlich.'] : [],
+                        'account_type' => empty($validated['account_type']) ? ['Kontoart ist erforderlich.'] : [],
+                    ]
+                ], 422);
+            }
+
+            $account = \App\Modules\Accounting\Models\Account::create([
+                'code' => $validated['account_code'],
+                'name' => $validated['account_name'],
+                'type' => $validated['account_type'],
+                'is_system' => false,
+            ]);
+            
+            $validated['account_id'] = $account->id;
+        }
         
         $validated['customer_account_id'] = $customerAccountId;
         $validated['vendor_account_id'] = $vendorAccountId;
         
         $contact = Contact::create($validated);
 
-        return response()->json($contact->load(['customerAccount', 'vendorAccount']), 201);
+        return response()->json($contact->load(['customerAccount', 'vendorAccount', 'account']), 201);
     }
 
     /**
@@ -170,6 +197,7 @@ class ContactController extends Controller
             'notice' => 'nullable|string',
             'bank_account' => 'nullable|string|max:255',
             'contact_person' => 'nullable|string|max:255',
+            'account_id' => 'nullable|exists:accounts,id',
         ]);
 
         // Handle type change logic if needed (e.g. creating missing accounts)
@@ -201,9 +229,13 @@ class ContactController extends Controller
             }
         }
 
+        if ($validated['type'] === 'other' && $request->has('account_id')) {
+            $validated['account_id'] = $request->input('account_id');
+        }
+
         $contact->update($validated);
 
-        return response()->json($contact->load(['customerAccount', 'vendorAccount']));
+        return response()->json($contact->load(['customerAccount', 'vendorAccount', 'account']));
     }
 
     /**

@@ -14,7 +14,6 @@ import {
 } from '@/components/ui/dialog';
 import { ContactForm, ContactFormValues } from '@/components/ContactForm';
 import { Badge } from '@/components/ui/badge';
-import { TableCell } from '@/components/ui/table';
 
 interface Contact {
     id: number;
@@ -33,6 +32,7 @@ interface Contact {
     balance_formatted: string;
     customer_balance?: number;
     vendor_balance?: number;
+    account_id?: number;
 }
 
 export function ContactsList() {
@@ -59,12 +59,19 @@ export function ContactsList() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data),
             });
-            if (!res.ok) throw new Error('Fehler beim Erstellen');
+            if (!res.ok) {
+                const error = await res.json();
+                throw new Error(error.message || 'Fehler beim Erstellen');
+            }
             return res.json();
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['contacts'] });
+            queryClient.invalidateQueries({ queryKey: ['accounts'] });
             setIsCreateOpen(false);
+        },
+        onError: (error: Error) => {
+            alert(error.message);
         },
     });
 
@@ -289,6 +296,7 @@ export function ContactsList() {
                                 notice: editContact.notice || '',
                                 bank_account: editContact.bank_account || '',
                                 contact_person: editContact.contact_person || '',
+                                account_id: editContact.account_id ? String(editContact.account_id) : undefined,
                             }}
                             onSubmit={(data) => updateMutation.mutate(data)}
                             isSubmitting={updateMutation.isPending}

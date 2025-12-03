@@ -21,6 +21,7 @@ class Contact extends Model
         'contact_person',
         'customer_account_id',
         'vendor_account_id',
+        'account_id',
     ];
     
     public function customerAccount()
@@ -31,6 +32,11 @@ class Contact extends Model
     public function vendorAccount()
     {
         return $this->belongsTo(\App\Modules\Accounting\Models\Account::class, 'vendor_account_id');
+    }
+
+    public function account()
+    {
+        return $this->belongsTo(\App\Modules\Accounting\Models\Account::class, 'account_id');
     }
     
     // Helper to get the primary account based on type, or default to customer if both

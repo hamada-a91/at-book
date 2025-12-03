@@ -249,10 +249,8 @@ export function BookingCreate() {
             } else if (type === 'vendor') {
                 return contact.vendor_account_id ? String(contact.vendor_account_id) : String(contact.account_id); // Fallback
             } else {
-                // For 'other', we don't have an auto-assigned account.
-                // The user must add it manually or we can try to find one if they added one manually before?
-                // For now, return empty string so validation fails and user has to add it.
-                return '';
+                // For 'other', we use the manually assigned account_id
+                return contact.account_id ? String(contact.account_id) : '';
             }
         };
 
@@ -271,12 +269,25 @@ export function BookingCreate() {
         // Let's generate what we can.
 
         if (transactionType === 'other') {
-            // Only generate Contra Account line + VAT if applicable?
-            // Or maybe just alert the user that they need to add the account manually?
-            // The user said: "System erzeugt NICHTS automatisch." -> "User klickt: Konto hinzufügen".
-            // So maybe we just don't add the contact line.
+            // For 'other' type, we use the account assigned to the contact.
+            // If accountId is present (which it should be if contact has account_id), we generate the line.
 
-            // Let's add the Contra Account line and VAT line (if any), and leave the Contact line for the user to add.
+            // Primary Account Line (e.g. Loan Account)
+            if (accountId) {
+                newLines.push({
+                    account_id: accountId,
+                    type: (contraAccount?.type === 'revenue' ? 'debit' : 'credit') as 'debit' | 'credit', // Opposite of contra? Or depends?
+                    // Usually:
+                    // If Contra is Revenue (Credit), then Primary is Debit.
+                    // If Contra is Expense (Debit), then Primary is Credit.
+                    // But for "Neutral", it depends.
+                    // Let's assume standard double entry logic:
+                    // If we selected a Revenue account as Contra, we are receiving money/claim -> Debit the Contact Account.
+                    amount: gross,
+                });
+            }
+
+            // Contra Account Line
 
             // Contra Account Line
             newLines.push({

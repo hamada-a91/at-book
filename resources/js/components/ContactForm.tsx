@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Mail, Building2, User, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,6 +21,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { useQuery } from '@tanstack/react-query';
 
 export const contactSchema = z.object({
     name: z.string().min(2, 'Name muss mindestens 2 Zeichen lang sein'),
@@ -32,6 +33,24 @@ export const contactSchema = z.object({
     notice: z.string().optional(),
     bank_account: z.string().optional(),
     contact_person: z.string().optional(),
+    // Fields for new account creation (only for 'other' type)
+    account_code: z.string().optional(),
+    account_name: z.string().optional(),
+    account_type: z.enum(['asset', 'liability', 'equity', 'revenue', 'expense']).optional(),
+    account_id: z.string().optional(),
+}).refine((data) => {
+    if (data.type === 'other') {
+        // If account_id is present, we assume it's an existing contact with an account
+        if (data.account_id) return true;
+        // Otherwise, we require the new account fields
+        if (!data.account_code || !data.account_name || !data.account_type) {
+            return false;
+        }
+    }
+    return true;
+}, {
+    message: "Für Kontakte vom Typ 'Neutral' müssen entweder alle Kontofelder (Konto-Nr., Kontoname, Kontoart) ausgefüllt werden oder ein bestehendes Konto ausgewählt werden.",
+    path: ["account_code"], // Highlight account_code field
 });
 
 export type ContactFormValues = z.infer<typeof contactSchema>;
@@ -47,6 +66,8 @@ export function ContactForm({ onSubmit, isSubmitting = false, defaultValues }: C
     const [showBankAccount, setShowBankAccount] = useState(!!defaultValues?.bank_account);
     const [showContactPerson, setShowContactPerson] = useState(!!defaultValues?.contact_person);
     const [showNotice, setShowNotice] = useState(!!defaultValues?.notice);
+    const [accountCodeError, setAccountCodeError] = useState<string | null>(null);
+    const [checkingAccountCode, setCheckingAccountCode] = useState(false);
 
     const form = useForm<ContactFormValues>({
         resolver: zodResolver(contactSchema),
@@ -63,6 +84,46 @@ export function ContactForm({ onSubmit, isSubmitting = false, defaultValues }: C
             ...defaultValues,
         },
     });
+
+    const { data: accounts } = useQuery({
+        queryKey: ['accounts'],
+        queryFn: async () => {
+            const res = await fetch('/api/accounts');
+            return res.json();
+        },
+    });
+
+    // Reset account code error when type changes
+    useEffect(() => {
+        const subscription = form.watch((value, { name }) => {
+            if (name === 'type' && value.type !== 'other') {
+                setAccountCodeError(null);
+            }
+        });
+        return () => subscription.unsubscribe();
+    }, [form]);
+
+    // Check if account code already exists
+    const checkAccountCode = async (code: string) => {
+        if (!code || code.trim() === '') {
+            setAccountCodeError(null);
+            return;
+        }
+
+        setCheckingAccountCode(true);
+        try {
+            const account = accounts?.find((acc: any) => acc.code === code);
+            if (account) {
+                setAccountCodeError(`Konto-Nr. ${code} existiert bereits (${account.name})`);
+            } else {
+                setAccountCodeError(null);
+            }
+        } catch (error) {
+            console.error('Error checking account code:', error);
+        } finally {
+            setCheckingAccountCode(false);
+        }
+    };
 
     return (
         <Form {...form}>
@@ -105,6 +166,98 @@ export function ContactForm({ onSubmit, isSubmitting = false, defaultValues }: C
                         </FormItem>
                     )}
                 />
+
+                {/* Account Creation for 'other' type */}
+                {form.watch('type') === 'other' && !form.watch('account_id') && (
+                    <div className="space-y-4 p-4 border rounded-md bg-slate-50 dark:bg-slate-900">
+                        <h4 className="font-medium text-sm">Neues Konto erstellen</h4>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <FormField
+                                control={form.control}
+                                name="account_code"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Konto-Nr. *</FormLabel>
+                                        <FormControl>
+                                            <Input
+                                                {...field}
+                                                placeholder="z.B. 1300"
+                                                onBlur={(e) => {
+                                                    field.onBlur();
+                                                    checkAccountCode(e.target.value);
+                                                }}
+                                                className={accountCodeError ? 'border-red-500' : ''}
+                                            />
+                                        </FormControl>
+                                        {accountCodeError && (
+                                            <p className="text-sm text-red-500">{accountCodeError}</p>
+                                        )}
+                                        {checkingAccountCode && (
+                                            <p className="text-sm text-slate-500">Prüfe Konto-Nr...</p>
+                                        )}
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            <FormField
+                                control={form.control}
+                                name="account_type"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Kontoart *</FormLabel>
+                                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                            <FormControl>
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Wählen..." />
+                                                </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                                <SelectItem value="asset">Aktiva (Vermögen)</SelectItem>
+                                                <SelectItem value="liability">Passiva (Verbindlichkeit)</SelectItem>
+                                                <SelectItem value="revenue">Erlöse (Einnahmen)</SelectItem>
+                                                <SelectItem value="expense">Aufwand (Ausgaben)</SelectItem>
+                                                <SelectItem value="equity">Eigenkapital</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                        </div>
+
+                        <FormField
+                            control={form.control}
+                            name="account_name"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Kontoname *</FormLabel>
+                                    <FormControl>
+                                        <Input
+                                            {...field}
+                                            placeholder="Name des Kontos"
+                                            // Optional: Sync with contact name if empty
+                                            onFocus={() => {
+                                                if (!field.value) {
+                                                    form.setValue('account_name', form.getValues('name'));
+                                                }
+                                            }}
+                                        />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                    </div>
+                )}
+
+                {/* Show message if account is already assigned (Editing mode) */}
+                {form.watch('type') === 'other' && form.watch('account_id') && (
+                    <div className="p-4 border rounded-md bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-sm">
+                        Diesem Kontakt ist bereits ein Konto zugewiesen. Die Bearbeitung des Kontos ist hier nicht möglich.
+                    </div>
+                )}
 
                 <FormField
                     control={form.control}
@@ -268,7 +421,11 @@ export function ContactForm({ onSubmit, isSubmitting = false, defaultValues }: C
                     />
                 )}
 
-                <Button type="submit" className="w-full" disabled={isSubmitting}>
+                <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={isSubmitting || !!accountCodeError}
+                >
                     {isSubmitting ? 'Speichert...' : 'Speichern'}
                 </Button>
             </form>
