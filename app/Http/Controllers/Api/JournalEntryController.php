@@ -22,6 +22,7 @@ class JournalEntryController extends Controller
             'date' => 'required|date',
             'description' => 'required|string|min:3',
             'contact_id' => 'nullable|exists:contacts,id',
+            'beleg_id' => 'nullable|exists:belege,id',
             'lines' => 'required|array|min:2',
             'lines.*.account_id' => 'required|exists:accounts,id',
             'lines.*.type' => 'required|in:debit,credit',
@@ -69,11 +70,27 @@ class JournalEntryController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $query = \App\Modules\Accounting\Models\JournalEntry::with('lines.account')
+        $query = \App\Modules\Accounting\Models\JournalEntry::with(['lines.account', 'beleg'])
             ->orderBy('booking_date', 'desc');
 
         if ($request->has('status')) {
             $query->where('status', $request->status);
+        }
+
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function($q) use ($search) {
+                $q->where('description', 'like', "%{$search}%")
+                  ->orWhere('id', 'like', "%{$search}%");
+            });
+        }
+
+        if ($request->filled('from_date')) {
+            $query->whereDate('booking_date', '>=', $request->from_date);
+        }
+
+        if ($request->filled('to_date')) {
+            $query->whereDate('booking_date', '<=', $request->to_date);
         }
 
         $entries = $query->paginate(50);
@@ -85,7 +102,7 @@ class JournalEntryController extends Controller
      */
     public function show(int $id): JsonResponse
     {
-        $entry = \App\Modules\Accounting\Models\JournalEntry::with('lines.account')
+        $entry = \App\Modules\Accounting\Models\JournalEntry::with(['lines.account', 'beleg'])
             ->findOrFail($id);
         return response()->json($entry);
     }

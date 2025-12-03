@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Plus, Eye, Lock, RotateCcw, CheckCircle2, AlertCircle, FileText, Calendar, Search } from 'lucide-react';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
+import { Plus, Eye, Lock, RotateCcw, CheckCircle2, AlertCircle, FileText, Calendar, Search, Paperclip, Download } from 'lucide-react';
+import { DateRangeSelector } from '@/components/reports/DateRangeSelector';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -28,7 +30,18 @@ interface JournalEntry {
     status: 'draft' | 'posted' | 'cancelled';
     locked_at: string | null;
     lines?: JournalEntryLine[];
+    beleg?: {
+        id: number;
+        document_number: string;
+        title: string;
+        file_path: string | null;
+        file_name: string | null;
+    };
 }
+
+// ... (rest of imports and interfaces)
+
+
 
 interface JournalEntryLine {
     id: number;
@@ -56,14 +69,24 @@ const statusVariants: Record<string, "default" | "secondary" | "destructive" | "
 
 export function JournalList() {
     const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'posted'>('all');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
+        from: startOfMonth(new Date()),
+        to: endOfMonth(new Date())
+    });
     const [selectedBooking, setSelectedBooking] = useState<JournalEntry | null>(null);
     const queryClient = useQueryClient();
 
     const { data: bookings, isLoading } = useQuery<{ data: JournalEntry[] }>({
-        queryKey: ['bookings', statusFilter],
+        queryKey: ['bookings', statusFilter, searchQuery, dateRange],
         queryFn: async () => {
-            const url = statusFilter === 'all' ? '/api/bookings' : `/api/bookings?status=${statusFilter}`;
-            const res = await fetch(url);
+            const params = new URLSearchParams();
+            if (statusFilter !== 'all') params.append('status', statusFilter);
+            if (searchQuery) params.append('search', searchQuery);
+            params.append('from_date', format(dateRange.from, 'yyyy-MM-dd'));
+            params.append('to_date', format(dateRange.to, 'yyyy-MM-dd'));
+
+            const res = await fetch(`/api/bookings?${params.toString()}`);
             return res.json();
         },
     });
@@ -147,7 +170,7 @@ export function JournalList() {
 
     return (
         <div className="space-y-8 p-1">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-slate-900 to-slate-600 dark:from-slate-100 dark:to-slate-400 bg-clip-text text-transparent">
                         Journal
@@ -156,12 +179,17 @@ export function JournalList() {
                         Alle Buchungen verwalten (GoBD-konform)
                     </p>
                 </div>
-                <Link to="/bookings/create">
-                    <Button className="shadow-lg shadow-blue-100/20 hover:shadow-blue-200/30 transition-all duration-300 bg-gradient-to-r from-blue-300 to-blue-500 hover:from-blue-700 hover:to-blue-600">
-                        <Plus className="w-4 h-4 mr-2" />
-                        Neue Buchung
-                    </Button>
-                </Link>
+                <div className="flex flex-col items-end gap-4">
+                    <div className="flex gap-2">
+                        <Link to="/bookings/create">
+                            <Button className="shadow-lg shadow-blue-100/20 hover:shadow-blue-200/30 transition-all duration-300 bg-gradient-to-r from-blue-300 to-blue-500 hover:from-blue-700 hover:to-blue-600">
+                                <Plus className="w-4 h-4 mr-2" />
+                                Neue Buchung
+                            </Button>
+                        </Link>
+                    </div>
+                    <DateRangeSelector onRangeChange={(from, to) => setDateRange({ from, to })} className="w-full md:w-auto" />
+                </div>
             </div>
 
             {/* Stats */}
@@ -238,6 +266,8 @@ export function JournalList() {
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                             <Input
                                 placeholder="Suchen..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
                                 className="pl-9 bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 focus:ring-blue-500"
                             />
                         </div>
@@ -412,6 +442,43 @@ export function JournalList() {
                                     </div>
                                 )}
                             </div>
+
+                            {/* Beleg Info */}
+                            {selectedBooking.beleg && (
+                                <div className="bg-blue-50/50 dark:bg-blue-900/10 rounded-xl border border-blue-100 dark:border-blue-800 p-4">
+                                    <h4 className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-3 flex items-center gap-2">
+                                        <Paperclip className="w-4 h-4" />
+                                        Verknüpfter Beleg
+                                    </h4>
+                                    <div className="flex items-center justify-between bg-white dark:bg-slate-900 p-3 rounded-lg border border-blue-100 dark:border-blue-800">
+                                        <div className="flex items-center gap-3">
+                                            <div className="h-10 w-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+                                                <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                                            </div>
+                                            <div>
+                                                <p className="font-medium text-slate-900 dark:text-slate-100">
+                                                    {selectedBooking.beleg.document_number}
+                                                </p>
+                                                <p className="text-sm text-slate-500 dark:text-slate-400">
+                                                    {selectedBooking.beleg.title}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        {selectedBooking.beleg.file_path && (
+                                            <a
+                                                href={`/api/belege/${selectedBooking.beleg.id}/download`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                            >
+                                                <Button variant="outline" size="sm" className="gap-2 hover:bg-blue-50 dark:hover:bg-blue-900/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800">
+                                                    <Download className="w-4 h-4" />
+                                                    Öffnen
+                                                </Button>
+                                            </a>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Booking Lines */}
                             <div>

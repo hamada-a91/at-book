@@ -4,7 +4,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { ArrowLeft, Plus, Trash2, Zap } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Zap, Upload, FileText, Search, XCircle, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -27,6 +27,13 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ContactSelector } from '@/components/ContactSelector';
 import { AccountSelector } from '@/components/AccountSelector';
 import { roundToTwoDecimals, formatCurrency as formatEuro, calculateVAT } from '@/lib/currency';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 
 interface Account {
     id: number;
@@ -71,6 +78,23 @@ type BookingFormValues = z.infer<typeof bookingSchema>;
 
 export function BookingCreate() {
     const navigate = useNavigate();
+
+    // Beleg Workflow State
+    type BelegOption = 'none' | 'attach' | 'create' | 'select' | 'exception';
+    const [belegStep, setBelegStep] = useState<'select' | 'complete'>('select');
+    const [selectedBelegOption, setSelectedBelegOption] = useState<BelegOption>('none');
+    const [newBelegId, setNewBelegId] = useState<number | null>(null);
+    const [showBelegDialog, setShowBelegDialog] = useState(false);
+
+    // Inline Beleg Creation Form State
+    const [newBelegData, setNewBelegData] = useState({
+        document_type: 'eingang',
+        title: '',
+        document_date: new Date().toISOString().split('T')[0],
+        due_date: '',
+        notes: '',
+        file: null as File | null,
+    });
 
     // Quick Entry State with Direct Payment Option
     const [quickEntry, setQuickEntry] = useState({
@@ -128,10 +152,97 @@ export function BookingCreate() {
 
     const createMutation = useMutation({
         mutationFn: async (data: BookingFormValues) => {
+            let belegIdToUse = selectedBelegId && selectedBelegId !== 'none' ? parseInt(selectedBelegId) : null;
+
+            // If creating new Beleg inline, create it first
+            if (selectedBelegOption === 'attach') {
+                // Validate that we have booking lines
+                if (!data.lines || data.lines.length === 0) {
+                    throw new Error('Bitte fügen Sie mindestens eine Buchungszeile hinzu bevor Sie einen Beleg erstellen.');
+                }
+
+                // Calculate Beleg data from booking
+                const debitSum = data.lines.filter(l => l.type === 'debit').reduce((sum, l) => sum + (parseFloat(String(l.amount)) || 0), 0);
+                const creditSum = data.lines.filter(l => l.type === 'credit').reduce((sum, l) => sum + (parseFloat(String(l.amount)) || 0), 0);
+                const totalAmount = Math.max(debitSum, creditSum); // Bruttobetrag
+
+                if (totalAmount === 0) {
+                    throw new Error('Der Buchungsbetrag muss größer als 0 sein um einen Beleg zu erstellen.');
+                }
+
+                // Try to find VAT amount from lines (if any account has 'USt' or 'Vst' in name)
+                let taxAmount = 0;
+                for (const line of data.lines) {
+                    const account = accounts?.find(a => String(a.id) === line.account_id);
+                    if (account && (account.code.includes('17') || account.code.includes('15'))) {
+                        // VAT account detected
+                        taxAmount = parseFloat(String(line.amount)) || 0;
+                        break;
+                    }
+                }
+
+                // Create FormData for file upload
+                const formData = new FormData();
+                formData.append('document_type', newBelegData.document_type);
+                formData.append('title', newBelegData.title);
+                formData.append('document_date', newBelegData.document_date);
+                formData.append('amount', String(Math.round(totalAmount * 100))); // Convert to cents
+                formData.append('tax_amount', String(Math.round(taxAmount * 100))); // Convert to cents
+                if (data.contact_id && data.contact_id !== 'none') formData.append('contact_id', data.contact_id);
+                if (newBelegData.notes) formData.append('notes', newBelegData.notes);
+                if (newBelegData.due_date) formData.append('due_date', newBelegData.due_date);
+                if (newBelegData.file) formData.append('file', newBelegData.file);
+
+                // Debug: Log what we're sending
+                console.log('Creating Beleg with data:', {
+                    document_type: newBelegData.document_type,
+                    title: newBelegData.title,
+                    document_date: newBelegData.document_date,
+                    amount: Math.round(totalAmount * 100),
+                    tax_amount: Math.round(taxAmount * 100),
+                    contact_id: data.contact_id,
+                    has_file: !!newBelegData.file,
+                });
+
+                // Create Beleg
+                const belegRes = await fetch('/api/belege', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                if (!belegRes.ok) {
+                    let errorMessage = 'Fehler beim Erstellen des Belegs';
+                    const contentType = belegRes.headers.get('content-type');
+
+                    if (contentType && contentType.includes('application/json')) {
+                        const error = await belegRes.json();
+                        errorMessage = error.message || error.error || errorMessage;
+                    } else {
+                        // HTML error response
+                        const errorText = await belegRes.text();
+                        console.error('Beleg creation error (HTML):', errorText);
+
+                        // Try to extract error from HTML
+                        const match = errorText.match(/<title>(.*?)<\/title>/);
+                        if (match && match[1]) {
+                            errorMessage = match[1];
+                        }
+                    }
+
+                    throw new Error(errorMessage + ` (Status: ${belegRes.status})`);
+                }
+
+                const createdBeleg = await belegRes.json();
+                belegIdToUse = createdBeleg.id;
+                setNewBelegId(createdBeleg.id);
+            }
+
+            // Create Booking
             const payload = {
                 date: data.date,
                 description: data.description,
                 contact_id: data.contact_id === 'none' || !data.contact_id ? null : data.contact_id,
+                beleg_id: belegIdToUse,
                 lines: data.lines.map((line) => ({
                     account_id: parseInt(line.account_id),
                     type: line.type,
@@ -163,6 +274,11 @@ export function BookingCreate() {
     });
 
     const onSubmit = (data: BookingFormValues) => {
+        // Validate that Beleg step is completed
+        if (belegStep !== 'complete') {
+            alert('Bitte wählen Sie zuerst eine Beleg-Option aus.');
+            return;
+        }
         createMutation.mutate(data);
     };
 
@@ -477,121 +593,474 @@ export function BookingCreate() {
                 </Button>
             </div>
 
+            {/* Beleg Selection Workflow - REQUIRED STEP */}
+            {belegStep === 'select' && (
+                <Card className="border-2 border-blue-500 dark:border-blue-600 shadow-lg bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30">
+                    <CardHeader className="pb-4">
+                        <div className="flex items-center gap-3">
+                            <div className="p-3 bg-blue-600 rounded-xl">
+                                <FileText className="w-6 h-6 text-white" />
+                            </div>
+                            <div>
+                                <CardTitle className="text-xl text-blue-900 dark:text-blue-100">
+                                    Schritt 1: Beleg zuordnen
+                                </CardTitle>
+                                <CardDescription className="text-blue-700 dark:text-blue-300 font-medium">
+                                    Bitte wählen Sie eine der folgenden Optionen, um fortzufahren
+                                </CardDescription>
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* Option 1: Attach File & Create Beleg */}
+                            <button
+                                onClick={() => {
+                                    setSelectedBelegOption('attach');
+                                    setBelegStep('select'); // Keep in select mode to show form
+                                }}
+                                className={`group relative p-6 rounded-xl border-2 transition-all duration-200 text-left ${selectedBelegOption === 'attach'
+                                    ? 'border-blue-600 bg-blue-100 dark:bg-blue-950/50 shadow-md'
+                                    : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-blue-400 hover:shadow-sm'
+                                    }`}
+                            >
+                                <div className="flex items-start gap-4">
+                                    <div className={`p-3 rounded-lg ${selectedBelegOption === 'attach' ? 'bg-blue-600' : 'bg-slate-100 dark:bg-slate-800 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/30'}`}>
+                                        <Upload className={`w-6 h-6 ${selectedBelegOption === 'attach' ? 'text-white' : 'text-slate-600 dark:text-slate-400'}`} />
+                                    </div>
+                                    <div className="flex-1">
+                                        <h3 className="font-semibold text-slate-900 dark:text-slate-100 mb-1">
+                                            Neuen Beleg erstellen
+                                        </h3>
+                                        <p className="text-sm text-slate-600 dark:text-slate-400">
+                                            Beleg-Daten eingeben und parallel mit Buchung erstellen
+                                        </p>
+                                    </div>
+                                    {selectedBelegOption === 'attach' && (
+                                        <Check className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                                    )}
+                                </div>
+                            </button>
+
+                            {/* Option 2: Create New Beleg */}
+                            <button
+                                onClick={() => {
+                                    setSelectedBelegOption('create');
+                                    // Navigate to Beleg creation page
+                                    window.open('/belege/create?from=booking', '_blank');
+                                    setShowBelegDialog(true);
+                                }}
+                                className={`group relative p-6 rounded-xl border-2 transition-all duration-200 text-left ${selectedBelegOption === 'create'
+                                    ? 'border-blue-600 bg-blue-100 dark:bg-blue-950/50 shadow-md'
+                                    : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-blue-400 hover:shadow-sm'
+                                    }`}
+                            >
+                                <div className="flex items-start gap-4">
+                                    <div className={`p-3 rounded-lg ${selectedBelegOption === 'create' ? 'bg-blue-600' : 'bg-slate-100 dark:bg-slate-800 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/30'}`}>
+                                        <Plus className={`w-6 h-6 ${selectedBelegOption === 'create' ? 'text-white' : 'text-slate-600 dark:text-slate-400'}`} />
+                                    </div>
+                                    <div className="flex-1">
+                                        <h3 className="font-semibold text-slate-900 dark:text-slate-100 mb-1">
+                                            Neuen Beleg erstellen
+                                        </h3>
+                                        <p className="text-sm text-slate-600 dark:text-slate-400">
+                                            Beleg-Details in neuem Fenster erfassen
+                                        </p>
+                                    </div>
+                                    {selectedBelegOption === 'create' && (
+                                        <Check className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                                    )}
+                                </div>
+                            </button>
+
+                            {/* Option 3: Select Existing Beleg */}
+                            <button
+                                onClick={() => {
+                                    setSelectedBelegOption('select');
+                                    setShowBelegDialog(true);
+                                }}
+                                className={`group relative p-6 rounded-xl border-2 transition-all duration-200 text-left ${selectedBelegOption === 'select'
+                                    ? 'border-blue-600 bg-blue-100 dark:bg-blue-950/50 shadow-md'
+                                    : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-blue-400 hover:shadow-sm'
+                                    }`}
+                            >
+                                <div className="flex items-start gap-4">
+                                    <div className={`p-3 rounded-lg ${selectedBelegOption === 'select' ? 'bg-blue-600' : 'bg-slate-100 dark:bg-slate-800 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/30'}`}>
+                                        <Search className={`w-6 h-6 ${selectedBelegOption === 'select' ? 'text-white' : 'text-slate-600 dark:text-slate-400'}`} />
+                                    </div>
+                                    <div className="flex-1">
+                                        <h3 className="font-semibold text-slate-900 dark:text-slate-100 mb-1">
+                                            Bestehenden Beleg auswählen
+                                        </h3>
+                                        <p className="text-sm text-slate-600 dark:text-slate-400">
+                                            Aus vorhandenen Belegen wählen
+                                        </p>
+                                    </div>
+                                    {selectedBelegOption === 'select' && (
+                                        <Check className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                                    )}
+                                </div>
+                            </button>
+
+                            {/* Option 4: Exception - Without Beleg */}
+                            <button
+                                onClick={() => {
+                                    setSelectedBelegOption('exception');
+                                    setBelegStep('complete');
+                                }}
+                                className={`group relative p-6 rounded-xl border-2 transition-all duration-200 text-left ${selectedBelegOption === 'exception'
+                                    ? 'border-amber-600 bg-amber-100 dark:bg-amber-950/50 shadow-md'
+                                    : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-amber-400 hover:shadow-sm'
+                                    }`}
+                            >
+                                <div className="flex items-start gap-4">
+                                    <div className={`p-3 rounded-lg ${selectedBelegOption === 'exception' ? 'bg-amber-600' : 'bg-slate-100 dark:bg-slate-800 group-hover:bg-amber-100 dark:group-hover:bg-amber-900/30'}`}>
+                                        <XCircle className={`w-6 h-6 ${selectedBelegOption === 'exception' ? 'text-white' : 'text-slate-600 dark:text-slate-400'}`} />
+                                    </div>
+                                    <div className="flex-1">
+                                        <h3 className="font-semibold text-slate-900 dark:text-slate-100 mb-1">
+                                            Ohne Beleg (Ausnahme)
+                                        </h3>
+                                        <p className="text-sm text-slate-600 dark:text-slate-400">
+                                            Nur in begründeten Ausnahmefällen
+                                        </p>
+                                    </div>
+                                    {selectedBelegOption === 'exception' && (
+                                        <Check className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                                    )}
+                                </div>
+                            </button>
+                        </div>
+
+                        {selectedBelegOption !== 'none' && selectedBelegOption !== 'exception' && selectedBelegOption !== 'attach' && (
+                            <div className="mt-6 p-4 bg-blue-100 dark:bg-blue-900/30 rounded-lg border border-blue-300 dark:border-blue-700">
+                                <p className="text-sm text-blue-900 dark:text-blue-100 font-medium">
+                                    ℹ️ Nach Abschluss der Beleg-Erfassung kehren Sie zu dieser Seite zurück und fahren fort.
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Inline Beleg Creation Form */}
+                        {selectedBelegOption === 'attach' && (
+                            <div className="mt-6 p-6 bg-white dark:bg-slate-900 rounded-xl border-2 border-blue-500 dark:border-blue-600 shadow-lg">
+                                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
+                                    <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                                    Neuen Beleg erstellen
+                                </h3>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {/* Document Type */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                                            Belegart *
+                                        </label>
+                                        <Select
+                                            value={newBelegData.document_type}
+                                            onValueChange={(value) => setNewBelegData(prev => ({ ...prev, document_type: value }))}
+                                        >
+                                            <SelectTrigger className="bg-white dark:bg-slate-950">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="eingang">Eingangsrechnung</SelectItem>
+                                                <SelectItem value="ausgang">Ausgangsrechnung</SelectItem>
+                                                <SelectItem value="offen">Offener Posten</SelectItem>
+                                                <SelectItem value="sonstige">Sonstige</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    {/* Title */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                                            Titel *
+                                        </label>
+                                        <Input
+                                            value={newBelegData.title}
+                                            onChange={(e) => setNewBelegData(prev => ({ ...prev, title: e.target.value }))}
+                                            placeholder="z.B. Rechnung #12345"
+                                            className="bg-white dark:bg-slate-950"
+                                        />
+                                    </div>
+
+                                    {/* Document Date */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                                            Belegdatum *
+                                        </label>
+                                        <Input
+                                            type="date"
+                                            value={newBelegData.document_date}
+                                            onChange={(e) => setNewBelegData(prev => ({ ...prev, document_date: e.target.value }))}
+                                            className="bg-white dark:bg-slate-950"
+                                        />
+                                    </div>
+
+                                    {/* Due Date */}
+                                    <div className="md:col-span-2">
+                                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                                            Fälligkeitsdatum (optional)
+                                        </label>
+                                        <Input
+                                            type="date"
+                                            value={newBelegData.due_date}
+                                            onChange={(e) => setNewBelegData(prev => ({ ...prev, due_date: e.target.value }))}
+                                            className="bg-white dark:bg-slate-950"
+                                        />
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                            💡 Betrag, MwSt und Kontakt werden automatisch aus der Buchung übernommen
+                                        </p>
+                                    </div>
+
+                                    {/* File Upload */}
+                                    <div className="md:col-span-2">
+                                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                                            Datei anhängen
+                                        </label>
+                                        <div className="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-lg p-4 text-center bg-slate-50 dark:bg-slate-900">
+                                            <Upload className="w-8 h-8 mx-auto text-slate-400 mb-2" />
+                                            <Input
+                                                type="file"
+                                                accept=".pdf,.jpg,.jpeg,.png"
+                                                onChange={(e) => setNewBelegData(prev => ({ ...prev, file: e.target.files?.[0] || null }))}
+                                                className="mt-2"
+                                            />
+                                            {newBelegData.file && (
+                                                <p className="text-sm text-emerald-600 dark:text-emerald-400 mt-2">
+                                                    ✓ {newBelegData.file.name}
+                                                </p>
+                                            )}
+                                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                                                PDF, JPG oder PNG (max. 10MB)
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Notes */}
+                                    <div className="md:col-span-2">
+                                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                                            Notizen
+                                        </label>
+                                        <Input
+                                            value={newBelegData.notes}
+                                            onChange={(e) => setNewBelegData(prev => ({ ...prev, notes: e.target.value }))}
+                                            placeholder="Optionale Notizen..."
+                                            className="bg-white dark:bg-slate-950"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="mt-6 flex gap-3">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => {
+                                            setSelectedBelegOption('none');
+                                            setNewBelegData({
+                                                document_type: 'eingang',
+                                                title: '',
+                                                document_date: new Date().toISOString().split('T')[0],
+                                                due_date: '',
+                                                notes: '',
+                                                file: null,
+                                            });
+                                        }}
+                                        className="flex-1"
+                                    >
+                                        Abbrechen
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        onClick={() => {
+                                            // Validate required fields
+                                            if (!newBelegData.title || !newBelegData.document_date) {
+                                                alert('Bitte füllen Sie alle Pflichtfelder aus (Titel, Datum)');
+                                                return;
+                                            }
+                                            setBelegStep('complete');
+                                        }}
+                                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                                    >
+                                        <Check className="w-4 h-4 mr-2" />
+                                        Beleg-Daten bestätigen
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* Beleg Confirmation - Once selected */}
+            {belegStep === 'complete' && (
+                <Card className="border-2 border-emerald-500 dark:border-emerald-600 shadow-md bg-gradient-to-br from-emerald-50 to-green-50 dark:from-emerald-950/30 dark:to-green-950/30">
+                    <CardContent className="py-4">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <div className="p-2 bg-emerald-600 rounded-lg">
+                                    <Check className="w-5 h-5 text-white" />
+                                </div>
+                                <div>
+                                    <h3 className="font-semibold text-emerald-900 dark:text-emerald-100">
+                                        {selectedBelegOption === 'exception' && 'Ohne Beleg (Ausnahme)'}
+                                        {selectedBelegOption === 'select' && `Beleg #${selectedBelegId}`}
+                                        {selectedBelegOption === 'create' && 'Neuer Beleg (Externes Fenster)'}
+                                        {selectedBelegOption === 'attach' && (
+                                            <span>
+                                                Neuer Beleg: {newBelegData.title || '(Noch nicht ausgefüllt)'}
+                                            </span>
+                                        )}
+                                    </h3>
+                                    <p className="text-sm text-emerald-700 dark:text-emerald-300">
+                                        {selectedBelegOption === 'attach'
+                                            ? 'Beleg wird beim Speichern automatisch erstellt'
+                                            : 'Sie können nun mit der Buchung fortfahren'}
+                                    </p>
+                                </div>
+                            </div>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                    setBelegStep('select');
+                                    setSelectedBelegOption('none');
+                                    setSelectedBelegId('');
+                                }}
+                                className="border-emerald-600 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50"
+                            >
+                                Ändern
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
+
             <div className="grid gap-6 lg:grid-cols-12">
                 {/* Main Form Area */}
                 <div className="lg:col-span-12 space-y-6">
                     {/* Quick Entry Card */}
-                    <Card className="border-none shadow-md bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 dark:border dark:border-blue-900/50">
-                        <CardHeader className="pb-4">
-                            <div className="flex items-center gap-2">
-                                <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
-                                    <Zap className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                                </div>
-                                <div>
-                                    <CardTitle className="text-lg text-blue-900 dark:text-blue-100">Schnelleingabe</CardTitle>
-                                    <CardDescription className="text-blue-700 dark:text-blue-300">
-                                        Automatische Generierung von Buchungssätzen
-                                    </CardDescription>
+                    <div className={`relative ${belegStep !== 'complete' ? 'opacity-50 pointer-events-none' : ''}`}>
+                        {belegStep !== 'complete' && (
+                            <div className="absolute inset-0 z-10 flex items-center justify-center bg-slate-900/5 dark:bg-slate-100/5 rounded-lg">
+                                <div className="bg-white dark:bg-slate-800 px-6 py-3 rounded-lg shadow-lg border-2 border-blue-500">
+                                    <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                        ⚠️ Bitte wählen Sie zuerst eine Beleg-Option
+                                    </p>
                                 </div>
                             </div>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-                                <div className="lg:col-span-2">
-                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                                        Kontakt *
-                                    </label>
-                                    <ContactSelector
-                                        contacts={contacts}
-                                        value={quickEntry.contact_id}
-                                        onChange={(value) => setQuickEntry(prev => ({ ...prev, contact_id: value }))}
-                                    />
+                        )}
+                        <Card className="border-none shadow-md bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 dark:border dark:border-blue-900/50">
+                            <CardHeader className="pb-4">
+                                <div className="flex items-center gap-2">
+                                    <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
+                                        <Zap className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-lg text-blue-900 dark:text-blue-100">Schnelleingabe</CardTitle>
+                                        <CardDescription className="text-blue-700 dark:text-blue-300">
+                                            Automatische Generierung von Buchungssätzen
+                                        </CardDescription>
+                                    </div>
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+                                    <div className="lg:col-span-2">
+                                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                                            Kontakt *
+                                        </label>
+                                        <ContactSelector
+                                            contacts={contacts}
+                                            value={quickEntry.contact_id}
+                                            onChange={(value) => setQuickEntry(prev => ({ ...prev, contact_id: value }))}
+                                        />
+                                    </div>
+
+                                    <div className="lg:col-span-2">
+                                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                                            Gegenkonto *
+                                        </label>
+                                        <AccountSelector
+                                            accounts={accounts}
+                                            value={quickEntry.contra_account_id}
+                                            onChange={(value) => setQuickEntry(prev => ({ ...prev, contra_account_id: value }))}
+                                            filterType={['revenue', 'expense']}
+                                            placeholder="Erlös-/Aufwandskonto..."
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                                            MwSt *
+                                        </label>
+                                        <Select
+                                            value={quickEntry.vat_rate}
+                                            onValueChange={(value) => setQuickEntry(prev => ({ ...prev, vat_rate: value }))}
+                                        >
+                                            <SelectTrigger className="bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="19">19%</SelectItem>
+                                                <SelectItem value="7">7%</SelectItem>
+                                                <SelectItem value="0">0%</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                                            Betrag (€) *
+                                        </label>
+                                        <Input
+                                            type="number"
+                                            step="0.01"
+                                            placeholder="0.00"
+                                            value={quickEntry.gross_amount}
+                                            onChange={(e) => setQuickEntry(prev => ({ ...prev, gross_amount: e.target.value }))}
+                                            className="bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800"
+                                        />
+                                    </div>
                                 </div>
 
-                                <div className="lg:col-span-2">
-                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                                        Gegenkonto *
-                                    </label>
-                                    <AccountSelector
-                                        accounts={accounts}
-                                        value={quickEntry.contra_account_id}
-                                        onChange={(value) => setQuickEntry(prev => ({ ...prev, contra_account_id: value }))}
-                                        filterType={['revenue', 'expense']}
-                                        placeholder="Erlös-/Aufwandskonto..."
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                                        MwSt *
-                                    </label>
-                                    <Select
-                                        value={quickEntry.vat_rate}
-                                        onValueChange={(value) => setQuickEntry(prev => ({ ...prev, vat_rate: value }))}
+                                <div className="mt-4 flex items-center justify-between">
+                                    <div className="flex items-center space-x-2">
+                                        <Checkbox
+                                            id="is_paid"
+                                            checked={quickEntry.is_paid}
+                                            onCheckedChange={(checked) => setQuickEntry(prev => ({ ...prev, is_paid: !!checked }))}
+                                            className="border-blue-400 data-[state=checked]:bg-blue-600"
+                                        />
+                                        <label
+                                            htmlFor="is_paid"
+                                            className="text-sm font-medium leading-none text-slate-700 dark:text-slate-300 cursor-pointer"
+                                        >
+                                            Als "Bezahlt" markieren
+                                        </label>
+                                        {quickEntry.is_paid && (
+                                            <div className="w-[200px] ml-4">
+                                                <AccountSelector
+                                                    accounts={accounts}
+                                                    value={quickEntry.payment_account_id}
+                                                    onChange={(value) => setQuickEntry(prev => ({ ...prev, payment_account_id: value }))}
+                                                    filterType={['asset']}
+                                                    placeholder="Kasse/Bank..."
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
+                                    <Button
+                                        type="button"
+                                        onClick={handleQuickEntry}
+                                        className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
                                     >
-                                        <SelectTrigger className="bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="19">19%</SelectItem>
-                                            <SelectItem value="7">7%</SelectItem>
-                                            <SelectItem value="0">0%</SelectItem>
-                                        </SelectContent>
-                                    </Select>
+                                        <Zap className="w-4 h-4 mr-2" />
+                                        Übernehmen
+                                    </Button>
                                 </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                                        Betrag (€) *
-                                    </label>
-                                    <Input
-                                        type="number"
-                                        step="0.01"
-                                        placeholder="0.00"
-                                        value={quickEntry.gross_amount}
-                                        onChange={(e) => setQuickEntry(prev => ({ ...prev, gross_amount: e.target.value }))}
-                                        className="bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="mt-4 flex items-center justify-between">
-                                <div className="flex items-center space-x-2">
-                                    <Checkbox
-                                        id="is_paid"
-                                        checked={quickEntry.is_paid}
-                                        onCheckedChange={(checked) => setQuickEntry(prev => ({ ...prev, is_paid: !!checked }))}
-                                        className="border-blue-400 data-[state=checked]:bg-blue-600"
-                                    />
-                                    <label
-                                        htmlFor="is_paid"
-                                        className="text-sm font-medium leading-none text-slate-700 dark:text-slate-300 cursor-pointer"
-                                    >
-                                        Als "Bezahlt" markieren
-                                    </label>
-                                    {quickEntry.is_paid && (
-                                        <div className="w-[200px] ml-4">
-                                            <AccountSelector
-                                                accounts={accounts}
-                                                value={quickEntry.payment_account_id}
-                                                onChange={(value) => setQuickEntry(prev => ({ ...prev, payment_account_id: value }))}
-                                                filterType={['asset']}
-                                                placeholder="Kasse/Bank..."
-                                            />
-                                        </div>
-                                    )}
-                                </div>
-                                <Button
-                                    type="button"
-                                    onClick={handleQuickEntry}
-                                    className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
-                                >
-                                    <Zap className="w-4 h-4 mr-2" />
-                                    Übernehmen
-                                </Button>
-                            </div>
-                        </CardContent>
-                    </Card>
+                            </CardContent>
+                        </Card>
+                    </div>
 
                     {/* Manual Entry Form */}
                     <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
@@ -629,38 +1098,6 @@ export function BookingCreate() {
                                                 </FormItem>
                                             )}
                                         />
-                                    </div>
-
-                                    {/* Beleg Selection */}
-                                    <div className="grid grid-cols-1 gap-6 pt-4 border-t border-slate-200 dark:border-slate-800">
-                                        <div>
-                                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                                                Beleg verknüpfen (optional)
-                                            </label>
-                                            <Select value={selectedBelegId} onValueChange={setSelectedBelegId}>
-                                                <SelectTrigger className="bg-white dark:bg-slate-950">
-                                                    <SelectValue placeholder="Beleg auswählen..." />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="none">Kein Beleg</SelectItem>
-                                                    {belege?.map((beleg: any) => (
-                                                        <SelectItem key={beleg.id} value={beleg.id.toString()}>
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="font-mono text-xs">{beleg.document_number}</span>
-                                                                <span>-</span>
-                                                                <span>{beleg.title}</span>
-                                                                <span className="text-xs text-slate-500">
-                                                                    ({(beleg.amount / 100).toFixed(2)} €)
-                                                                </span>
-                                                            </div>
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                                                Verknüpfen Sie diese Buchung mit einem Beleg
-                                            </p>
-                                        </div>
                                     </div>
 
                                     {/* Lines */}
@@ -811,6 +1248,185 @@ export function BookingCreate() {
                     </Card>
                 </div>
             </div>
+
+            {/* Dialog for Attach File */}
+            <Dialog open={showBelegDialog && selectedBelegOption === 'attach'} onOpenChange={(open) => {
+                if (!open) {
+                    setShowBelegDialog(false);
+                    if (!newBelegId) {
+                        setSelectedBelegOption('none');
+                    }
+                }
+            }}>
+                <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle>Beleg anhängen</DialogTitle>
+                        <DialogDescription>
+                            Laden Sie eine Datei hoch um einen neuen Beleg zu erstellen
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-lg p-8 text-center">
+                            <Upload className="w-12 h-12 mx-auto text-slate-400 mb-4" />
+                            <p className="text-sm text-slate-600 dark:text-slate-400 mb-2">
+                                Ziehen Sie eine Datei hierher oder klicken Sie um eine auszuwählen
+                            </p>
+                            <Input
+                                type="file"
+                                accept=".pdf,.jpg,.jpeg,.png"
+                                className="mt-2"
+                                onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                        // TODO: Implement file upload
+                                        alert('Datei-Upload wird implementiert: ' + file.name);
+                                        setShowBelegDialog(false);
+                                        setBelegStep('complete');
+                                    }
+                                }}
+                            />
+                            <p className="text-xs text-slate-500 mt-2">
+                                PDF, JPG oder PNG (max. 10MB)
+                            </p>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Dialog for Select Existing Beleg */}
+            <Dialog open={showBelegDialog && selectedBelegOption === 'select'} onOpenChange={(open) => {
+                if (!open) {
+                    setShowBelegDialog(false);
+                    if (!selectedBelegId) {
+                        setSelectedBelegOption('none');
+                    }
+                }
+            }}>
+                <DialogContent className="max-w-3xl max-h-[80vh] overflow-auto">
+                    <DialogHeader>
+                        <DialogTitle>Bestehenden Beleg auswählen</DialogTitle>
+                        <DialogDescription>
+                            Wählen Sie einen vorhandenen Beleg aus der Liste
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-3 py-4">
+                        {belege && belege.length > 0 ? (
+                            belege
+                                .filter((beleg: any) => beleg.status === 'draft' || beleg.status === 'booked')
+                                .map((beleg: any) => (
+                                    <button
+                                        key={beleg.id}
+                                        onClick={() => {
+                                            setSelectedBelegId(String(beleg.id));
+                                            setShowBelegDialog(false);
+                                            setBelegStep('complete');
+                                        }}
+                                        className={`w-full p-4 rounded-lg border-2 text-left transition-all ${selectedBelegId === String(beleg.id)
+                                            ? 'border-blue-600 bg-blue-50 dark:bg-blue-950/30'
+                                            : 'border-slate-200 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-600'
+                                            }`}
+                                    >
+                                        <div className="flex items-start justify-between gap-4">
+                                            <div className="flex-1">
+                                                <div className="flex items-center gap-3 mb-2">
+                                                    <span className="font-mono text-sm font-semibold text-blue-600 dark:text-blue-400">
+                                                        {beleg.document_number}
+                                                    </span>
+                                                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${beleg.status === 'draft'
+                                                        ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                                                        : 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
+                                                        }`}>
+                                                        {beleg.status === 'draft' ? 'Entwurf' : 'Gebucht'}
+                                                    </span>
+                                                </div>
+                                                <h4 className="font-semibold text-slate-900 dark:text-slate-100 mb-1">
+                                                    {beleg.title}
+                                                </h4>
+                                                <div className="flex items-center gap-4 text-sm text-slate-600 dark:text-slate-400">
+                                                    <span>{new Date(beleg.document_date).toLocaleDateString('de-DE')}</span>
+                                                    <span className="font-mono font-semibold">
+                                                        {(beleg.amount / 100).toFixed(2)} €
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            {selectedBelegId === String(beleg.id) && (
+                                                <Check className="w-6 h-6 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                                            )}
+                                        </div>
+                                    </button>
+                                ))
+                        ) : (
+                            <div className="text-center py-12">
+                                <FileText className="w-16 h-16 mx-auto text-slate-300 dark:text-slate-700 mb-4" />
+                                <p className="text-slate-600 dark:text-slate-400">
+                                    Keine Belege gefunden
+                                </p>
+                                <Button
+                                    variant="outline"
+                                    className="mt-4"
+                                    onClick={() => {
+                                        window.open('/belege/create', '_blank');
+                                    }}
+                                >
+                                    <Plus className="w-4 h-4 mr-2" />
+                                    Neuen Beleg erstellen
+                                </Button>
+                            </div>
+                        )}
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Dialog for Create New Beleg - Instructions */}
+            <Dialog open={showBelegDialog && selectedBelegOption === 'create'} onOpenChange={(open) => {
+                if (!open) {
+                    setShowBelegDialog(false);
+                }
+            }}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Neuen Beleg erstellen</DialogTitle>
+                        <DialogDescription>
+                            Der Beleg-Editor wurde in einem neuen Fenster geöffnet
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="p-4 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
+                            <h4 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">
+                                Nächste Schritte:
+                            </h4>
+                            <ol className="list-decimal list-inside space-y-2 text-sm text-blue-800 dark:text-blue-200">
+                                <li>Füllen Sie das Beleg-Formular im neuen Fenster aus</li>
+                                <li>Speichern Sie den Beleg als Entwurf</li>
+                                <li>Kehren Sie zu dieser Seite zurück</li>
+                                <li>Klicken Sie auf "Beleg erstellt" um fortzufahren</li>
+                            </ol>
+                        </div>
+                        <div className="flex gap-3">
+                            <Button
+                                variant="outline"
+                                className="flex-1"
+                                onClick={() => {
+                                    setShowBelegDialog(false);
+                                    setSelectedBelegOption('none');
+                                }}
+                            >
+                                Abbrechen
+                            </Button>
+                            <Button
+                                className="flex-1"
+                                onClick={() => {
+                                    setShowBelegDialog(false);
+                                    setBelegStep('complete');
+                                }}
+                            >
+                                <Check className="w-4 h-4 mr-2" />
+                                Beleg erstellt
+                            </Button>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

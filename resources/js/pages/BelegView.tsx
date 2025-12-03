@@ -247,6 +247,45 @@ export function BelegView() {
                             </CardContent>
                         </Card>
                     )}
+
+                    {/* File Preview */}
+                    {beleg.file_path && (
+                        <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Eye className="w-5 h-5 text-primary" />
+                                    Vorschau
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                {beleg.file_name?.match(/\.(jpg|jpeg|png|gif)$/i) && (
+                                    <img
+                                        src={`/api/belege/${id}/download`}
+                                        alt="Beleg Vorschau"
+                                        className="w-full h-auto rounded-lg border border-slate-200 dark:border-slate-800"
+                                    />
+                                )}
+                                {beleg.file_name?.match(/\.pdf$/i) && (
+                                    <iframe
+                                        src={`/api/belege/${id}/download`}
+                                        className="w-full h-[600px] rounded-lg border border-slate-200 dark:border-slate-800"
+                                        title="PDF Vorschau"
+                                    />
+                                )}
+                                {!beleg.file_name?.match(/\.(jpg|jpeg|png|gif|pdf)$/i) && (
+                                    <div className="text-center py-12 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                                        <FileText className="w-12 h-12 text-slate-400 mx-auto mb-4" />
+                                        <p className="text-slate-500 dark:text-slate-400">
+                                            Keine Vorschau verfügbar für diesen Dateityp.
+                                        </p>
+                                        <Button variant="outline" onClick={handleDownload} className="mt-4">
+                                            Herunterladen
+                                        </Button>
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    )}
                 </div>
 
                 {/* Sidebar */}

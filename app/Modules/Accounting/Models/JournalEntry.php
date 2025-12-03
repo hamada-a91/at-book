@@ -36,4 +36,9 @@ class JournalEntry extends Model
     {
         return $this->hasMany(\App\Models\Beleg::class);
     }
+
+    public function beleg()
+    {
+        return $this->belongsTo(\App\Models\Beleg::class);
+    }
 }

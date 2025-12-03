@@ -35,6 +35,7 @@ class BookingService
                 'booking_date' => $data['date'],
                 'description' => $data['description'],
                 'contact_id' => $data['contact_id'] ?? null,
+                'beleg_id' => $data['beleg_id'] ?? null,
                 'status' => 'draft',
                 'user_id' => Auth::id() ?? 1, // Fallback for demo
             ]);
@@ -48,6 +49,14 @@ class BookingService
                     'tax_key' => $line['tax_key'] ?? null,
                     'tax_amount' => $line['tax_amount'] ?? 0,
                 ]);
+            }
+
+            // 4. Update Beleg status if linked
+            if (!empty($data['beleg_id'])) {
+                $beleg = \App\Models\Beleg::find($data['beleg_id']);
+                if ($beleg && $beleg->status === 'draft') {
+                    $beleg->update(['status' => 'booked']);
+                }
             }
 
             return $entry;

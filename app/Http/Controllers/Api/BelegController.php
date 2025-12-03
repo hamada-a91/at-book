@@ -53,13 +53,23 @@ class BelegController extends Controller
             'contact_id' => 'nullable|exists:contacts,id',
             'notes' => 'nullable|string',
             'due_date' => 'nullable|date',
+            'file' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240', // 10MB max
         ]);
 
         // Generate document number (BEL-2025-0001)
         $year = date('Y');
-        $lastBeleg = Beleg::where('document_number', 'like', "BEL-$year-%")->latest('id')->first();
+        $lastBeleg = Beleg::withTrashed()->where('document_number', 'like', "BEL-$year-%")->latest('id')->first();
         $nextNumber = $lastBeleg ? intval(substr($lastBeleg->document_number, -4)) + 1 : 1;
         $documentNumber = sprintf("BEL-%s-%04d", $year, $nextNumber);
+
+        // Handle file upload if present
+        $filePath = null;
+        $fileName = null;
+        if ($request->hasFile('file')) {
+            $file = $request->file('file');
+            $fileName = $file->getClientOriginalName();
+            $filePath = $file->store('belege', 'public');
+        }
 
         $beleg = Beleg::create([
             'document_number' => $documentNumber,
@@ -71,6 +81,8 @@ class BelegController extends Controller
             'contact_id' => $validated['contact_id'] ?? null,
             'notes' => $validated['notes'] ?? null,
             'due_date' => $validated['due_date'] ?? null,
+            'file_path' => $filePath,
+            'file_name' => $fileName,
             'status' => 'draft',
         ]);
 
