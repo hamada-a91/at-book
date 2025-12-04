@@ -37,6 +37,9 @@ class CompanySettingController extends Controller
             'zip' => 'nullable|string|max:20',
             'city' => 'nullable|string|max:255',
             'country' => 'nullable|string|max:255',
+            'email' => 'nullable|email|max:255',
+            'phone' => 'nullable|string|max:50',
+            'tax_number' => 'nullable|string|max:100',
             'tax_type' => 'required|in:kleinunternehmer,umsatzsteuer_pflichtig',
             'logo' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
         ]);
@@ -60,6 +63,9 @@ class CompanySettingController extends Controller
         $settings->zip = $request->input('zip');
         $settings->city = $request->input('city');
         $settings->country = $request->input('country', 'Deutschland');
+        $settings->email = $request->input('email');
+        $settings->phone = $request->input('phone');
+        $settings->tax_number = $request->input('tax_number');
         $settings->tax_type = $request->input('tax_type');
 
         // Handle logo upload

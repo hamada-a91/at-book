@@ -3,7 +3,7 @@ import { useNavigate, useParams, Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Edit, Trash2, Send, Download, FileText, Calendar, User, Euro, Receipt } from 'lucide-react';
+import { ArrowLeft, Edit, Trash2, Send, Download, FileText, Calendar, Euro, Receipt, Eye } from 'lucide-react';
 import { Beleg } from '@/types/beleg';
 
 export function BelegView() {

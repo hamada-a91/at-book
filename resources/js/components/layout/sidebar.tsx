@@ -11,6 +11,7 @@ import {
     CreditCard,
     BookOpen,
     Receipt,
+    Landmark,
 } from "lucide-react"
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
@@ -47,6 +48,12 @@ export function Sidebar({ className }: SidebarProps) {
             icon: CreditCard,
             href: "/accounts",
             active: pathname.startsWith("/accounts"),
+        },
+        {
+            label: "Bank Konto",
+            icon: Landmark,
+            href: "/bank-accounts",
+            active: pathname.startsWith("/bank-accounts"),
         },
         {
             label: "Journal & Berichte",

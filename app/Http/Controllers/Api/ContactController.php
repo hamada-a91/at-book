@@ -16,7 +16,7 @@ class ContactController extends Controller
      */
     public function index()
     {
-        $contacts = Contact::with(['customerAccount.journalEntryLines', 'vendorAccount.journalEntryLines'])->orderBy('name')->get();
+        $contacts = Contact::with(['customerAccount.journalEntryLines', 'vendorAccount.journalEntryLines'])->orderBy('id', 'desc')->get();
         
         return $contacts->map(function ($contact) {
             $data = $contact->toArray();

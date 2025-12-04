@@ -32,6 +32,9 @@ interface CompanySetting {
     zip: string | null;
     city: string | null;
     country: string | null;
+    email: string | null;
+    phone: string | null;
+    tax_number: string | null;
     tax_type: 'kleinunternehmer' | 'umsatzsteuer_pflichtig';
     logo_path: string | null;
 }
@@ -42,6 +45,9 @@ const settingsSchema = z.object({
     zip: z.string().optional(),
     city: z.string().optional(),
     country: z.string().optional(),
+    email: z.string().email('Ungültige E-Mail-Adresse').optional().or(z.literal('')),
+    phone: z.string().optional(),
+    tax_number: z.string().optional(),
     tax_type: z.enum(['kleinunternehmer', 'umsatzsteuer_pflichtig']),
 });
 
@@ -69,6 +75,9 @@ export function Settings() {
             zip: '',
             city: '',
             country: 'Deutschland',
+            email: '',
+            phone: '',
+            tax_number: '',
             tax_type: 'kleinunternehmer',
         },
     });
@@ -82,6 +91,9 @@ export function Settings() {
                 zip: settings.zip || '',
                 city: settings.city || '',
                 country: settings.country || 'Deutschland',
+                email: settings.email || '',
+                phone: settings.phone || '',
+                tax_number: settings.tax_number || '',
                 tax_type: settings.tax_type,
             });
             if (settings.logo_path) {
@@ -231,6 +243,50 @@ export function Settings() {
                                         <FormLabel>Land</FormLabel>
                                         <FormControl>
                                             <Input placeholder="Deutschland" {...field} className="bg-white dark:bg-slate-950" />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <FormField
+                                    control={form.control}
+                                    name="email"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>E-Mail *</FormLabel>
+                                            <FormControl>
+                                                <Input type="email" placeholder="info@firma.de" {...field} className="bg-white dark:bg-slate-950" />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+
+                                <FormField
+                                    control={form.control}
+                                    name="phone"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Telefon *</FormLabel>
+                                            <FormControl>
+                                                <Input type="tel" placeholder="+49 123 456789" {...field} className="bg-white dark:bg-slate-950" />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            </div>
+
+                            <FormField
+                                control={form.control}
+                                name="tax_number"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Steuernummer</FormLabel>
+                                        <FormControl>
+                                            <Input placeholder="z.B. 12/345/67890" {...field} className="bg-white dark:bg-slate-950" />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>

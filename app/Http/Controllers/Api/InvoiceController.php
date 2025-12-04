@@ -10,7 +10,7 @@ class InvoiceController extends Controller
 {
     public function index()
     {
-        $invoices = Invoice::with(['contact', 'lines'])->latest()->get();
+        $invoices = Invoice::with(['contact', 'lines'])->orderBy('id', 'desc')->get();
         return response()->json($invoices);
     }
 

@@ -59,6 +59,10 @@ Route::middleware(['api'])->group(function () {
     Route::post('/bookings/{id}/lock', [JournalEntryController::class, 'lock']);
     Route::post('/bookings/{id}/reverse', [JournalEntryController::class, 'reverse']);
 
+    // Bank Accounts
+    Route::apiResource('bank-accounts', \App\Http\Controllers\Api\BankAccountController::class);
+    Route::post('/bank-accounts/{id}/set-default', [\App\Http\Controllers\Api\BankAccountController::class, 'setDefault']);
+
     // Company Settings
     Route::get('/settings', [CompanySettingController::class, 'show']);
     Route::post('/settings', [CompanySettingController::class, 'update']);

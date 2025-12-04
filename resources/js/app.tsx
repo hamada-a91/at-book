@@ -17,6 +17,7 @@ import { Settings } from './pages/Settings';
 import { BelegeList } from './pages/BelegeList';
 import { BelegCreate } from './pages/BelegCreate';
 import { BelegView } from './pages/BelegView';
+import { BankAccountsList } from './pages/BankAccountsList';
 import { MainLayout } from '@/components/layout/main-layout';
 import { ThemeProvider } from '@/components/theme-provider';
 import '../css/app.css';
@@ -54,6 +55,7 @@ function App() {
                             <Route path="/journal" element={<Navigate to="/reports" replace />} />
                             <Route path="/bookings" element={<JournalList />} />
                             <Route path="/bookings/create" element={<BookingCreate />} />
+                            <Route path="/bank-accounts" element={<BankAccountsList />} />
                             <Route path="/settings" element={<Settings />} />
                         </Routes>
                     </MainLayout>

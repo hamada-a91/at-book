@@ -14,7 +14,7 @@ class AccountController extends Controller
      */
     public function index(): JsonResponse
     {
-        $accounts = Account::with('journalEntryLines')->orderBy('code')->get();
+        $accounts = Account::with('journalEntryLines')->orderBy('id', 'desc')->get();
         
         $accountsWithBalances = $accounts->map(function ($account) {
             $data = $account->toArray();

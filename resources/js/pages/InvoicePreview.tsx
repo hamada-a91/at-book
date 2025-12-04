@@ -33,11 +33,21 @@ interface Invoice {
 
 interface CompanySetting {
     company_name: string;
-    address: string;
+
     email: string;
     phone: string;
     tax_number: string;
-    logo_url?: string;
+    logo_path?: string;
+}
+
+interface BankAccount {
+    id: number;
+    name: string;
+    bank_name: string;
+    iban: string;
+    bic: string | null;
+    formatted_iban: string;
+    is_default: boolean;
 }
 
 export function InvoicePreview() {
@@ -59,6 +69,17 @@ export function InvoicePreview() {
             return res.json();
         },
     });
+
+    const { data: bankAccounts } = useQuery<BankAccount[]>({
+        queryKey: ['bank-accounts'],
+        queryFn: async () => {
+            const res = await fetch('/api/bank-accounts');
+            return res.json();
+        },
+    });
+
+    // Get default bank account
+    const defaultBankAccount = bankAccounts?.find(account => account.is_default) || bankAccounts?.[0];
 
     const formatCurrency = (cents: number) => {
         return new Intl.NumberFormat('de-DE', {
@@ -128,8 +149,12 @@ export function InvoicePreview() {
                     {/* Header with Logo */}
                     <div className="flex justify-between items-start mb-12">
                         <div>
-                            {settings?.logo_url && (
-                                <img src={settings.logo_url} alt="Logo" className="h-16 mb-4" />
+                            {settings?.logo_path && (
+                                <img
+                                    src={`/storage/${settings.logo_path}`}
+                                    alt={`${settings.company_name} Logo`}
+                                    className="h-16 mb-4 object-contain"
+                                />
                             )}
                             <h1 className="text-3xl font-bold text-slate-900">
                                 {settings?.company_name || 'Vorpoint'}
@@ -162,7 +187,7 @@ export function InvoicePreview() {
                     <div className="grid grid-cols-2 gap-8 mb-8">
                         <div>
                             <p className="text-xs text-slate-500 mb-2">
-                                {settings?.company_name}, {settings?.address}
+                                {settings?.company_name}, {settings?.street}, {settings?.zip} {settings?.city}
                             </p>
                             <div className="border-b pb-4">
                                 <p className="font-bold text-slate-900">{invoice.contact.name}</p>
@@ -173,9 +198,13 @@ export function InvoicePreview() {
                         </div>
                         <div className="text-right text-sm">
                             <p className="font-bold">{settings?.company_name}</p>
-                            <p>{settings?.address}</p>
-                            <p>Tel.: {settings?.phone}</p>
-                            <p>{settings?.email}</p>
+                            {settings?.street && <p>{settings.street}</p>}
+                            {(settings?.zip || settings?.city) && (
+                                <p>{settings?.zip} {settings?.city}</p>
+                            )}
+                            {settings?.country && <p>{settings.country}</p>}
+                            {settings?.phone && <p>Tel.: {settings.phone}</p>}
+                            {settings?.email && <p>E-Mail: {settings.email}</p>}
                         </div>
                     </div>
 
@@ -240,18 +269,38 @@ export function InvoicePreview() {
                         <p>{invoice.footer_note}</p>
                     </div>
 
-                    {/* Company Footer */}
-                    <div className="mt-12 pt-6 border-t border-slate-300 text-xs text-slate-600 grid grid-cols-3 gap-4">
-                        <div>
-                            <p className="font-bold">{settings?.company_name}</p>
-                            <p>{settings?.address}</p>
-                        </div>
-                        <div className="text-center">
-                            <p>Steuernummer: {settings?.tax_number}</p>
-                        </div>
-                        <div className="text-right">
-                            <p>{settings?.email}</p>
-                            <p>Tel.: {settings?.phone}</p>
+                    {/* Company Footer with Bank Details and Tax Number */}
+                    <div className="mt-12 pt-6 border-t border-slate-300 text-xs text-slate-600">
+                        <div className="grid grid-cols-3 gap-4">
+                            <div>
+                                <p className="font-bold mb-1">{settings?.company_name}</p>
+                                {settings?.street && <p>{settings.street}</p>}
+                                {(settings?.zip || settings?.city) && (
+                                    <p>{settings?.zip} {settings?.city}</p>
+                                )}
+                                {settings?.country && <p>{settings.country}</p>}
+                            </div>
+                            <div className="text-center">
+                                {settings?.tax_number && (
+                                    <>
+                                        <p className="font-semibold">Steuernummer</p>
+                                        <p>{settings.tax_number}</p>
+                                    </>
+                                )}
+                                {defaultBankAccount && (
+                                    <div className="mt-2">
+                                        <p className="font-semibold">Bankverbindung</p>
+                                        <p>{defaultBankAccount.bank_name}</p>
+                                        <p>IBAN: {defaultBankAccount.formatted_iban}</p>
+                                        {defaultBankAccount.bic && <p>BIC: {defaultBankAccount.bic}</p>}
+                                    </div>
+                                )}
+                            </div>
+                            <div className="text-right">
+                                <p className="font-semibold mb-1">Kontakt</p>
+                                {settings?.email && <p>{settings.email}</p>}
+                                {settings?.phone && <p>Tel.: {settings.phone}</p>}
+                            </div>
                         </div>
                     </div>
                 </div>

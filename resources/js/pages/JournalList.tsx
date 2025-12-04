@@ -165,6 +165,9 @@ export function JournalList() {
     };
 
     const bookingsList = bookings?.data || [];
+
+    // Calculate stats from filtered bookingsList (reactive to search and filters)
+    const filteredCount = bookingsList.length;
     const draftCount = bookingsList.filter((b) => b.status === 'draft').length;
     const postedCount = bookingsList.filter((b) => b.status === 'posted').length;
 
@@ -192,21 +195,33 @@ export function JournalList() {
                 </div>
             </div>
 
-            {/* Stats */}
+            {/* Stats - Clickable Filter Cards */}
             <div className="grid gap-6 md:grid-cols-3">
-                <Card className="relative overflow-hidden border-none shadow-xl bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl group hover:scale-[1.02] transition-all duration-300">
+                <Card
+                    className={`relative overflow-hidden border-none shadow-xl backdrop-blur-xl group hover:scale-[1.02] transition-all duration-300 cursor-pointer ${statusFilter === 'all'
+                            ? 'bg-blue-50/90 dark:bg-blue-950/50 ring-2 ring-blue-500'
+                            : 'bg-white/80 dark:bg-slate-950/80 hover:bg-blue-50/50 dark:hover:bg-blue-950/30'
+                        }`}
+                    onClick={() => setStatusFilter('all')}
+                >
                     <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                     <CardContent className="p-6 flex items-center justify-between relative z-10">
                         <div>
                             <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Gesamt Buchungen</p>
-                            <div className="text-3xl font-bold text-slate-900 dark:text-slate-100 mt-2">{bookingsList.length}</div>
+                            <div className="text-3xl font-bold text-slate-900 dark:text-slate-100 mt-2">{filteredCount}</div>
                         </div>
                         <div className="h-12 w-12 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shadow-inner">
                             <FileText className="w-6 h-6 text-blue-600 dark:text-blue-400" />
                         </div>
                     </CardContent>
                 </Card>
-                <Card className="relative overflow-hidden border-none shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl group hover:scale-[1.02] transition-all duration-300">
+                <Card
+                    className={`relative overflow-hidden border-none shadow-xl backdrop-blur-xl group hover:scale-[1.02] transition-all duration-300 cursor-pointer ${statusFilter === 'draft'
+                            ? 'bg-amber-50/90 dark:bg-amber-950/50 ring-2 ring-amber-500'
+                            : 'bg-white/80 dark:bg-slate-900/80 hover:bg-amber-50/50 dark:hover:bg-amber-950/30'
+                        }`}
+                    onClick={() => setStatusFilter('draft')}
+                >
                     <div className="absolute inset-0 bg-gradient-to-br from-amber-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                     <CardContent className="p-6 flex items-center justify-between relative z-10">
                         <div>
@@ -218,7 +233,13 @@ export function JournalList() {
                         </div>
                     </CardContent>
                 </Card>
-                <Card className="relative overflow-hidden border-none shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl group hover:scale-[1.02] transition-all duration-300">
+                <Card
+                    className={`relative overflow-hidden border-none shadow-xl backdrop-blur-xl group hover:scale-[1.02] transition-all duration-300 cursor-pointer ${statusFilter === 'posted'
+                            ? 'bg-emerald-50/90 dark:bg-emerald-950/50 ring-2 ring-emerald-500'
+                            : 'bg-white/80 dark:bg-slate-900/80 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/30'
+                        }`}
+                    onClick={() => setStatusFilter('posted')}
+                >
                     <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                     <CardContent className="p-6 flex items-center justify-between relative z-10">
                         <div>
