@@ -133,68 +133,149 @@ class ReportsController extends Controller
 
     /**
      * Generate Balance Sheet (Bilanz)
+     * WITH AGGREGATION: Debtor/Creditor accounts aggregated to 1400/1600
      */
     public function balanceSheet(Request $request): JsonResponse
     {
-        $date = $request->input('to_date', Carbon::now()->endOfYear()->toDateString()); // Balance sheet is "as of" date
+        $date = $request->input('to_date', Carbon::now()->endOfYear()->toDateString());
 
-        // Assets (Aktiva)
-        $assetAccounts = Account::where('type', 'asset')
+        // ===== ASSETS: Process aggregation =====
+        // Get regular asset accounts (EXCLUDE 10000-19999 - those are individual debtors)
+        $regularAssets = Account::where('type', 'asset')
+            ->where(function($q) {
+                $q->where('code', '<', '10000')->orWhere('code', '>=', '20000');
+            })
             ->with(['journalEntryLines' => function ($query) use ($date) {
                 $query->whereHas('journalEntry', function ($q) use ($date) {
-                    $q->where('booking_date', '<=', $date)
-                      ->where('status', '!=', 'cancelled');
+                    $q->where('booking_date', '<=', $date)->where('status', '!=', 'cancelled');
                 });
             }])->get();
 
-        // Liabilities (Passiva)
-        $liabilityAccounts = Account::where('type', 'liability')
+        // AGGREGATE individual debtor accounts (10000-19999) to 1400
+        $debtorAccounts = Account::whereBetween('code', ['10000', '19999'])
             ->with(['journalEntryLines' => function ($query) use ($date) {
                 $query->whereHas('journalEntry', function ($q) use ($date) {
-                    $q->where('booking_date', '<=', $date)
-                      ->where('status', '!=', 'cancelled');
+                    $q->where('booking_date', '<=', $date)->where('status', '!=', 'cancelled');
                 });
             }])->get();
-            
-        // Equity (Eigenkapital)
+
+        $totalDebtors = $debtorAccounts->sum(function($acc) {
+            $debit = $acc->journalEntryLines->where('type', 'debit')->sum('amount');
+            $credit = $acc->journalEntryLines->where('type', 'credit')->sum('amount');
+            return $debit - $credit;
+        });
+
+        $assets = collect();
+        // Process regular assets
+        foreach ($regularAssets as $account) {
+            $debit = $account->journalEntryLines->where('type', 'debit')->sum('amount');
+            $credit = $account->journalEntryLines->where('type', 'credit')->sum('amount');
+            $balance = $debit - $credit;
+            if ($balance != 0) {
+                $assets->push([
+                    'code' => $account->code,
+                    'name' => $account->name,
+                    'category' => $account->category,
+                    'balance' => $balance,
+                    'is_aggregated' => false
+                ]);
+            }
+        }
+
+        // Add aggregated debtors
+        if ($totalDebtors != 0) {
+            $assets->push([
+                'code' => '1400',
+                'name' => 'Forderungen aus Lieferungen und Leistungen',
+                'category' => 'Umlaufvermögen',
+                'balance' => $totalDebtors,
+                'is_aggregated' => true,
+                'detail_count' => $debtorAccounts->count()
+            ]);
+        }
+
+        // ===== LIABILITIES: Process aggregation =====
+        // Get regular liabilities (EXCLUDE 70000-79999 - those are individual creditors)
+        $regularLiabilities = Account::where('type', 'liability')
+            ->where(function($q) {
+                $q->where('code', '<', '70000')->orWhere('code', '>=', '80000');
+            })
+            ->with(['journalEntryLines' => function ($query) use ($date) {
+                $query->whereHas('journalEntry', function ($q) use ($date) {
+                    $q->where('booking_date', '<=', $date)->where('status', '!=', 'cancelled');
+                });
+            }])->get();
+
+        // AGGREGATE individual creditor accounts (70000-79999) to 1600
+        $creditorAccounts = Account::whereBetween('code', ['70000', '79999'])
+            ->with(['journalEntryLines' => function ($query) use ($date) {
+                $query->whereHas('journalEntry', function ($q) use ($date) {
+                    $q->where('booking_date', '<=', $date)->where('status', '!=', 'cancelled');
+                });
+            }])->get();
+
+        $totalCreditors = $creditorAccounts->sum(function($acc) {
+            $debit = $acc->journalEntryLines->where('type', 'debit')->sum('amount');
+            $credit = $acc->journalEntryLines->where('type', 'credit')->sum('amount');
+            return $credit - $debit;
+        });
+
+        $liabilities = collect();
+        // Process regular liabilities
+        foreach ($regularLiabilities as $account) {
+            $debit = $account->journalEntryLines->where('type', 'debit')->sum('amount');
+            $credit = $account->journalEntryLines->where('type', 'credit')->sum('amount');
+            $balance = $credit - $debit;
+            if ($balance != 0) {
+                $liabilities->push([
+                    'code' => $account->code,
+                    'name' => $account->name,
+                    'category' => $account->category,
+                    'balance' => $balance,
+                    'is_aggregated' => false
+                ]);
+            }
+        }
+
+        // Add aggregated creditors
+        if ($totalCreditors != 0) {
+            $liabilities->push([
+                'code' => '1600',
+                'name' => 'Verbindlichkeiten aus Lieferungen und Leistungen',
+                'category' => 'Verbindlichkeiten',
+                'balance' => $totalCreditors,
+                'is_aggregated' => true,
+                'detail_count' => $creditorAccounts->count()
+            ]);
+        }
+
+        // ===== EQUITY =====
         $equityAccounts = Account::where('type', 'equity')
             ->with(['journalEntryLines' => function ($query) use ($date) {
                 $query->whereHas('journalEntry', function ($q) use ($date) {
-                    $q->where('booking_date', '<=', $date)
-                      ->where('status', '!=', 'cancelled');
+                    $q->where('booking_date', '<=', $date)->where('status', '!=', 'cancelled');
                 });
             }])->get();
 
-        $processBalance = function ($accounts, $isAsset = true) {
-            return $accounts->map(function ($account) use ($isAsset) {
-                $debit = $account->journalEntryLines->where('type', 'debit')->sum('amount');
-                $credit = $account->journalEntryLines->where('type', 'credit')->sum('amount');
-                
-                // Assets: Debit - Credit
-                // Liabilities/Equity: Credit - Debit
-                $balance = $isAsset ? ($debit - $credit) : ($credit - $debit);
-
-                if ($balance == 0) return null;
-
-                return [
+        $equity = collect();
+        foreach ($equityAccounts as $account) {
+            $debit = $account->journalEntryLines->where('type', 'debit')->sum('amount');
+            $credit = $account->journalEntryLines->where('type', 'credit')->sum('amount');
+            $balance = $credit - $debit;
+            if ($balance != 0) {
+                $equity->push([
                     'code' => $account->code,
                     'name' => $account->name,
-                    'balance' => $balance
-                ];
-            })->filter()->values();
-        };
-
-        $assets = $processBalance($assetAccounts, true);
-        $liabilities = $processBalance($liabilityAccounts, false);
-        $equity = $processBalance($equityAccounts, false);
+                    'category' => $account->category,
+                    'balance' => $balance,
+                    'is_aggregated' => false
+                ]);
+            }
+        }
 
         $totalAssets = $assets->sum('balance');
         $totalLiabilities = $liabilities->sum('balance');
         $totalEquity = $equity->sum('balance');
-
-        // Calculate calculated profit/loss to balance
-        // Assets = Liabilities + Equity + Profit
-        // Profit = Assets - Liabilities - Equity
         $calculatedProfit = $totalAssets - ($totalLiabilities + $totalEquity);
 
         return response()->json([

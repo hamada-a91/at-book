@@ -20,6 +20,12 @@ class CompanySetting extends Model
         'bank_details',
         'invoice_prefix',
         'invoice_footer_text',
+        // SKR03 Account Plan Settings
+        'business_models',
+        'legal_form',
+        'account_plan_initialized_at',
+        'account_plan_last_updated_at',
+        'onboarding_completed',
     ];
 
     /**
@@ -33,6 +39,9 @@ class CompanySetting extends Model
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
             'bank_details' => 'array',
+            'account_plan_initialized_at' => 'datetime',
+            'account_plan_last_updated_at' => 'datetime',
+            'onboarding_completed' => 'boolean',
         ];
     }
 }

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { Settings as SettingsIcon, Save, Upload, Building2, MapPin } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -24,6 +25,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { AccountPlanManagement } from '@/components/AccountPlanManagement';
 
 interface CompanySetting {
     id: number;
@@ -40,13 +42,13 @@ interface CompanySetting {
 }
 
 const settingsSchema = z.object({
-    company_name: z.string().optional(),
-    street: z.string().optional(),
-    zip: z.string().optional(),
-    city: z.string().optional(),
+    company_name: z.string().min(1, 'Firmenname ist erforderlich'),
+    street: z.string().min(1, 'Straße ist erforderlich'),
+    zip: z.string().min(1, 'PLZ ist erforderlich'),
+    city: z.string().min(1, 'Stadt ist erforderlich'),
     country: z.string().optional(),
-    email: z.string().email('Ungültige E-Mail-Adresse').optional().or(z.literal('')),
-    phone: z.string().optional(),
+    email: z.string().email('Ungültige E-Mail-Adresse').min(1, 'E-Mail ist erforderlich'),
+    phone: z.string().min(1, 'Telefonnummer ist erforderlich'),
     tax_number: z.string().optional(),
     tax_type: z.enum(['kleinunternehmer', 'umsatzsteuer_pflichtig']),
 });
@@ -57,6 +59,16 @@ export function Settings() {
     const [logoFile, setLogoFile] = useState<File | null>(null);
     const [logoPreview, setLogoPreview] = useState<string | null>(null);
     const queryClient = useQueryClient();
+    const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const fromOnboarding = searchParams.get('from') === 'onboarding';
+
+    // Debug logging
+    useEffect(() => {
+        console.log('🔍 Settings loaded');
+        console.log('📋 Search params:', Object.fromEntries([...searchParams]));
+        console.log('🎯 fromOnboarding:', fromOnboarding);
+    }, [fromOnboarding, searchParams]);
 
     const { data: settings, isLoading } = useQuery<CompanySetting>({
         queryKey: ['settings'],
@@ -121,8 +133,28 @@ export function Settings() {
             if (!res.ok) throw new Error('Fehler beim Speichern');
             return res.json();
         },
-        onSuccess: () => {
+        onSuccess: (data) => {
+            console.log('✅ Settings saved successfully!');
+            console.log('📦 Response data:', data);
+
             queryClient.invalidateQueries({ queryKey: ['settings'] });
+            setLogoFile(null);
+
+            // Check the URL parameter directly at the time of success
+            const currentParams = new URLSearchParams(window.location.search);
+            const isFromOnboarding = currentParams.get('from') === 'onboarding';
+
+            console.log('🔍 Current URL params:', Object.fromEntries(currentParams));
+            console.log('🎯 isFromOnboarding:', isFromOnboarding);
+
+            // If coming from onboarding, redirect back to continue
+            if (isFromOnboarding) {
+                console.log('🔄 Redirecting to onboarding...');
+                // Use window.location.href for full page navigation since /onboarding is outside the MainLayout routes
+                setTimeout(() => {
+                    window.location.href = '/onboarding?refresh=true';
+                }, 500);
+            }
         },
     });
 
@@ -162,6 +194,25 @@ export function Settings() {
                     <p className="text-slate-500 dark:text-slate-400">Unternehmenseinstellungen verwalten</p>
                 </div>
             </div>
+
+            {/* Onboarding Banner */}
+            {fromOnboarding && (
+                <div className="bg-gradient-to-r from-purple-500 to-pink-500 text-white p-4 rounded-lg shadow-lg">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h3 className="font-semibold">📋 Onboarding - Schritt 1</h3>
+                            <p className="text-sm opacity-90">Füllen Sie Ihre Firmendaten aus und speichern Sie, um fortzufahren</p>
+                        </div>
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => navigate('/onboarding')}
+                        >
+                            Zurück zum Onboarding
+                        </Button>
+                    </div>
+                </div>
+            )}
 
             <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
@@ -391,7 +442,9 @@ export function Settings() {
                     {updateMutation.isSuccess && (
                         <div className="bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-400 px-4 py-3 rounded-lg flex items-center gap-2">
                             <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                            Einstellungen erfolgreich gespeichert!
+                            {fromOnboarding
+                                ? 'Einstellungen gespeichert! Sie werden zum Onboarding weitergeleitet...'
+                                : 'Einstellungen erfolgreich gespeichert!'}
                         </div>
                     )}
 
@@ -402,6 +455,22 @@ export function Settings() {
                             Fehler beim Speichern der Einstellungen
                         </div>
                     )}
+
+                    {/* Account Plan Management Section */}
+                    <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
+                        <CardHeader className="border-b border-slate-100 dark:border-slate-800 pb-4">
+                            <div className="flex items-center gap-2">
+                                <Building2 className="w-5 h-5 text-primary" />
+                                <CardTitle>Kontenplan-Verwaltung</CardTitle>
+                            </div>
+                            <CardDescription>
+                                Verwalten Sie Ihren SKR03-Kontenplan und erweitern Sie ihn bei Bedarf
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="pt-6">
+                            <AccountPlanManagement />
+                        </CardContent>
+                    </Card>
                 </form>
             </Form>
         </div>
