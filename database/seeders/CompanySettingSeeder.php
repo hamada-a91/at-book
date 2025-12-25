@@ -15,9 +15,21 @@ class CompanySettingSeeder extends Seeder
      */
     public function run(): void
     {
+        $this->command->info('👤 Creating Demo User...');
+        
+        // Create a demo user first (required for journal entries)
+        \App\Models\User::create([
+            'name' => 'Demo User',
+            'email' => 'demo@at-book.local',
+            'password' => bcrypt('password'),
+            'email_verified_at' => now(),
+        ]);
+        
+        $this->command->info('✅ Demo user created (email: demo@at-book.local, password: password)');
+        
         $this->command->info('🏢 Creating Company Settings...');
         
-        // 1. Create Company Setting mit Demo-Daten
+        // 1. Create Company Setting with Demo Data
         $setting = CompanySetting::create([
             'company_name' => 'Demo Firma GmbH',
             'street' => 'Musterstraße 123',
@@ -85,6 +97,8 @@ class CompanySettingSeeder extends Seeder
         $this->command->info('');
         $this->command->info('🎉 Setup complete! You can now access the dashboard.');
         $this->command->warn('📝 Demo credentials:');
+        $this->command->line('   Email: demo@at-book.local');
+        $this->command->line('   Password: password');
         $this->command->line('   Company: Demo Firma GmbH');
         $this->command->line('   Location: Berlin');
         $this->command->line('   Account Plan: SKR03 (Dienstleistungen + Handel + GmbH)');

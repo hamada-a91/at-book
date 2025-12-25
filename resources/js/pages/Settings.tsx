@@ -1,31 +1,17 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-
-import { Settings as SettingsIcon, Save, Upload, Building2, MapPin } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Upload, Building2, MapPin, Mail, Phone, FileText, Image, AlertCircle, CheckCircle2, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import {
-    Form,
-    FormControl,
-    FormField,
-    FormItem,
-    FormLabel,
-    FormMessage,
-    FormDescription,
-} from '@/components/ui/form';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AccountPlanManagement } from '@/components/AccountPlanManagement';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface CompanySetting {
     id: number;
@@ -42,33 +28,31 @@ interface CompanySetting {
 }
 
 const settingsSchema = z.object({
-    company_name: z.string().min(1, 'Firmenname ist erforderlich'),
-    street: z.string().min(1, 'Straße ist erforderlich'),
-    zip: z.string().min(1, 'PLZ ist erforderlich'),
-    city: z.string().min(1, 'Stadt ist erforderlich'),
-    country: z.string().optional(),
-    email: z.string().email('Ungültige E-Mail-Adresse').min(1, 'E-Mail ist erforderlich'),
-    phone: z.string().min(1, 'Telefonnummer ist erforderlich'),
+    company_name: z.string().min(2, 'Firmenname muss mindestens 2 Zeichen lang sein').max(100, 'Firmenname darf maximal 100 Zeichen lang sein'),
+    street: z.string().min(3, 'Straße muss mindestens 3 Zeichen lang sein'),
+    zip: z.string().min(4, 'PLZ muss mindestens 4 Zeichen lang sein').max(10, 'PLZ darf maximal 10 Zeichen lang sein'),
+    city: z.string().min(2, 'Stadt muss mindestens 2 Zeichen lang sein'),
+    country: z.string().min(2, 'Land ist erforderlich'),
+    email: z.string().email('Bitte geben Sie eine gültige E-Mail-Adresse ein'),
+    phone: z.string().min(5, 'Telefonnummer muss mindestens 5 Zeichen lang sein'),
     tax_number: z.string().optional(),
     tax_type: z.enum(['kleinunternehmer', 'umsatzsteuer_pflichtig']),
 });
 
 type SettingsFormValues = z.infer<typeof settingsSchema>;
 
+const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+
 export function Settings() {
     const [logoFile, setLogoFile] = useState<File | null>(null);
     const [logoPreview, setLogoPreview] = useState<string | null>(null);
+    const [logoError, setLogoError] = useState<string | null>(null);
+    const [saveSuccess, setSaveSuccess] = useState(false);
     const queryClient = useQueryClient();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const fromOnboarding = searchParams.get('from') === 'onboarding';
-
-    // Debug logging
-    useEffect(() => {
-        console.log('🔍 Settings loaded');
-        console.log('📋 Search params:', Object.fromEntries([...searchParams]));
-        console.log('🎯 fromOnboarding:', fromOnboarding);
-    }, [fromOnboarding, searchParams]);
 
     const { data: settings, isLoading } = useQuery<CompanySetting>({
         queryKey: ['settings'],
@@ -94,7 +78,6 @@ export function Settings() {
         },
     });
 
-    // Update form when settings are loaded
     useEffect(() => {
         if (settings) {
             form.reset({
@@ -106,7 +89,7 @@ export function Settings() {
                 email: settings.email || '',
                 phone: settings.phone || '',
                 tax_number: settings.tax_number || '',
-                tax_type: settings.tax_type,
+                tax_type: settings.tax_type || 'kleinunternehmer',
             });
             if (settings.logo_path) {
                 setLogoPreview(`/storage/${settings.logo_path}`);
@@ -133,27 +116,16 @@ export function Settings() {
             if (!res.ok) throw new Error('Fehler beim Speichern');
             return res.json();
         },
-        onSuccess: (data) => {
-            console.log('✅ Settings saved successfully!');
-            console.log('📦 Response data:', data);
-
+        onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['settings'] });
             setLogoFile(null);
+            setSaveSuccess(true);
+            setTimeout(() => setSaveSuccess(false), 3000);
 
-            // Check the URL parameter directly at the time of success
-            const currentParams = new URLSearchParams(window.location.search);
-            const isFromOnboarding = currentParams.get('from') === 'onboarding';
-
-            console.log('🔍 Current URL params:', Object.fromEntries(currentParams));
-            console.log('🎯 isFromOnboarding:', isFromOnboarding);
-
-            // If coming from onboarding, redirect back to continue
-            if (isFromOnboarding) {
-                console.log('🔄 Redirecting to onboarding...');
-                // Use window.location.href for full page navigation since /onboarding is outside the MainLayout routes
+            if (fromOnboarding) {
                 setTimeout(() => {
-                    window.location.href = '/onboarding?refresh=true';
-                }, 500);
+                    window.location.href = '/onboarding';
+                }, 1500);
             }
         },
     });
@@ -164,7 +136,23 @@ export function Settings() {
 
     const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
+        setLogoError(null);
+
         if (file) {
+            // Validate file type
+            if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
+                setLogoError('Bitte laden Sie nur Bilder hoch (JPEG, PNG, WebP)');
+                e.target.value = '';
+                return;
+            }
+
+            // Validate file size
+            if (file.size > MAX_FILE_SIZE) {
+                setLogoError('Die Datei ist zu groß. Maximale Größe: 5MB');
+                e.target.value = '';
+                return;
+            }
+
             setLogoFile(file);
             const reader = new FileReader();
             reader.onloadend = () => {
@@ -174,99 +162,286 @@ export function Settings() {
         }
     };
 
+    const removeLogo = () => {
+        setLogoFile(null);
+        setLogoPreview(null);
+        setLogoError(null);
+    };
+
     if (isLoading) {
         return (
-            <div className="flex items-center justify-center h-64">
-                <p className="text-slate-600 dark:text-slate-400">Lade Einstellungen...</p>
+            <div className="flex items-center justify-center min-h-[400px]">
+                <div className="text-center space-y-4">
+                    <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent mx-auto"></div>
+                    <p className="text-slate-600 dark:text-slate-400">Laden der Einstellungen...</p>
+                </div>
             </div>
         );
     }
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 max-w-5xl mx-auto pb-12">
             {/* Header */}
-            <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-blue-600 dark:bg-blue-500 rounded-xl flex items-center justify-center shadow-lg shadow-blue-600/20 dark:shadow-blue-500/20">
-                    <SettingsIcon className="w-6 h-6 text-white" />
+            <div className="flex items-center gap-4">
+                <div className="relative">
+                    <div className="w-14 h-14 bg-gradient-to-br from-blue-600 to-blue-700 dark:from-blue-500 dark:to-blue-600 rounded-2xl flex items-center justify-center shadow-xl shadow-blue-600/30 dark:shadow-blue-500/30">
+                        <SettingsIcon className="w-7 h-7 text-white" />
+                    </div>
+                    <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full border-2 border-white dark:border-slate-900"></div>
                 </div>
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Einstellungen</h1>
-                    <p className="text-slate-500 dark:text-slate-400">Unternehmenseinstellungen verwalten</p>
+                <div className="flex-1">
+                    <h1 className="text-4xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">
+                        Einstellungen
+                    </h1>
+                    <p className="text-slate-600 dark:text-slate-400 mt-1">Verwalten Sie Ihre Unternehmenseinstellungen</p>
                 </div>
             </div>
 
+            {/* Success Message */}
+            {saveSuccess && (
+                <Alert className="bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800 animate-in slide-in-from-top duration-300">
+                    <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+                    <AlertDescription className="text-green-800 dark:text-green-200">
+                        ✅ Einstellungen wurden erfolgreich gespeichert!
+                        {fromOnboarding && <span className="ml-2">Weiterleitung zum Onboarding...</span>}
+                    </AlertDescription>
+                </Alert>
+            )}
+
             {/* Onboarding Banner */}
             {fromOnboarding && (
-                <div className="bg-gradient-to-r from-purple-500 to-pink-500 text-white p-4 rounded-lg shadow-lg">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <h3 className="font-semibold">📋 Onboarding - Schritt 1</h3>
-                            <p className="text-sm opacity-90">Füllen Sie Ihre Firmendaten aus und speichern Sie, um fortzufahren</p>
+                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 p-1 shadow-2xl">
+                    <div className="bg-white dark:bg-slate-900 rounded-xl p-6">
+                        <div className="flex items-center justify-between">
+                            <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-2xl">🚀</span>
+                                    <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Onboarding - Schritt 1 von 4</h3>
+                                </div>
+                                <p className="text-slate-600 dark:text-slate-400">
+                                    Geben Sie Ihre Firmendaten ein und klicken Sie auf <strong>"Speichern"</strong>, um fortzufahren
+                                </p>
+                            </div>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => navigate('/onboarding')}
+                                className="hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+                            >
+                                ← Zurück
+                            </Button>
                         </div>
-                        <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => navigate('/onboarding')}
-                        >
-                            Zurück zum Onboarding
-                        </Button>
                     </div>
                 </div>
             )}
 
             <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                    {/* Company Address Card */}
-                    <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
-                        <CardHeader className="border-b border-slate-100 dark:border-slate-800 pb-4">
-                            <div className="flex items-center gap-2">
-                                <Building2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                                <CardTitle>Firmendaten</CardTitle>
+                    {/* Logo Upload Card */}
+                    <Card className="shadow-lg border-slate-200 dark:border-slate-800 hover:shadow-xl transition-all duration-300">
+                        <CardHeader>
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/20 rounded-lg flex items-center justify-center">
+                                    <Image className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                                </div>
+                                <div>
+                                    <CardTitle className="text-xl">Firmenlogo</CardTitle>
+                                    <CardDescription>Laden Sie Ihr Firmenlogo hoch (Max. 5MB, nur Bilder)</CardDescription>
+                                </div>
                             </div>
-                            <CardDescription>
-                                Geben Sie die Adresse Ihres Unternehmens ein
-                            </CardDescription>
                         </CardHeader>
-                        <CardContent className="pt-6 space-y-4">
+                        <CardContent className="space-y-4">
+                            <div className="flex items-start gap-6">
+                                {/* Preview */}
+                                <div className="flex-shrink-0">
+                                    {logoPreview ? (
+                                        <div className="relative group">
+                                            <img
+                                                src={logoPreview}
+                                                alt="Logo Vorschau"
+                                                className="w-32 h-32 object-contain rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-2 shadow-md"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={removeLogo}
+                                                className="absolute -top-2 -right-2 w-7 h-7 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-lg"
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="w-32 h-32 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl flex items-center justify-center bg-slate-50 dark:bg-slate-900/50">
+                                            <Image className="w-12 h-12 text-slate-400" />
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Upload Button */}
+                                <div className="flex-1 space-y-3">
+                                    <div className="flex items-center gap-3">
+                                        <label htmlFor="logo-upload">
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                className="cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-950 hover:border-blue-600 hover:text-blue-600 dark:hover:text-blue-400 transition-all"
+                                                onClick={() => document.getElementById('logo-upload')?.click()}
+                                            >
+                                                <Upload className="w-4 h-4 mr-2" />
+                                                Logo hochladen
+                                            </Button>
+                                        </label>
+                                        <input
+                                            id="logo-upload"
+                                            type="file"
+                                            accept="image/jpeg,image/jpg,image/png,image/webp"
+                                            onChange={handleLogoChange}
+                                            className="hidden"
+                                        />
+                                    </div>
+
+                                    {logoError && (
+                                        <Alert variant="destructive" className="animate-in slide-in-from-top duration-300">
+                                            <AlertCircle className="h-4 w-4" />
+                                            <AlertDescription>{logoError}</AlertDescription>
+                                        </Alert>
+                                    )}
+
+                                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                                        Unterstützte Formate: JPEG, PNG, WebP<br />
+                                        Maximale Dateigröße: 5MB
+                                    </p>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Company Information Card */}
+                    <Card className="shadow-lg border-slate-200 dark:border-slate-800 hover:shadow-xl transition-all duration-300">
+                        <CardHeader>
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/20 rounded-lg flex items-center justify-center">
+                                    <Building2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                                </div>
+                                <div>
+                                    <CardTitle className="text-xl">Firmendaten</CardTitle>
+                                    <CardDescription>Grundlegende Informationen zu Ihrem Unternehmen</CardDescription>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
                             <FormField
                                 control={form.control}
                                 name="company_name"
                                 render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel>Firma *</FormLabel>
+                                        <FormLabel className="text-sm font-medium">Firmenname *</FormLabel>
                                         <FormControl>
-                                            <Input placeholder="z.B. Vorpoint" {...field} className="bg-white dark:bg-slate-950" />
+                                            <Input
+                                                {...field}
+                                                placeholder="z.B. Mustermann GmbH"
+                                                className="h-11 border-slate-300 dark:border-slate-700 focus:border-blue-500 dark:focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+                                            />
                                         </FormControl>
-                                        <FormMessage />
+                                        <FormMessage className="text-xs" />
                                     </FormItem>
                                 )}
                             />
 
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <FormField
+                                    control={form.control}
+                                    name="email"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className="text-sm font-medium">E-Mail *</FormLabel>
+                                            <FormControl>
+                                                <div className="relative">
+                                                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                                    <Input
+                                                        {...field}
+                                                        type="email"
+                                                        placeholder="info@firma.de"
+                                                        className="h-11 pl-10 border-slate-300 dark:border-slate-700 focus:border-blue-500 dark:focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+                                                    />
+                                                </div>
+                                            </FormControl>
+                                            <FormMessage className="text-xs" />
+                                        </FormItem>
+                                    )}
+                                />
+
+                                <FormField
+                                    control={form.control}
+                                    name="phone"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className="text-sm font-medium">Telefon *</FormLabel>
+                                            <FormControl>
+                                                <div className="relative">
+                                                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                                    <Input
+                                                        {...field}
+                                                        type="tel"
+                                                        placeholder="+49 123 456789"
+                                                        className="h-11 pl-10 border-slate-300 dark:border-slate-700 focus:border-blue-500 dark:focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+                                                    />
+                                                </div>
+                                            </FormControl>
+                                            <FormMessage className="text-xs" />
+                                        </FormItem>
+                                    )}
+                                />
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Address Card */}
+                    <Card className="shadow-lg border-slate-200 dark:border-slate-800 hover:shadow-xl transition-all duration-300">
+                        <CardHeader>
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-green-100 dark:bg-green-900/20 rounded-lg flex items-center justify-center">
+                                    <MapPin className="w-5 h-5 text-green-600 dark:text-green-400" />
+                                </div>
+                                <div>
+                                    <CardTitle className="text-xl">Adresse</CardTitle>
+                                    <CardDescription>Ihre Firmenadresse</CardDescription>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
                             <FormField
                                 control={form.control}
                                 name="street"
                                 render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel>Straße Nr. *</FormLabel>
+                                        <FormLabel className="text-sm font-medium">Straße & Hausnummer *</FormLabel>
                                         <FormControl>
-                                            <Input placeholder="z.B. Gorkistraße 84" {...field} className="bg-white dark:bg-slate-950" />
+                                            <Input
+                                                {...field}
+                                                placeholder="Musterstraße 123"
+                                                className="h-11 border-slate-300 dark:border-slate-700 focus:border-green-500 dark:focus:border-green-500 focus:ring-2 focus:ring-green-500/20 transition-all"
+                                            />
                                         </FormControl>
-                                        <FormMessage />
+                                        <FormMessage className="text-xs" />
                                     </FormItem>
                                 )}
                             />
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                 <FormField
                                     control={form.control}
                                     name="zip"
                                     render={({ field }) => (
                                         <FormItem>
-                                            <FormLabel>PLZ *</FormLabel>
+                                            <FormLabel className="text-sm font-medium">PLZ *</FormLabel>
                                             <FormControl>
-                                                <Input placeholder="z.B. 04347" {...field} className="bg-white dark:bg-slate-950" />
+                                                <Input
+                                                    {...field}
+                                                    placeholder="10115"
+                                                    className="h-11 border-slate-300 dark:border-slate-700 focus:border-green-500 dark:focus:border-green-500 focus:ring-2 focus:ring-green-500/20 transition-all"
+                                                />
                                             </FormControl>
-                                            <FormMessage />
+                                            <FormMessage className="text-xs" />
                                         </FormItem>
                                     )}
                                 />
@@ -275,12 +450,16 @@ export function Settings() {
                                     control={form.control}
                                     name="city"
                                     render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Ort *</FormLabel>
+                                        <FormItem className="md:col-span-2">
+                                            <FormLabel className="text-sm font-medium">Stadt *</FormLabel>
                                             <FormControl>
-                                                <Input placeholder="z.B. Leipzig" {...field} className="bg-white dark:bg-slate-950" />
+                                                <Input
+                                                    {...field}
+                                                    placeholder="Berlin"
+                                                    className="h-11 border-slate-300 dark:border-slate-700 focus:border-green-500 dark:focus:border-green-500 focus:ring-2 focus:ring-green-500/20 transition-all"
+                                                />
                                             </FormControl>
-                                            <FormMessage />
+                                            <FormMessage className="text-xs" />
                                         </FormItem>
                                     )}
                                 />
@@ -291,188 +470,119 @@ export function Settings() {
                                 name="country"
                                 render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel>Land</FormLabel>
+                                        <FormLabel className="text-sm font-medium">Land *</FormLabel>
                                         <FormControl>
-                                            <Input placeholder="Deutschland" {...field} className="bg-white dark:bg-slate-950" />
+                                            <Input
+                                                {...field}
+                                                placeholder="Deutschland"
+                                                className="h-11 border-slate-300 dark:border-slate-700 focus:border-green-500 dark:focus:border-green-500 focus:ring-2 focus:ring-green-500/20 transition-all"
+                                            />
                                         </FormControl>
-                                        <FormMessage />
+                                        <FormMessage className="text-xs" />
                                     </FormItem>
                                 )}
                             />
+                        </CardContent>
+                    </Card>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <FormField
-                                    control={form.control}
-                                    name="email"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>E-Mail *</FormLabel>
-                                            <FormControl>
-                                                <Input type="email" placeholder="info@firma.de" {...field} className="bg-white dark:bg-slate-950" />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-
-                                <FormField
-                                    control={form.control}
-                                    name="phone"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Telefon *</FormLabel>
-                                            <FormControl>
-                                                <Input type="tel" placeholder="+49 123 456789" {...field} className="bg-white dark:bg-slate-950" />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
+                    {/* Tax Information Card */}
+                    <Card className="shadow-lg border-slate-200 dark:border-slate-800 hover:shadow-xl transition-all duration-300">
+                        <CardHeader>
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-orange-100 dark:bg-orange-900/20 rounded-lg flex items-center justify-center">
+                                    <FileText className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+                                </div>
+                                <div>
+                                    <CardTitle className="text-xl">Steuerinformationen</CardTitle>
+                                    <CardDescription>Steuernummer und Steuerart</CardDescription>
+                                </div>
                             </div>
-
+                        </CardHeader>
+                        <CardContent className="space-y-6">
                             <FormField
                                 control={form.control}
                                 name="tax_number"
                                 render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel>Steuernummer</FormLabel>
+                                        <FormLabel className="text-sm font-medium">Steuernummer</FormLabel>
                                         <FormControl>
-                                            <Input placeholder="z.B. 12/345/67890" {...field} className="bg-white dark:bg-slate-950" />
+                                            <Input
+                                                {...field}
+                                                placeholder="DE123456789"
+                                                className="h-11 border-slate-300 dark:border-slate-700 focus:border-orange-500 dark:focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all"
+                                            />
                                         </FormControl>
-                                        <FormMessage />
+                                        <FormMessage className="text-xs" />
                                     </FormItem>
                                 )}
                             />
-                        </CardContent>
-                    </Card>
 
-                    {/* Tax Settings Card */}
-                    <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
-                        <CardHeader className="border-b border-slate-100 dark:border-slate-800 pb-4">
-                            <div className="flex items-center gap-2">
-                                <MapPin className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                                <CardTitle>Steuereinstellungen</CardTitle>
-                            </div>
-                            <CardDescription>
-                                Wählen Sie Ihre Umsatzsteuer-Option
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="pt-6">
                             <FormField
                                 control={form.control}
                                 name="tax_type"
                                 render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel>Umsatzsteuer-Option *</FormLabel>
+                                        <FormLabel className="text-sm font-medium">Steuerart *</FormLabel>
                                         <Select onValueChange={field.onChange} defaultValue={field.value}>
                                             <FormControl>
-                                                <SelectTrigger className="bg-white dark:bg-slate-950">
-                                                    <SelectValue />
+                                                <SelectTrigger className="h-11 border-slate-300 dark:border-slate-700 focus:border-orange-500 dark:focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all">
+                                                    <SelectValue placeholder="Steuerart wählen" />
                                                 </SelectTrigger>
                                             </FormControl>
                                             <SelectContent>
-                                                <SelectItem value="kleinunternehmer">
-                                                    Kleinunternehmerregelung (§19 UStG)
-                                                </SelectItem>
-                                                <SelectItem value="umsatzsteuer_pflichtig">
-                                                    Umsatzsteuer pflichtig
-                                                </SelectItem>
+                                                <SelectItem value="kleinunternehmer">Kleinunternehmer (§19 UStG)</SelectItem>
+                                                <SelectItem value="umsatzsteuer_pflichtig">Umsatzsteuerpflichtig</SelectItem>
                                             </SelectContent>
                                         </Select>
-                                        <FormDescription>
-                                            {field.value === 'kleinunternehmer'
-                                                ? 'Keine Umsatzsteuer wird berechnet'
-                                                : 'Umsatzsteuer wird in Rechnungen berechnet'}
+                                        <FormDescription className="text-xs">
+                                            Wählen Sie die zutreffende Steuerart für Ihr Unternehmen
                                         </FormDescription>
-                                        <FormMessage />
+                                        <FormMessage className="text-xs" />
                                     </FormItem>
                                 )}
                             />
                         </CardContent>
                     </Card>
 
-                    {/* Logo Upload Card */}
-                    <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
-                        <CardHeader className="border-b border-slate-100 dark:border-slate-800 pb-4">
-                            <div className="flex items-center gap-2">
-                                <Upload className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                                <CardTitle>Firmenlogo</CardTitle>
-                            </div>
-                            <CardDescription>
-                                Laden Sie Ihr Firmenlogo hoch (wird auf Rechnungen und Dokumenten angezeigt)
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="pt-6">
-                            <div className="space-y-4">
-                                {logoPreview && (
-                                    <div className="flex justify-center">
-                                        <img
-                                            src={logoPreview}
-                                            alt="Logo Vorschau"
-                                            className="max-h-32 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm bg-white dark:bg-slate-950 p-2"
-                                        />
-                                    </div>
-                                )}
-                                <div className="flex items-center gap-4">
-                                    <Input
-                                        type="file"
-                                        accept="image/*"
-                                        onChange={handleLogoChange}
-                                        className="cursor-pointer bg-white dark:bg-slate-950"
-                                    />
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-
                     {/* Save Button */}
-                    <div className="flex justify-end">
+                    <div className="flex justify-end gap-3 pt-4">
+                        {fromOnboarding && (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => navigate('/onboarding')}
+                                className="hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+                            >
+                                Abbrechen
+                            </Button>
+                        )}
                         <Button
                             type="submit"
-                            size="lg"
-                            className="gap-2 shadow-lg shadow-primary/20"
                             disabled={updateMutation.isPending}
+                            className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg shadow-blue-600/30 hover:shadow-xl hover:shadow-blue-600/40 transition-all duration-300 px-8 h-11"
                         >
-                            <Save className="w-4 h-4" />
-                            {updateMutation.isPending ? 'Speichert...' : 'Einstellungen speichern'}
+                            {updateMutation.isPending ? (
+                                <>
+                                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
+                                    Speichern...
+                                </>
+                            ) : (
+                                <>
+                                    <Save className="w-4 h-4 mr-2" />
+                                    Einstellungen speichern
+                                </>
+                            )}
                         </Button>
                     </div>
-
-                    {/* Success Message */}
-                    {updateMutation.isSuccess && (
-                        <div className="bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-400 px-4 py-3 rounded-lg flex items-center gap-2">
-                            <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                            {fromOnboarding
-                                ? 'Einstellungen gespeichert! Sie werden zum Onboarding weitergeleitet...'
-                                : 'Einstellungen erfolgreich gespeichert!'}
-                        </div>
-                    )}
-
-                    {/* Error Message */}
-                    {updateMutation.isError && (
-                        <div className="bg-rose-50 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-400 px-4 py-3 rounded-lg flex items-center gap-2">
-                            <div className="w-2 h-2 rounded-full bg-rose-500" />
-                            Fehler beim Speichern der Einstellungen
-                        </div>
-                    )}
-
-                    {/* Account Plan Management Section */}
-                    <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
-                        <CardHeader className="border-b border-slate-100 dark:border-slate-800 pb-4">
-                            <div className="flex items-center gap-2">
-                                <Building2 className="w-5 h-5 text-primary" />
-                                <CardTitle>Kontenplan-Verwaltung</CardTitle>
-                            </div>
-                            <CardDescription>
-                                Verwalten Sie Ihren SKR03-Kontenplan und erweitern Sie ihn bei Bedarf
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="pt-6">
-                            <AccountPlanManagement />
-                        </CardContent>
-                    </Card>
                 </form>
             </Form>
+
+            {/* Account Plan Management - Only show when not in onboarding */}
+            {!fromOnboarding && (
+                <div className="mt-12">
+                    <AccountPlanManagement />
+                </div>
+            )}
         </div>
     );
 }

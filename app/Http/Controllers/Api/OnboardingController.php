@@ -105,6 +105,17 @@ class OnboardingController extends Controller
             ], 400);
         }
         
+        // Erstelle einen Standard-User falls keiner existiert
+        // Dies ist wichtig für Journal Entries, die einen user_id benötigen
+        if (\App\Models\User::count() === 0) {
+            \App\Models\User::create([
+                'name' => $settings->company_name ?? 'Admin',
+                'email' => $settings->email ?? 'admin@' . str_replace(' ', '', strtolower($settings->company_name ?? 'company')) . '.local',
+                'password' => bcrypt('password'),
+                'email_verified_at' => now(),
+            ]);
+        }
+        
         // Markiere Onboarding als abgeschlossen
         $settings->onboarding_completed = true;
         $settings->save();
