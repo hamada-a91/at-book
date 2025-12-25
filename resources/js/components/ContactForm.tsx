@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Mail, Building2, User, FileText } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Mail, Building2, User, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { useForm, UseFormReturn } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import {
@@ -303,7 +303,7 @@ export function ContactForm({ onSubmit, isSubmitting = false, defaultValues }: C
 
                 {/* Optional Fields with Toggle Buttons */}
                 <div className="border-t pt-4">
-                    <p className="text-sm font-medium text-slate-700 mb-3">Optionale Felder</p>
+                    <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">Optionale Felder</p>
                     <div className="flex flex-wrap gap-2">
                         {!showEmail && (
                             <Button
