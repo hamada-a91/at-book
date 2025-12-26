@@ -3,14 +3,20 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\HasTenantScope;
 use App\Models\Invoice;
 use Illuminate\Http\Request;
 
 class InvoiceController extends Controller
 {
+    use HasTenantScope;
     public function index()
     {
-        $invoices = Invoice::with(['contact', 'lines'])->orderBy('id', 'desc')->get();
+        $tenant = $this->getTenantOrFail();
+        $invoices = Invoice::where('tenant_id', $tenant->id)
+            ->with(['contact', 'lines'])
+            ->orderBy('id', 'desc')
+            ->get();
         return response()->json($invoices);
     }
 
@@ -32,9 +38,13 @@ class InvoiceController extends Controller
             'lines.*.account_id' => 'required|exists:accounts,id',
         ]);
 
-        // Generate invoice number (RE-2025-0001)
+        // Generate invoice number (RE-2025-0001) - tenant-scoped
+        $tenant = $this->getTenantOrFail();
         $year = date('Y');
-        $lastInvoice = Invoice::where('invoice_number', 'like', "RE-$year-%")->latest('id')->first();
+        $lastInvoice = Invoice::where('tenant_id', $tenant->id)
+            ->where('invoice_number', 'like', "RE-$year-%")
+            ->latest('id')
+            ->first();
         $nextNumber = $lastInvoice ? intval(substr($lastInvoice->invoice_number, -4)) + 1 : 1;
         $invoiceNumber = sprintf("RE-%s-%04d", $year, $nextNumber);
 
@@ -84,8 +94,11 @@ class InvoiceController extends Controller
         return response()->json($invoice->load(['contact', 'lines']), 201);
     }
 
-    public function show(Invoice $invoice)
+    public function show(Request $request, int $id)
     {
+        $tenant = $this->getTenantOrFail();
+        $invoice = Invoice::where('tenant_id', $tenant->id)->findOrFail($id);
+        
         return response()->json($invoice->load(['contact', 'lines.account']));
     }
 
@@ -325,8 +338,11 @@ class InvoiceController extends Controller
     /**
      * Download invoice as PDF
      */
-    public function downloadPDF(Invoice $invoice)
+    public function downloadPDF(Request $request, int $id)
     {
+        $tenant = $this->getTenantOrFail();
+        $invoice = Invoice::where('tenant_id', $tenant->id)->findOrFail($id);
+        
         $invoice->load(['contact', 'lines.account']);
         $settings = \App\Models\CompanySetting::first();
         

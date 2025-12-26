@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import axios from '@/lib/axios';
 import { Search, Plus, FileText } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -36,22 +37,23 @@ const accountTypeStyles: Record<string, string> = {
 
 export function AccountsList() {
     const navigate = useNavigate();
-    const [search, setSearch] = useState('');
+    const { tenant } = useParams();
+    const [searchTerm, setSearchTerm] = useState('');
     const [typeFilter, setTypeFilter] = useState('all');
 
     const { data: accounts, isLoading } = useQuery<Account[]>({
         queryKey: ['accounts'],
         queryFn: async () => {
-            const res = await fetch('/api/accounts');
-            return res.json();
+            const { data } = await axios.get('/api/accounts');
+            return data;
         },
     });
 
     const filteredAccounts = accounts?.filter((account) => {
         const matchesSearch =
-            search === '' ||
-            account.code.toLowerCase().includes(search.toLowerCase()) ||
-            account.name.toLowerCase().includes(search.toLowerCase());
+            searchTerm === '' ||
+            account.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            account.name.toLowerCase().includes(searchTerm.toLowerCase());
 
         const matchesType = typeFilter === 'all' || account.type === typeFilter;
 
@@ -66,9 +68,8 @@ export function AccountsList() {
                     <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Kontenplan (SKR03)</h1>
                     <p className="text-slate-500 dark:text-slate-400">Übersicht aller Sachkonten</p>
                 </div>
-                <Link to="/accounts/create">
-
-                    <Button className="shadow-lg shadow-blue-100/20 hover:shadow-blue-200/30 transition-all duration-300 bg-gradient-to-r from-blue-300 to-blue-500 hover:from-blue-700 hover:to-blue-600">
+                <Link to={`/${tenant}/accounts/create`}>
+                    <Button className="shadow-lg shadow-emerald-100/20 hover:shadow-emerald-200/30 transition-all duration-300 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700">
                         <Plus className="w-4 h-4 mr-2" />
                         Neues Konto
                     </Button>
@@ -82,8 +83,8 @@ export function AccountsList() {
                     <Input
                         type="text"
                         placeholder="Suche nach Konto-Nr. oder Name..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
                         className="pl-9 bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800"
                     />
                 </div>
@@ -147,7 +148,7 @@ export function AccountsList() {
                                         <tr
                                             key={account.id}
                                             className="group hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
-                                            onClick={() => navigate(`/accounts/${account.id}`)}
+                                            onClick={() => navigate(`/${tenant}/accounts/${account.id}`)}
                                         >
                                             <td className="px-6 py-4">
                                                 <span className="font-mono font-bold text-slate-900 dark:text-slate-100 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import axios from '@/lib/axios';
 
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,6 +14,7 @@ import { Beleg, BelegType, BelegStatus } from '@/types/beleg';
 
 export function BelegeList() {
     const navigate = useNavigate();
+    const { tenant } = useParams();
     const queryClient = useQueryClient();
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState<BelegType | 'all'>('all');
@@ -21,19 +23,18 @@ export function BelegeList() {
     const { data: belege, isLoading } = useQuery<Beleg[]>({
         queryKey: ['belege', filterType, filterStatus],
         queryFn: async () => {
-            let url = '/api/belege?';
-            if (filterType !== 'all') url += `document_type=${filterType}&`;
-            if (filterStatus !== 'all') url += `status=${filterStatus}&`;
-            const res = await fetch(url);
-            return res.json();
+            const params = new URLSearchParams();
+            if (filterType !== 'all') params.append('document_type', filterType);
+            if (filterStatus !== 'all') params.append('status', filterStatus);
+            const { data } = await axios.get(`/api/belege?${params.toString()}`);
+            return data;
         },
     });
 
     const deleteMutation = useMutation({
         mutationFn: async (id: number) => {
-            const res = await fetch(`/api/belege/${id}`, { method: 'DELETE' });
-            if (!res.ok) throw new Error('Fehler beim Löschen');
-            return res.json();
+            const { data } = await axios.delete(`/api/belege/${id}`);
+            return data;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['belege'] });
@@ -42,9 +43,8 @@ export function BelegeList() {
 
     const bookMutation = useMutation({
         mutationFn: async (id: number) => {
-            const res = await fetch(`/api/belege/${id}/book`, { method: 'POST' });
-            if (!res.ok) throw new Error('Fehler beim Buchen');
-            return res.json();
+            const { data } = await axios.post(`/api/belege/${id}/book`);
+            return data;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['belege'] });
@@ -99,7 +99,37 @@ export function BelegeList() {
     };
 
     const handleDownload = async (id: number) => {
-        window.open(`/api/belege/${id}/download`, '_blank');
+        try {
+            const response = await axios.get(`/api/belege/${id}/download`, {
+                responseType: 'blob',
+            });
+
+            // Get filename from content-disposition if possible, or fallback
+            // Note: Accessing content-disposition header might depend on CORS exposure
+            const contentDisposition = response.headers['content-disposition'];
+            let filename = `beleg-${id}`;
+            if (contentDisposition) {
+                const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
+                if (filenameMatch && filenameMatch[1]) {
+                    filename = filenameMatch[1];
+                }
+            }
+            // Fallback extension if not in filename
+            if (!filename.includes('.')) {
+                filename += '.pdf'; // Default Assumption, though backend might send others
+            }
+
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', filename);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        } catch (error) {
+            console.error('Download error:', error);
+            alert('Fehler beim Herunterladen der Datei');
+        }
     };
 
     const filteredBelege = belege?.filter(beleg =>
@@ -116,9 +146,9 @@ export function BelegeList() {
                     <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Belege</h1>
                     <p className="text-slate-500 dark:text-slate-400">Verwalten Sie Ihre Geschäftsbelege</p>
                 </div>
-                <Link to="/belege/create">
-                    <Button className="gap-2 shadow-lg shadow-primary/20 bg-gradient-to-r from-cyan-300 to-cyan-500 hover:from-cyan-700 hover:to-cyan-600">
-                        <Plus className="w-4 h-4" />
+                <Link to={`/${tenant}/belege/create`}>
+                    <Button className="shadow-lg shadow-purple-100/20 hover:shadow-purple-200/30 transition-all duration-300 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700">
+                        <Plus className="w-4 h-4 mr-2" />
                         Neuer Beleg
                     </Button>
                 </Link>
@@ -205,8 +235,10 @@ export function BelegeList() {
                         </div>
                         <h3 className="text-lg font-medium text-slate-900 dark:text-slate-100 mb-1">Keine Belege gefunden</h3>
                         <p className="mb-6">Erstellen Sie Ihren ersten Beleg, um loszulegen.</p>
-                        <Link to="/belege/create">
-                            <Button variant="outline">Ersten Beleg erstellen</Button>
+                        <Link to={`/${tenant}/belege/create`}>
+                            <Button variant="link" className="text-purple-600 hover:text-purple-800 p-0 h-auto font-normal">
+                                Jetzt einen hochladen
+                            </Button>
                         </Link>
                     </CardContent>
                 ) : (
@@ -275,7 +307,7 @@ export function BelegeList() {
                                                     size="icon"
                                                     variant="ghost"
                                                     className="h-8 w-8 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
-                                                    onClick={() => navigate(`/belege/${beleg.id}`)}
+                                                    onClick={() => navigate(`/${tenant}/belege/${beleg.id}`)}
                                                     title="Ansehen"
                                                 >
                                                     <Eye className="w-4 h-4" />
@@ -310,7 +342,7 @@ export function BelegeList() {
                                                             size="icon"
                                                             variant="ghost"
                                                             className="h-8 w-8 text-slate-500 hover:text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20"
-                                                            onClick={() => navigate(`/belege/${beleg.id}/edit`)}
+                                                            onClick={() => navigate(`/${tenant}/belege/${beleg.id}/edit`)}
                                                             title="Bearbeiten"
                                                         >
                                                             <Edit className="w-4 h-4" />

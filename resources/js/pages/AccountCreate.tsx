@@ -1,5 +1,6 @@
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import axios from '@/lib/axios';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -34,6 +35,7 @@ type AccountFormValues = z.infer<typeof accountSchema>;
 
 export function AccountCreate() {
     const navigate = useNavigate();
+    const { tenant } = useParams();
     const queryClient = useQueryClient();
 
     const form = useForm<AccountFormValues>({
@@ -48,22 +50,17 @@ export function AccountCreate() {
 
     const createMutation = useMutation({
         mutationFn: async (data: AccountFormValues) => {
-            const res = await fetch('/api/accounts', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data),
-            });
-
-            if (!res.ok) {
-                const error = await res.json();
-                throw new Error(error.message || 'Fehler beim Erstellen');
+            try {
+                const { data: newAccount } = await axios.post('/api/accounts', data);
+                return newAccount;
+            } catch (error: any) {
+                const errorMsg = error.response?.data?.message || 'Fehler beim Erstellen';
+                throw new Error(errorMsg);
             }
-
-            return res.json();
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['accounts'] });
-            navigate('/accounts');
+            navigate(`/${tenant}/accounts`);
         },
         onError: (error: Error) => {
             alert('Fehler: ' + error.message);
@@ -78,7 +75,7 @@ export function AccountCreate() {
         <div className="space-y-6">
             {/* Header */}
             <div className="flex items-center gap-4">
-                <Link to="/accounts">
+                <Link to={`/${tenant}/accounts`}>
                     <Button variant="ghost" size="icon" className="h-10 w-10">
                         <ArrowLeft className="w-5 h-5" />
                     </Button>
@@ -170,7 +167,7 @@ export function AccountCreate() {
                             />
 
                             <div className="flex justify-end gap-3 pt-4">
-                                <Link to="/accounts">
+                                <Link to={`/${tenant}/accounts`}>
                                     <Button type="button" variant="outline" className="gap-2">
                                         <X className="w-4 h-4" />
                                         Abbrechen

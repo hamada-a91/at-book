@@ -3,9 +3,12 @@
 namespace App\Modules\Accounting\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Concerns\BelongsToTenant;
 
 class Account extends Model
 {
+    use BelongsToTenant;
+    
     protected $guarded = ['id'];
     
     protected $casts = [

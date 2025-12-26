@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { KPICard } from '@/components/dashboard/kpi-card';
 import { RevenueChart } from '@/components/dashboard/revenue-chart';
 import {
@@ -19,6 +19,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import axios from '@/lib/axios';
 
 interface DashboardSummary {
     income: number;
@@ -43,6 +44,7 @@ export function Dashboard() {
     const [filter, setFilter] = useState('current_month');
     const queryClient = useQueryClient();
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const { tenant } = useParams();
 
     // Calculate date range based on filter
     const getDateRange = (filterType: string) => {
@@ -86,15 +88,15 @@ export function Dashboard() {
 
     const dateRange = getDateRange(filter);
 
-    const { data: summary, isLoading: isLoadingSummary } = useQuery<DashboardSummary>({
+    const { data: summary, isLoading: isSummaryLoading } = useQuery<DashboardSummary>({
         queryKey: ['dashboard-summary', filter],
         queryFn: async () => {
             const params = new URLSearchParams({
                 start_date: dateRange.start_date,
                 end_date: dateRange.end_date,
             });
-            const res = await fetch(`/api/dashboard/summary?${params}`);
-            return res.json();
+            const { data } = await axios.get(`/api/dashboard/summary?${params}`);
+            return data;
         },
     });
 
@@ -106,16 +108,16 @@ export function Dashboard() {
                 end_date: dateRange.end_date,
                 group_by: dateRange.group_by,
             });
-            const res = await fetch(`/api/dashboard/chart?${params}`);
-            return res.json();
+            const { data } = await axios.get(`/api/dashboard/chart?${params}`);
+            return data;
         },
     });
 
     const { data: recentBookings } = useQuery({
         queryKey: ['recent-bookings'],
         queryFn: async () => {
-            const res = await fetch('/api/dashboard/recent-bookings?limit=5');
-            return res.json();
+            const { data } = await axios.get('/api/dashboard/recent-bookings?limit=5');
+            return data;
         },
     });
 
@@ -177,37 +179,27 @@ export function Dashboard() {
 
             {/* Quick Actions */}
             <div className="grid gap-4 md:grid-cols-2">
-                <Link to="/bookings/create">
-                    <Card className="group cursor-pointer border-none shadow-lg bg-gradient-to-br from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 transition-all duration-300 hover:scale-[1.02] hover:shadow-xl">
-                        <CardContent className="p-6 flex items-center justify-between">
-                            <div className="text-white">
-                                <h3 className="text-lg font-semibold mb-1">Neue Buchung</h3>
-                                <p className="text-blue-100 text-sm">Buchung erfassen</p>
-                            </div>
-                            <div className="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center group-hover:bg-white/30 transition-colors">
-                                <Receipt className="w-6 h-6 text-white" />
-                            </div>
-                        </CardContent>
-                    </Card>
+                <Link to={`/${tenant}/bookings/create`}>
+                    <Button className="w-full gap-2 justify-start items-center h-12 text-base font-medium transition-all hover:bg-primary hover:text-primary-foreground group">
+                        <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary-foreground/20">
+                            <Receipt className="h-5 w-5" />
+                        </div>
+                        Neue Buchung
+                    </Button>
                 </Link>
-                <Link to="/invoices/create">
-                    <Card className="group cursor-pointer border-none shadow-lg bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 transition-all duration-300 hover:scale-[1.02] hover:shadow-xl">
-                        <CardContent className="p-6 flex items-center justify-between">
-                            <div className="text-white">
-                                <h3 className="text-lg font-semibold mb-1">Neue Rechnung</h3>
-                                <p className="text-emerald-100 text-sm">Rechnung erstellen</p>
-                            </div>
-                            <div className="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center group-hover:bg-white/30 transition-colors">
-                                <FileText className="w-6 h-6 text-white" />
-                            </div>
-                        </CardContent>
-                    </Card>
+                <Link to={`/${tenant}/invoices/create`}>
+                    <Button className="w-full gap-2 justify-start items-center h-12 text-base font-medium transition-all hover:bg-primary hover:text-primary-foreground group">
+                        <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary-foreground/20">
+                            <FileText className="h-5 w-5" />
+                        </div>
+                        Neue Rechnung
+                    </Button>
                 </Link>
             </div>
 
             {/* KPI Cards */}
             <div className="grid gap-4 md:grid-cols-3">
-                {isLoadingSummary ? (
+                {isSummaryLoading ? (
                     <>
                         <Card className="h-32 flex items-center justify-center bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm"><Loader2 className="animate-spin text-slate-400" /></Card>
                         <Card className="h-32 flex items-center justify-center bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm"><Loader2 className="animate-spin text-slate-400" /></Card>
@@ -255,7 +247,7 @@ export function Dashboard() {
                     </CardHeader>
                     <CardContent>
                         <div className="space-y-6">
-                            {recentBookings?.map((booking: any) => {
+                            {Array.isArray(recentBookings) && recentBookings.map((booking: any) => {
                                 const isIncome = booking.lines?.some((l: any) => l.type === 'credit' && l.account?.type === 'revenue');
                                 const isExpense = booking.lines?.some((l: any) => l.type === 'debit' && l.account?.type === 'expense');
                                 const amount = calculateBookingAmount(booking);

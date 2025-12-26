@@ -3,18 +3,27 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\HasTenantScope;
 use App\Modules\Accounting\Models\Account;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class AccountController extends Controller
 {
+    use HasTenantScope;
+
     /**
      * List all accounts (Chart of Accounts) with balances
      */
     public function index(): JsonResponse
     {
-        $accounts = Account::with('journalEntryLines')->orderBy('id', 'desc')->get();
+        // Get tenant and explicitly filter accounts
+        $tenant = $this->getTenantOrFail();
+        
+        $accounts = Account::where('tenant_id', $tenant->id)
+            ->with('journalEntryLines')
+            ->orderBy('id', 'desc')
+            ->get();
         
         $accountsWithBalances = $accounts->map(function ($account) {
             $data = $account->toArray();
@@ -31,8 +40,15 @@ class AccountController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        $tenant = $this->getTenantOrFail();
+        
         $validated = $request->validate([
-            'code' => 'required|string|unique:accounts,code|max:10',
+            'code' => [
+                'required',
+                'string',
+                'max:10',
+                \Illuminate\Validation\Rule::unique('accounts', 'code')->where('tenant_id', $tenant->id),
+            ],
             'name' => 'required|string|max:255',
             'type' => 'required|in:asset,liability,equity,revenue,expense',
             'tax_key_code' => 'nullable|string',
@@ -48,7 +64,10 @@ class AccountController extends Controller
      */
     public function show(Request $request, int $id): JsonResponse
     {
-        $account = Account::findOrFail($id);
+        // Ensure tenant is loaded
+        $tenant = $this->getTenantOrFail();
+        
+        $account = Account::where('tenant_id', $tenant->id)->findOrFail($id);
         
         // Get date range from request or use defaults
         $fromDate = $request->input('from_date');

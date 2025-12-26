@@ -3,9 +3,12 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Concerns\BelongsToTenant;
 
 class CompanySetting extends Model
 {
+    use BelongsToTenant;
+    
     protected $fillable = [
         'company_name',
         'street',

@@ -2,6 +2,56 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Schema;
+
+// Schema Fix Route (Temporary)
+Route::get('/force-schema-fix', function () {
+    $messages = [];
+    
+    if (Schema::hasTable('accounts')) {
+        // 1. Try to drop old unique constraint
+        try {
+            Schema::table('accounts', function (Illuminate\Database\Schema\Blueprint $table) {
+                $table->dropUnique('accounts_code_unique');
+            });
+            $messages[] = 'Dropped accounts_code_unique';
+        } catch (\Exception $e) {
+            $messages[] = 'Drop failed (might not exist): ' . $e->getMessage();
+        }
+        
+        // 2. Try to add new scoped unique constraint
+        try {
+            Schema::table('accounts', function (Illuminate\Database\Schema\Blueprint $table) {
+                $table->unique(['tenant_id', 'code']);
+            });
+             $messages[] = 'Added unique(tenant_id, code)';
+        } catch (\Exception $e) {
+             $messages[] = 'Add unique failed (might exist): ' . $e->getMessage();
+        }
+        // 3. Fix Tax Codes table similarly
+        if (Schema::hasTable('tax_codes')) {
+            try {
+                Schema::table('tax_codes', function (Illuminate\Database\Schema\Blueprint $table) {
+                    $table->dropUnique('tax_codes_code_unique');
+                });
+                $messages[] = 'Dropped tax_codes_code_unique';
+            } catch (\Exception $e) {
+                $messages[] = 'Drop tax_unique failed: ' . $e->getMessage();
+            }
+            
+            try {
+                Schema::table('tax_codes', function (Illuminate\Database\Schema\Blueprint $table) {
+                    $table->unique(['tenant_id', 'code']);
+                });
+                $messages[] = 'Added unique(tenant_id, code) to tax_codes';
+            } catch (\Exception $e) {
+                $messages[] = 'Add tax_unique failed: ' . $e->getMessage();
+            }
+        }
+    }
+    
+    return response()->json(['messages' => $messages]);
+});
 use App\Http\Controllers\Api\ContactController;
 use App\Http\Controllers\Api\AccountController;
 use App\Http\Controllers\Api\AccountBalanceController;
@@ -11,9 +61,21 @@ use App\Http\Controllers\Api\CompanySettingController;
 use App\Http\Controllers\Api\ReportsController;
 use App\Http\Controllers\Api\AccountPlanController;
 use App\Http\Controllers\Api\OnboardingController;
+use App\Http\Controllers\Auth\RegistrationController;
+use App\Http\Controllers\Auth\LoginController;
 
-Route::middleware(['api'])->group(function () {
+// ===== PUBLIC AUTHENTICATION ROUTES =====
+Route::post('/register', [RegistrationController::class, 'register'])->name('api.register');
+Route::post('/login', [LoginController::class, 'login'])->name('api.login');
+Route::post('/logout', [LoginController::class, 'logout'])->middleware('auth:api')->name('api.logout');
+Route::get('/user', [LoginController::class, 'user'])->middleware('auth:api')->name('api.user');
+
+Route::middleware(['api', 'auth:api', \App\Http\Middleware\SetTenantFromUser::class])->group(function () {
     // ===== UNPROTECTED ROUTES (accessible during onboarding) =====
+    
+    // Note: auth:sanctum supports BOTH session auth (web) AND token auth (API)
+    // This allows the frontend to call these routes during onboarding (session)
+    // and also via API tokens after login
     
     // Onboarding Status
     Route::get('/onboarding/status', [OnboardingController::class, 'status']);

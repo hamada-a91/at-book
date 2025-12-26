@@ -3,18 +3,23 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\HasTenantScope;
 use App\Models\BankAccount;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
 class BankAccountController extends Controller
 {
+    use HasTenantScope;
+
     /**
      * Display a listing of bank accounts
      */
     public function index(): JsonResponse
     {
-        $accounts = BankAccount::orderBy('is_default', 'desc')
+        $tenant = $this->getTenantOrFail();
+        $accounts = BankAccount::where('tenant_id', $tenant->id)
+            ->orderBy('is_default', 'desc')
             ->orderBy('id', 'desc')
             ->get()
             ->map(function ($account) {

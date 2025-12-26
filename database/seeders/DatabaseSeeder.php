@@ -2,22 +2,19 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
 {
-    use WithoutModelEvents;
-
     /**
      * Seed the application's database.
+     * 
+     * NOTE: For multi-tenant applications, we don't seed demo data.
+     * Each tenant creates their own data through the onboarding process.
      */
     public function run(): void
     {
-        $this->call([
-            CompanySettingSeeder::class,
-            // AccountSeeder::class, // Removed - now handled by CompanySettingSeeder
-        ]);
+        // No seeding needed - tenants create their own data via onboarding
+        $this->command->info('✅ Multi-tenant app - no seeding required. Use onboarding to create data.');
     }
 }

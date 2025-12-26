@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import axios from '@/lib/axios';
 import { format } from 'date-fns';
 import {
     FileText,
@@ -10,7 +10,7 @@ import {
     Receipt,
     Download,
     Printer,
-    X
+
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -53,14 +53,11 @@ export function Reports() {
                 to_date: format(dateRange.to, 'yyyy-MM-dd'),
             });
 
-            const res = await fetch(`/api/reports/${type}?${queryParams}`);
-            if (!res.ok) throw new Error('Fehler beim Laden des Berichts');
-
-            const data = await res.json();
+            const { data } = await axios.get(`/api/reports/${type}?${queryParams}`);
             setReportData(data);
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
-            alert('Fehler beim Erstellen des Berichts');
+            alert(error.response?.data?.message || 'Fehler beim Erstellen des Berichts');
             setActiveReport(null);
         } finally {
             setIsLoading(false);

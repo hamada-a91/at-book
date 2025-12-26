@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import axios from '@/lib/axios';
 import { Plus, Search, Pencil, Trash2, Eye, User } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -47,23 +48,20 @@ export function ContactsList() {
     const { data: contacts, isLoading } = useQuery<Contact[]>({
         queryKey: ['contacts'],
         queryFn: async () => {
-            const res = await fetch('/api/contacts');
-            return res.json();
+            const { data } = await axios.get('/api/contacts');
+            return data;
         },
     });
 
     const createMutation = useMutation({
         mutationFn: async (data: ContactFormValues) => {
-            const res = await fetch('/api/contacts', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data),
-            });
-            if (!res.ok) {
-                const error = await res.json();
-                throw new Error(error.message || 'Fehler beim Erstellen');
+            try {
+                const { data: newContact } = await axios.post('/api/contacts', data);
+                return newContact;
+            } catch (error: any) {
+                const errorMsg = error.response?.data?.message || 'Fehler beim Erstellen';
+                throw new Error(errorMsg);
             }
-            return res.json();
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['contacts'] });
@@ -78,13 +76,13 @@ export function ContactsList() {
     const updateMutation = useMutation({
         mutationFn: async (data: ContactFormValues) => {
             if (!editContact) return;
-            const res = await fetch(`/api/contacts/${editContact.id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data),
-            });
-            if (!res.ok) throw new Error('Fehler beim Aktualisieren');
-            return res.json();
+            try {
+                const { data: updatedContact } = await axios.put(`/api/contacts/${editContact.id}`, data);
+                return updatedContact;
+            } catch (error: any) {
+                const errorMsg = error.response?.data?.message || 'Fehler beim Aktualisieren';
+                throw new Error(errorMsg);
+            }
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['contacts'] });
@@ -94,14 +92,13 @@ export function ContactsList() {
 
     const deleteMutation = useMutation({
         mutationFn: async (id: number) => {
-            const res = await fetch(`/api/contacts/${id}`, {
-                method: 'DELETE',
-            });
-            if (!res.ok) {
-                const error = await res.json();
-                throw new Error(error.error || 'Fehler beim Löschen');
+            try {
+                const { data } = await axios.delete(`/api/contacts/${id}`);
+                return data;
+            } catch (error: any) {
+                const errorMsg = error.response?.data?.error || 'Fehler beim Löschen';
+                throw new Error(errorMsg);
             }
-            return res.json();
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['contacts'] });

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
+import axios from '@/lib/axios';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { Plus, Eye, Lock, RotateCcw, CheckCircle2, AlertCircle, FileText, Calendar, Search, Paperclip, Download } from 'lucide-react';
 import { DateRangeSelector } from '@/components/reports/DateRangeSelector';
@@ -70,6 +71,7 @@ const statusVariants: Record<string, "default" | "secondary" | "destructive" | "
 export function JournalList() {
     const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'posted'>('all');
     const [searchQuery, setSearchQuery] = useState('');
+    const { tenant } = useParams();
     const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
         from: startOfMonth(new Date()),
         to: endOfMonth(new Date())
@@ -86,19 +88,15 @@ export function JournalList() {
             params.append('from_date', format(dateRange.from, 'yyyy-MM-dd'));
             params.append('to_date', format(dateRange.to, 'yyyy-MM-dd'));
 
-            const res = await fetch(`/api/bookings?${params.toString()}`);
-            return res.json();
+            const { data } = await axios.get(`/api/bookings?${params.toString()}`);
+            return data;
         },
     });
 
     const lockMutation = useMutation({
         mutationFn: async (id: number) => {
-            const res = await fetch(`/api/bookings/${id}/lock`, { method: 'POST' });
-            if (!res.ok) {
-                const error = await res.json();
-                throw new Error(error.message || 'Fehler beim Buchen');
-            }
-            return res.json();
+            const { data } = await axios.post(`/api/bookings/${id}/lock`);
+            return data;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['bookings'] });
@@ -111,12 +109,8 @@ export function JournalList() {
 
     const reverseMutation = useMutation({
         mutationFn: async (id: number) => {
-            const res = await fetch(`/api/bookings/${id}/reverse`, { method: 'POST' });
-            if (!res.ok) {
-                const error = await res.json();
-                throw new Error(error.message || 'Fehler beim Stornieren');
-            }
-            return res.json();
+            const { data } = await axios.post(`/api/bookings/${id}/reverse`);
+            return data;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['bookings'] });
@@ -147,9 +141,8 @@ export function JournalList() {
     };
 
     const viewDetails = async (id: number) => {
-        const res = await fetch(`/api/bookings/${id}`);
-        const booking = await res.json();
-        setSelectedBooking(booking);
+        const { data } = await axios.get(`/api/bookings/${id}`);
+        setSelectedBooking(data);
     };
 
     const formatDate = (dateString: string) => {
@@ -184,8 +177,8 @@ export function JournalList() {
                 </div>
                 <div className="flex flex-col items-end gap-4">
                     <div className="flex gap-2">
-                        <Link to="/bookings/create">
-                            <Button className="shadow-lg shadow-blue-100/20 hover:shadow-blue-200/30 transition-all duration-300 bg-gradient-to-r from-blue-300 to-blue-500 hover:from-blue-700 hover:to-blue-600">
+                        <Link to={`/${tenant}/bookings/create`}>
+                            <Button className="shadow-lg shadow-blue-100/20 hover:shadow-blue-200/30 transition-all duration-300 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
                                 <Plus className="w-4 h-4 mr-2" />
                                 Neue Buchung
                             </Button>
@@ -199,8 +192,8 @@ export function JournalList() {
             <div className="grid gap-6 md:grid-cols-3">
                 <Card
                     className={`relative overflow-hidden border-none shadow-xl backdrop-blur-xl group hover:scale-[1.02] transition-all duration-300 cursor-pointer ${statusFilter === 'all'
-                            ? 'bg-blue-50/90 dark:bg-blue-950/50 ring-2 ring-blue-500'
-                            : 'bg-white/80 dark:bg-slate-950/80 hover:bg-blue-50/50 dark:hover:bg-blue-950/30'
+                        ? 'bg-blue-50/90 dark:bg-blue-950/50 ring-2 ring-blue-500'
+                        : 'bg-white/80 dark:bg-slate-950/80 hover:bg-blue-50/50 dark:hover:bg-blue-950/30'
                         }`}
                     onClick={() => setStatusFilter('all')}
                 >
@@ -217,8 +210,8 @@ export function JournalList() {
                 </Card>
                 <Card
                     className={`relative overflow-hidden border-none shadow-xl backdrop-blur-xl group hover:scale-[1.02] transition-all duration-300 cursor-pointer ${statusFilter === 'draft'
-                            ? 'bg-amber-50/90 dark:bg-amber-950/50 ring-2 ring-amber-500'
-                            : 'bg-white/80 dark:bg-slate-900/80 hover:bg-amber-50/50 dark:hover:bg-amber-950/30'
+                        ? 'bg-amber-50/90 dark:bg-amber-950/50 ring-2 ring-amber-500'
+                        : 'bg-white/80 dark:bg-slate-900/80 hover:bg-amber-50/50 dark:hover:bg-amber-950/30'
                         }`}
                     onClick={() => setStatusFilter('draft')}
                 >
@@ -235,8 +228,8 @@ export function JournalList() {
                 </Card>
                 <Card
                     className={`relative overflow-hidden border-none shadow-xl backdrop-blur-xl group hover:scale-[1.02] transition-all duration-300 cursor-pointer ${statusFilter === 'posted'
-                            ? 'bg-emerald-50/90 dark:bg-emerald-950/50 ring-2 ring-emerald-500'
-                            : 'bg-white/80 dark:bg-slate-900/80 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/30'
+                        ? 'bg-emerald-50/90 dark:bg-emerald-950/50 ring-2 ring-emerald-500'
+                        : 'bg-white/80 dark:bg-slate-900/80 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/30'
                         }`}
                     onClick={() => setStatusFilter('posted')}
                 >
@@ -311,7 +304,7 @@ export function JournalList() {
                                     ? `Es wurden keine Buchungen mit dem Status "${statusFilter === 'draft' ? 'Entwurf' : 'Gebucht'}" gefunden.`
                                     : 'Beginnen Sie mit Ihrer ersten Buchung, um Ihre Finanzen zu verwalten.'}
                             </p>
-                            <Link to="/bookings/create">
+                            <Link to={`/${tenant}/bookings/create`}>
                                 <Button size="lg" className="shadow-lg shadow-blue-500/20">
                                     <Plus className="w-5 h-5 mr-2" />
                                     Erste Buchung erstellen

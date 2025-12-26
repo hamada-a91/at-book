@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, Link } from 'react-router-dom';
+import axios from '@/lib/axios';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,12 +14,12 @@ import { BelegType } from '@/types/beleg';
 interface Contact {
     id: number;
     name: string;
-    type: string;
+    type: 'customer' | 'vendor' | 'both' | 'other';
 }
 
 export function BelegCreate() {
     const navigate = useNavigate();
-    const { id } = useParams<{ id: string }>();
+    const { tenant, id } = useParams<{ tenant: string; id: string }>();
     const queryClient = useQueryClient();
     const isEditMode = !!id;
 
@@ -36,8 +37,8 @@ export function BelegCreate() {
     const { data: contacts } = useQuery<Contact[]>({
         queryKey: ['contacts'],
         queryFn: async () => {
-            const res = await fetch('/api/contacts');
-            return res.json();
+            const { data } = await axios.get('/api/contacts');
+            return data;
         },
     });
 
@@ -46,8 +47,8 @@ export function BelegCreate() {
         queryKey: ['beleg', id],
         queryFn: async () => {
             if (!id) return null;
-            const res = await fetch(`/api/belege/${id}`);
-            return res.json();
+            const { data } = await axios.get(`/api/belege/${id}`);
+            return data;
         },
         enabled: !!id,
     });
@@ -81,20 +82,17 @@ export function BelegCreate() {
     const createBelegMutation = useMutation({
         mutationFn: async (data: any) => {
             const url = isEditMode ? `/api/belege/${id}` : '/api/belege';
-            const method = isEditMode ? 'PUT' : 'POST';
+            const method = isEditMode ? 'put' : 'post';
 
-            const res = await fetch(url, {
-                method,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data),
-            });
-            if (!res.ok) {
-                const error = await res.json();
-                throw new Error(error.message || 'Fehler beim Speichern');
+            try {
+                // @ts-ignore
+                const { data: responseData } = await axios[method](url, data);
+                console.log('Beleg response:', responseData);
+                return responseData;
+            } catch (error: any) {
+                const errorMsg = error.response?.data?.message || 'Fehler beim Speichern';
+                throw new Error(errorMsg);
             }
-            const responseData = await res.json();
-            console.log('Beleg response:', responseData);
-            return responseData;
         },
         onSuccess: async (data) => {
             console.log('Beleg created/updated successfully:', data);
@@ -110,7 +108,7 @@ export function BelegCreate() {
             }
 
             queryClient.invalidateQueries({ queryKey: ['belege'] });
-            navigate(`/belege/${data.id}`);
+            navigate(`/${tenant}/belege/${data.id}`);
         },
         onError: (error: Error) => {
             console.error('Beleg mutation error:', error);
@@ -123,12 +121,12 @@ export function BelegCreate() {
             const formData = new FormData();
             formData.append('file', file);
 
-            const res = await fetch(`/api/belege/${belegId}/upload`, {
-                method: 'POST',
-                body: formData,
+            const { data } = await axios.post(`/api/belege/${belegId}/upload`, formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                },
             });
-            if (!res.ok) throw new Error('Fehler beim Hochladen der Datei');
-            return res.json();
+            return data;
         },
     });
 
@@ -188,7 +186,7 @@ export function BelegCreate() {
     return (
         <div className="space-y-6">
             <div className="flex items-center gap-4">
-                <Link to="/belege">
+                <Link to={`/${tenant}/belege`}>
                     <Button variant="ghost" size="icon" className="h-10 w-10">
                         <ArrowLeft className="w-5 h-5" />
                     </Button>
@@ -429,7 +427,7 @@ export function BelegCreate() {
 
                 {/* Actions */}
                 <div className="flex justify-end gap-4 pb-8">
-                    <Button type="button" variant="outline" onClick={() => navigate('/belege')} className="gap-2">
+                    <Button type="button" variant="outline" onClick={() => navigate(`/${tenant}/belege`)} className="gap-2">
                         <X className="w-4 h-4" />
                         Abbrechen
                     </Button>

@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Check, Building2, Scale, ShoppingCart, Zap, Sparkles, Rocket, ArrowRight, Loader2 } from 'lucide-react';
-import axios from 'axios';
+import axios from '@/lib/axios';
 
 interface OnboardingStatus {
     completed: boolean;
@@ -24,6 +24,10 @@ export default function Onboarding() {
     const [isGenerating, setIsGenerating] = useState(false);
 
     const navigate = useNavigate();
+    const { tenant } = useParams();
+
+    // Helper function for tenant-aware URLs
+    const tenantUrl = (path: string) => tenant ? `/${tenant}${path}` : path;
 
     const businessModels = [
         {
@@ -96,13 +100,16 @@ export default function Onboarding() {
         checkStatus();
     }, []);
 
+    const [error, setError] = useState<string | null>(null);
+
     const checkStatus = async () => {
         try {
+            setError(null);
             const { data } = await axios.get('/api/onboarding/status');
             setStatus(data);
 
             if (data.completed) {
-                navigate('/dashboard');
+                navigate(tenantUrl('/dashboard'));
                 return;
             }
 
@@ -111,8 +118,12 @@ export default function Onboarding() {
             else if (!data.steps.legal_form) setCurrentStep(3);
             else if (!data.steps.account_plan) setCurrentStep(4);
 
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error checking status:', error);
+            setError('Failed to load onboarding status. Please try refreshing or logging in again.');
+            if (error.response?.status === 401) {
+                setError('Session expired. Please login again.');
+            }
         } finally {
             setIsLoading(false);
         }
@@ -142,7 +153,7 @@ export default function Onboarding() {
             alert('🎉 Willkommen! Onboarding erfolgreich abgeschlossen');
 
             setTimeout(() => {
-                navigate('/dashboard');
+                navigate(tenantUrl('/dashboard'));
             }, 500);
 
         } catch (error: any) {
@@ -162,6 +173,27 @@ export default function Onboarding() {
                     <div className="animate-spin rounded-full h-20 w-20 border-4 border-purple-200 dark:border-purple-800 border-t-purple-600 dark:border-t-purple-400"></div>
                     <Sparkles className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 h-8 w-8 text-purple-600 dark:text-purple-400 animate-pulse" />
                 </div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 dark:from-slate-900 dark:via-purple-950 dark:to-slate-900">
+                <Card className="max-w-md w-full shadow-2xl border-red-200 dark:border-red-900">
+                    <CardHeader>
+                        <CardTitle className="text-red-600 dark:text-red-400">Error</CardTitle>
+                        <CardDescription>{error}</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <button
+                            onClick={() => window.location.href = '/login'}
+                            className="w-full h-10 bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-4 py-2"
+                        >
+                            Return to Login
+                        </button>
+                    </CardContent>
+                </Card>
             </div>
         );
     }
@@ -217,7 +249,7 @@ export default function Onboarding() {
                         </CardHeader>
                         <CardContent>
                             <button
-                                onClick={() => navigate('/settings?from=onboarding')}
+                                onClick={() => navigate(tenantUrl('/settings?from=onboarding'))}
                                 className="w-full h-14 text-lg font-medium bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white shadow-xl shadow-purple-600/30 hover:shadow-2xl hover:shadow-purple-600/40 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] rounded-lg flex items-center justify-center gap-3"
                             >
                                 <Building2 className="h-6 w-6" />
@@ -257,8 +289,8 @@ export default function Onboarding() {
                                                 }
                                             }}
                                             className={`relative p-6 rounded-2xl cursor-pointer transition-all duration-300 transform hover:scale-105 ${isSelected
-                                                    ? `bg-gradient-to-br ${model.bgGradient} border-2 ${model.borderColor} shadow-xl`
-                                                    : 'border-2 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 hover:shadow-lg bg-white dark:bg-slate-900'
+                                                ? `bg-gradient-to-br ${model.bgGradient} border-2 ${model.borderColor} shadow-xl`
+                                                : 'border-2 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 hover:shadow-lg bg-white dark:bg-slate-900'
                                                 }`}
                                         >
                                             {isSelected && (
@@ -308,8 +340,8 @@ export default function Onboarding() {
                                             key={form.id}
                                             onClick={() => setSelectedLegalForm(form.id)}
                                             className={`relative p-5 rounded-xl cursor-pointer transition-all duration-300 transform hover:scale-[1.01] ${isSelected
-                                                    ? 'bg-green-50 dark:bg-green-950/30 border-2 border-green-500 shadow-lg shadow-green-500/20'
-                                                    : 'border-2 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 hover:shadow-md bg-white dark:bg-slate-900'
+                                                ? 'bg-green-50 dark:bg-green-950/30 border-2 border-green-500 shadow-lg shadow-green-500/20'
+                                                : 'border-2 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 hover:shadow-md bg-white dark:bg-slate-900'
                                                 }`}
                                         >
                                             {isSelected && (

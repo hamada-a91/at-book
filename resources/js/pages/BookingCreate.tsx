@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useNavigate, useParams } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import axios from '@/lib/axios';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -78,7 +79,8 @@ type BookingFormValues = z.infer<typeof bookingSchema>;
 
 export function BookingCreate() {
     const navigate = useNavigate();
-
+    const { tenant } = useParams();
+    const queryClient = useQueryClient();
     // Beleg Workflow State
     type BelegOption = 'none' | 'attach' | 'create' | 'select' | 'exception';
     const [belegStep, setBelegStep] = useState<'select' | 'complete'>('select');
@@ -109,24 +111,24 @@ export function BookingCreate() {
     const { data: accounts } = useQuery<Account[]>({
         queryKey: ['accounts'],
         queryFn: async () => {
-            const res = await fetch('/api/accounts');
-            return res.json();
+            const { data } = await axios.get('/api/accounts');
+            return data;
         },
     });
 
     const { data: contacts } = useQuery<Contact[]>({
         queryKey: ['contacts'],
         queryFn: async () => {
-            const res = await fetch('/api/contacts');
-            return res.json();
+            const { data } = await axios.get('/api/contacts');
+            return data;
         },
     });
 
     const { data: belege } = useQuery({
         queryKey: ['belege'],
         queryFn: async () => {
-            const res = await fetch('/api/belege');
-            return res.json();
+            const { data } = await axios.get('/api/belege');
+            return data;
         },
     });
 
@@ -205,36 +207,24 @@ export function BookingCreate() {
                 });
 
                 // Create Beleg
-                const belegRes = await fetch('/api/belege', {
-                    method: 'POST',
-                    body: formData,
-                });
+                try {
+                    const { data: createdBeleg } = await axios.post('/api/belege', formData, {
+                        headers: {
+                            'Content-Type': 'multipart/form-data',
+                        },
+                    });
 
-                if (!belegRes.ok) {
+                    belegIdToUse = createdBeleg.id;
+                    setNewBelegId(createdBeleg.id);
+                } catch (error: any) {
                     let errorMessage = 'Fehler beim Erstellen des Belegs';
-                    const contentType = belegRes.headers.get('content-type');
-
-                    if (contentType && contentType.includes('application/json')) {
-                        const error = await belegRes.json();
-                        errorMessage = error.message || error.error || errorMessage;
-                    } else {
-                        // HTML error response
-                        const errorText = await belegRes.text();
-                        console.error('Beleg creation error (HTML):', errorText);
-
-                        // Try to extract error from HTML
-                        const match = errorText.match(/<title>(.*?)<\/title>/);
-                        if (match && match[1]) {
-                            errorMessage = match[1];
-                        }
+                    if (error.response?.data?.message) {
+                        errorMessage = error.response.data.message;
+                    } else if (error.response?.data?.error) {
+                        errorMessage = error.response.data.error;
                     }
-
-                    throw new Error(errorMessage + ` (Status: ${belegRes.status})`);
+                    throw new Error(errorMessage);
                 }
-
-                const createdBeleg = await belegRes.json();
-                belegIdToUse = createdBeleg.id;
-                setNewBelegId(createdBeleg.id);
             }
 
             // Create Booking
@@ -252,21 +242,15 @@ export function BookingCreate() {
                 })),
             };
 
-            const res = await fetch('/api/bookings', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-            });
-
-            if (!res.ok) {
-                const error = await res.json();
-                throw new Error(error.error || 'Fehler beim Erstellen');
+            try {
+                const { data: resData } = await axios.post('/api/bookings', payload);
+                return resData;
+            } catch (error: any) {
+                throw new Error(error.response?.data?.error || error.response?.data?.message || 'Fehler beim Erstellen der Buchung');
             }
-
-            return res.json();
         },
         onSuccess: () => {
-            navigate('/bookings');
+            navigate(`/${tenant}/bookings`);
         },
         onError: (error: Error) => {
             alert('Fehler: ' + error.message);
@@ -587,7 +571,7 @@ export function BookingCreate() {
                     <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Neue Buchung</h1>
                     <p className="text-slate-500 dark:text-slate-400">Erstellen Sie einen neuen Buchungssatz</p>
                 </div>
-                <Button variant="ghost" onClick={() => navigate('/bookings')} className="gap-2">
+                <Button variant="ghost" onClick={() => navigate(`/${tenant}/bookings`)} className="gap-2">
                     <ArrowLeft className="w-4 h-4" />
                     Zurück zur Übersicht
                 </Button>
@@ -647,7 +631,7 @@ export function BookingCreate() {
                                 onClick={() => {
                                     setSelectedBelegOption('create');
                                     // Navigate to Beleg creation page
-                                    window.open('/belege/create?from=booking', '_blank');
+                                    window.open(`/${tenant}/belege/create?from=booking`, '_blank');
                                     setShowBelegDialog(true);
                                 }}
                                 className={`group relative p-6 rounded-xl border-2 transition-all duration-200 text-left ${selectedBelegOption === 'create'
@@ -1234,7 +1218,7 @@ export function BookingCreate() {
                                         </div>
 
                                         <div className="flex items-center gap-3 w-full md:w-auto">
-                                            <Button type="button" variant="outline" onClick={() => navigate('/bookings')} className="flex-1 md:flex-none">
+                                            <Button type="button" variant="outline" onClick={() => navigate(`/${tenant}/bookings`)} className="flex-1 md:flex-none">
                                                 Abbrechen
                                             </Button>
                                             <Button type="submit" disabled={!isBalanced || createMutation.isPending} className="flex-1 md:flex-none min-w-[140px]">
@@ -1365,7 +1349,7 @@ export function BookingCreate() {
                                     variant="outline"
                                     className="mt-4"
                                     onClick={() => {
-                                        window.open('/belege/create', '_blank');
+                                        window.open(`/${tenant}/belege/create`, '_blank');
                                     }}
                                 >
                                     <Plus className="w-4 h-4 mr-2" />

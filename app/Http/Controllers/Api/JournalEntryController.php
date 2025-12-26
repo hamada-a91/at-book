@@ -3,12 +3,15 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\HasTenantScope;
 use App\Modules\Accounting\Services\BookingService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
 class JournalEntryController extends Controller
 {
+    use HasTenantScope;
+
     public function __construct(
         private BookingService $bookingService
     ) {}
@@ -70,7 +73,9 @@ class JournalEntryController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $query = \App\Modules\Accounting\Models\JournalEntry::with(['lines.account', 'beleg'])
+        $tenant = $this->getTenantOrFail();
+        $query = \App\Modules\Accounting\Models\JournalEntry::where('tenant_id', $tenant->id)
+            ->with(['lines.account', 'beleg'])
             ->orderBy('booking_date', 'desc');
 
         if ($request->has('status')) {

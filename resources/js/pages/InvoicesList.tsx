@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import axios from '@/lib/axios';
 
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -25,6 +26,7 @@ interface Invoice {
 
 export function InvoicesList() {
     const navigate = useNavigate();
+    const { tenant } = useParams();
     const queryClient = useQueryClient();
     const [paymentDialog, setPaymentDialog] = useState<{ open: boolean; invoice: Invoice | null }>({ open: false, invoice: null });
     const [paymentAccount, setPaymentAccount] = useState('');
@@ -34,16 +36,15 @@ export function InvoicesList() {
     const { data: invoices, isLoading } = useQuery<Invoice[]>({
         queryKey: ['invoices'],
         queryFn: async () => {
-            const res = await fetch('/api/invoices');
-            return res.json();
+            const { data } = await axios.get('/api/invoices');
+            return data;
         },
     });
 
     const deleteMutation = useMutation({
         mutationFn: async (id: number) => {
-            const res = await fetch(`/api/invoices/${id}`, { method: 'DELETE' });
-            if (!res.ok) throw new Error('Fehler beim Löschen');
-            return res.json();
+            const { data } = await axios.delete(`/api/invoices/${id}`);
+            return data;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['invoices'] });
@@ -52,9 +53,8 @@ export function InvoicesList() {
 
     const bookMutation = useMutation({
         mutationFn: async (id: number) => {
-            const res = await fetch(`/api/invoices/${id}/book`, { method: 'POST' });
-            if (!res.ok) throw new Error('Fehler beim Buchen');
-            return res.json();
+            const { data } = await axios.post(`/api/invoices/${id}/book`);
+            return data;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['invoices'] });
@@ -65,20 +65,15 @@ export function InvoicesList() {
     const { data: accounts } = useQuery({
         queryKey: ['accounts'],
         queryFn: async () => {
-            const res = await fetch('/api/accounts');
-            return res.json();
+            const { data } = await axios.get('/api/accounts');
+            return data;
         },
     });
 
     const paymentMutation = useMutation({
         mutationFn: async ({ invoiceId, data }: { invoiceId: number; data: any }) => {
-            const res = await fetch(`/api/invoices/${invoiceId}/payment`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data),
-            });
-            if (!res.ok) throw new Error('Fehler beim Erfassen der Zahlung');
-            return res.json();
+            const { data: resData } = await axios.post(`/api/invoices/${invoiceId}/payment`, data);
+            return resData;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['invoices'] });
@@ -149,9 +144,9 @@ export function InvoicesList() {
                     <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Rechnungen</h1>
                     <p className="text-slate-500 dark:text-slate-400">Verwalten Sie Ihre Ausgangsrechnungen</p>
                 </div>
-                <Link to="/invoices/create">
-                    <Button className="gap-2 shadow-lg shadow-primary/20 bg-gradient-to-r from-purple-300 to-purple-500 hover:from-purple-700 hover:to-purple-600">
-                        <Plus className="w-4 h-4" />
+                <Link to={`/${tenant}/invoices/create`}>
+                    <Button className="shadow-lg shadow-blue-100/20 hover:shadow-blue-200/30 transition-all duration-300 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
+                        <Plus className="w-4 h-4 mr-2" />
                         Neue Rechnung
                     </Button>
                 </Link>
@@ -187,8 +182,10 @@ export function InvoicesList() {
                         </div>
                         <h3 className="text-lg font-medium text-slate-900 dark:text-slate-100 mb-1">Keine Rechnungen gefunden</h3>
                         <p className="mb-6">Erstellen Sie Ihre erste Rechnung, um loszulegen.</p>
-                        <Link to="/invoices/create">
-                            <Button variant="outline">Erste Rechnung erstellen</Button>
+                        <Link to={`/${tenant}/invoices/create`}>
+                            <Button variant="link" className="text-blue-600 hover:text-blue-800 p-0 h-auto font-normal">
+                                Jetzt eine erstellen
+                            </Button>
                         </Link>
                     </CardContent>
                 ) : (
@@ -249,7 +246,7 @@ export function InvoicesList() {
                                                     size="icon"
                                                     variant="ghost"
                                                     className="h-8 w-8 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
-                                                    onClick={() => navigate(`/invoices/${invoice.id}/preview`)}
+                                                    onClick={() => navigate(`/${tenant}/invoices/${invoice.id}/preview`)}
                                                     title="Ansehen"
                                                 >
                                                     <Eye className="w-4 h-4" />

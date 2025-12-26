@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { Check, ChevronsUpDown, Plus, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import axios from '@/lib/axios';
 import { Button } from '@/components/ui/button';
 import {
     Popover,
@@ -14,7 +15,7 @@ import {
     DialogTitle,
     DialogTrigger,
 } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
+
 import { ContactForm, ContactFormValues } from '@/components/ContactForm';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -50,13 +51,8 @@ export function ContactSelector({ contacts, value, onChange }: ContactSelectorPr
 
     const createMutation = useMutation({
         mutationFn: async (data: ContactFormValues) => {
-            const res = await fetch('/api/contacts', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data),
-            });
-            if (!res.ok) throw new Error('Fehler beim Erstellen');
-            return res.json();
+            const { data: newContact } = await axios.post('/api/contacts', data);
+            return newContact;
         },
         onSuccess: (newContact) => {
             queryClient.invalidateQueries({ queryKey: ['contacts'] });

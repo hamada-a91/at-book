@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Dashboard } from './pages/Dashboard';
 import { AccountsList } from './pages/AccountsList';
@@ -19,11 +19,59 @@ import { BelegCreate } from './pages/BelegCreate';
 import { BelegView } from './pages/BelegView';
 import { BankAccountsList } from './pages/BankAccountsList';
 import Onboarding from './pages/Onboarding';
+import Welcome from './pages/Welcome';
+import Register from './pages/Auth/Register';
+import Login from './pages/Auth/Login';
 import { MainLayout } from '@/components/layout/main-layout';
 import { ThemeProvider } from '@/components/theme-provider';
 import { useEffect, useState } from 'react';
-import axios from 'axios';
+import axios from '@/lib/axios';
 import '../css/app.css';
+
+// ============================================================================
+// GLOBAL FETCH INTERCEPTOR - Automatically adds auth token to all API calls
+// ============================================================================
+const originalFetch = window.fetch;
+window.fetch = function (...args: Parameters<typeof originalFetch>) {
+    const [url, options = {}] = args;
+
+    // Only intercept API calls
+    if (typeof url === 'string' && url.startsWith('/api')) {
+        const token = localStorage.getItem('auth_token');
+        const headers = new Headers(options.headers || {});
+
+        // Add auth token if available, BUT skip for public auth routes to prevent 401s from stale tokens
+        const isPublicAuthRoute = url.endsWith('/login') || url.endsWith('/register');
+        if (token && !isPublicAuthRoute) {
+            console.log('🔐 Attaching auth token to request:', url);
+            headers.set('Authorization', `Bearer ${token}`);
+        } else {
+            console.log('⚠️ No auth token attached or public route:', url, { hasToken: !!token, isPublic: isPublicAuthRoute });
+        }
+
+        // Always set Accept header for API calls
+        headers.set('Accept', 'application/json');
+
+        // Set Content-Type for JSON bodies
+        if (options.body && typeof options.body === 'string') {
+            headers.set('Content-Type', 'application/json');
+        }
+
+        options.headers = headers as HeadersInit;
+        options.credentials = 'include'; // Include cookies for session auth
+    }
+
+    return originalFetch.apply(this, args).then(async (response) => {
+        // Handle 401 Unauthorized - redirect to login
+        if (response.status === 401 && typeof url === 'string' && url.startsWith('/api')) {
+            console.warn('🔒 Unauthorized request to:', url);
+            localStorage.removeItem('auth_token');
+            window.location.href = '/login';
+        }
+        return response;
+    });
+};
+// ============================================================================
 
 const queryClient = new QueryClient({
     defaultOptions: {
@@ -34,11 +82,12 @@ const queryClient = new QueryClient({
     },
 });
 
-// Redirect Component
+// Redirect Component for Onboarding
 function OnboardingCheck({ children }: { children: React.ReactNode }) {
     const [isChecking, setIsChecking] = useState(true);
     const [shouldRedirect, setShouldRedirect] = useState(false);
     const location = useLocation();
+    const { tenant } = useParams();
 
     useEffect(() => {
         checkOnboarding();
@@ -46,7 +95,16 @@ function OnboardingCheck({ children }: { children: React.ReactNode }) {
 
     const checkOnboarding = async () => {
         // Allow onboarding and settings routes
-        if (location.pathname === '/onboarding' || location.pathname === '/settings') {
+        if (location.pathname.includes('/onboarding') || location.pathname.includes('/settings')) {
+            setIsChecking(false);
+            return;
+        }
+
+        // Check if we have a token before trying to use it
+        const token = localStorage.getItem('auth_token');
+        if (!token) {
+            // No token, but we are supposed to be in a protected route?
+            // Let the layout/wrappers handle auth redirects if needed.
             setIsChecking(false);
             return;
         }
@@ -61,6 +119,7 @@ function OnboardingCheck({ children }: { children: React.ReactNode }) {
             }
         } catch (error) {
             console.error('Error checking onboarding:', error);
+            // Don't redirect here, let the interceptor handle 401s if they occur
         } finally {
             setIsChecking(false);
         }
@@ -75,8 +134,11 @@ function OnboardingCheck({ children }: { children: React.ReactNode }) {
     }
 
     if (shouldRedirect) {
-        window.location.href = '/onboarding';
-        return null;
+        // Ensure we don't redirect if we are already there (redundant check but safe)
+        if (!location.pathname.includes('/onboarding')) {
+            window.location.href = `/${tenant}/onboarding`;
+            return null;
+        }
     }
 
     return <>{children}</>;
@@ -88,41 +150,59 @@ function App() {
             <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
                 <BrowserRouter>
                     <Routes>
-                        {/* Onboarding Route - Standalone */}
-                        <Route path="/onboarding" element={<Onboarding />} />
+                        {/* Public Routes (No Tenant) */}
+                        <Route path="/" element={<Welcome />} />
+                        <Route path="/register" element={<Register />} />
+                        <Route path="/login" element={<Login />} />
 
-                        {/* All other routes with OnboardingCheck */}
-                        <Route path="/*" element={
-                            <OnboardingCheck>
-                                <MainLayout>
-                                    <Routes>
-                                        <Route path="/" element={<Dashboard />} />
-                                        <Route path="/accounts" element={<AccountsList />} />
-                                        <Route path="/accounts/create" element={<AccountCreate />} />
-                                        <Route path="/accounts/:id" element={<AccountDetail />} />
-                                        <Route path="/contacts" element={<ContactsList />} />
-                                        <Route path="/invoices" element={<InvoicesList />} />
-                                        <Route path="/invoices/create" element={<InvoiceCreate />} />
-                                        <Route path="/invoices/:id/preview" element={<InvoicePreview />} />
-                                        <Route path="/invoices/:id/edit" element={<InvoiceCreate />} />
-                                        <Route path="/belege" element={<BelegeList />} />
-                                        <Route path="/belege/create" element={<BelegCreate />} />
-                                        <Route path="/belege/:id" element={<BelegView />} />
-                                        <Route path="/belege/:id/edit" element={<BelegCreate />} />
-                                        <Route path="/reports" element={<Reports />} />
-                                        <Route path="/journal" element={<Navigate to="/reports" replace />} />
-                                        <Route path="/bookings" element={<JournalList />} />
-                                        <Route path="/bookings/create" element={<BookingCreate />} />
-                                        <Route path="/bank-accounts" element={<BankAccountsList />} />
-                                        <Route path="/settings" element={<Settings />} />
-                                    </Routes>
-                                </MainLayout>
-                            </OnboardingCheck>
-                        } />
+                        {/* Tenant-Specific Routes */}
+                        <Route path="/:tenant/*" element={<TenantRoutes />} />
                     </Routes>
                 </BrowserRouter>
             </ThemeProvider>
         </QueryClientProvider>
+    );
+}
+
+// Tenant-specific routes wrapper
+function TenantRoutes() {
+    const { tenant } = useParams();
+
+    return (
+        <Routes>
+            {/* Onboarding Route - Standalone */}
+            <Route path="/onboarding" element={<Onboarding />} />
+
+            {/* All other routes with OnboardingCheck */}
+            <Route path="/*" element={
+                <OnboardingCheck>
+                    <MainLayout>
+                        <Routes>
+                            <Route path="/dashboard" element={<Dashboard />} />
+                            <Route path="/accounts" element={<AccountsList />} />
+                            <Route path="/accounts/create" element={<AccountCreate />} />
+                            <Route path="/accounts/:id" element={<AccountDetail />} />
+                            <Route path="/contacts" element={<ContactsList />} />
+                            <Route path="/invoices" element={<InvoicesList />} />
+                            <Route path="/invoices/create" element={<InvoiceCreate />} />
+                            <Route path="/invoices/:id/preview" element={<InvoicePreview />} />
+                            <Route path="/invoices/:id/edit" element={<InvoiceCreate />} />
+                            <Route path="/belege" element={<BelegeList />} />
+                            <Route path="/belege/create" element={<BelegCreate />} />
+                            <Route path="/belege/:id" element={<BelegView />} />
+                            <Route path="/belege/:id/edit" element={<BelegCreate />} />
+                            <Route path="/reports" element={<Reports />} />
+                            <Route path="/journal" element={<Navigate to={`/${tenant}/reports`} replace />} />
+                            <Route path="/bookings" element={<JournalList />} />
+                            <Route path="/bookings/create" element={<BookingCreate />} />
+                            <Route path="/bank-accounts" element={<BankAccountsList />} />
+                            <Route path="/settings" element={<Settings />} />
+                            <Route path="/" element={<Navigate to={`/${tenant}/dashboard`} replace />} />
+                        </Routes>
+                    </MainLayout>
+                </OnboardingCheck>
+            } />
+        </Routes>
     );
 }
 

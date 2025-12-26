@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\HasTenantScope;
 use App\Models\Beleg;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -10,9 +11,13 @@ use Illuminate\Support\Facades\DB;
 
 class BelegController extends Controller
 {
+    use HasTenantScope;
+
     public function index(Request $request)
     {
-        $query = Beleg::with(['contact', 'journalEntry']);
+        $tenant = $this->getTenantOrFail();
+        $query = Beleg::where('tenant_id', $tenant->id)
+            ->with(['contact', 'journalEntry']);
 
         // Filter by document type
         if ($request->has('document_type')) {

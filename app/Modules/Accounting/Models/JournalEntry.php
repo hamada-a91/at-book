@@ -5,10 +5,11 @@ namespace App\Modules\Accounting\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Models\Concerns\BelongsToTenant;
 
 class JournalEntry extends Model
 {
-    use SoftDeletes;
+    use SoftDeletes, BelongsToTenant;
 
     protected $guarded = ['id'];
 

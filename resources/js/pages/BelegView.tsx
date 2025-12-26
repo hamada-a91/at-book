@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, Link } from 'react-router-dom';
+import axios from '@/lib/axios';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -8,33 +9,49 @@ import { Beleg } from '@/types/beleg';
 
 export function BelegView() {
     const navigate = useNavigate();
-    const { id } = useParams<{ id: string }>();
+    const { tenant, id } = useParams<{ tenant: string; id: string }>();
     const queryClient = useQueryClient();
 
     const { data: beleg, isLoading } = useQuery<Beleg>({
         queryKey: ['beleg', id],
         queryFn: async () => {
-            const res = await fetch(`/api/belege/${id}`);
-            return res.json();
+            const { data } = await axios.get(`/api/belege/${id}`);
+            return data;
         },
+    });
+
+    const { data: filePreviewUrl } = useQuery({
+        queryKey: ['beleg-file-preview', id],
+        queryFn: async () => {
+            if (!id) return null;
+            try {
+                const response = await axios.get(`/api/belege/${id}/download`, {
+                    responseType: 'blob'
+                });
+                return window.URL.createObjectURL(response.data);
+            } catch (error) {
+                console.error('Error fetching file preview', error);
+                return null;
+            }
+        },
+        enabled: !!beleg?.file_path,
+        staleTime: 5 * 60 * 1000,
     });
 
     const deleteMutation = useMutation({
         mutationFn: async () => {
-            const res = await fetch(`/api/belege/${id}`, { method: 'DELETE' });
-            if (!res.ok) throw new Error('Fehler beim Löschen');
-            return res.json();
+            const { data } = await axios.delete(`/api/belege/${id}`);
+            return data;
         },
         onSuccess: () => {
-            navigate('/belege');
+            navigate(`/${tenant}/belege`);
         },
     });
 
     const bookMutation = useMutation({
         mutationFn: async () => {
-            const res = await fetch(`/api/belege/${id}/book`, { method: 'POST' });
-            if (!res.ok) throw new Error('Fehler beim Buchen');
-            return res.json();
+            const { data } = await axios.post(`/api/belege/${id}/book`);
+            return data;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['beleg', id] });
@@ -54,8 +71,50 @@ export function BelegView() {
         }
     };
 
-    const handleDownload = () => {
-        window.open(`/api/belege/${id}/download`, '_blank');
+    const handleDownload = async () => {
+        try {
+            const response = await axios.get(`/api/belege/${id}/download`, {
+                responseType: 'blob',
+            });
+
+            // Get filename from content-disposition if possible, or use beleg filename
+            const contentDisposition = response.headers['content-disposition'];
+            let filename = beleg?.file_name || `beleg-${id}`;
+
+            if (contentDisposition) {
+                const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
+                if (filenameMatch && filenameMatch[1]) {
+                    filename = filenameMatch[1];
+                }
+            }
+
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', filename);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        } catch (error: any) {
+            console.error('Download error:', error);
+            let message = 'Fehler beim Herunterladen der Datei';
+
+            if (error.response && error.response.data instanceof Blob) {
+                try {
+                    const text = await error.response.data.text();
+                    const json = JSON.parse(text);
+                    if (json.message || json.error) {
+                        message = json.message || json.error;
+                    }
+                } catch (e) {
+                    // Ignore parse error
+                }
+            } else if (error.message) {
+                message = error.message;
+            }
+
+            alert(message);
+        }
     };
 
     const formatCurrency = (cents: number) => {
@@ -117,7 +176,7 @@ export function BelegView() {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                    <Link to="/belege">
+                    <Link to={`/${tenant}/belege`}>
                         <Button variant="ghost" size="icon" className="h-10 w-10">
                             <ArrowLeft className="w-5 h-5" />
                         </Button>
@@ -138,7 +197,7 @@ export function BelegView() {
                     )}
                     {beleg.status === 'draft' && (
                         <>
-                            <Button variant="outline" onClick={() => navigate(`/belege/${id}/edit`)} className="gap-2">
+                            <Button variant="outline" onClick={() => navigate(`/${tenant}/belege/${id}/edit`)} className="gap-2">
                                 <Edit className="w-4 h-4" />
                                 Bearbeiten
                             </Button>
@@ -238,7 +297,7 @@ export function BelegView() {
                                             {new Date(beleg.journalEntry.booking_date).toLocaleDateString('de-DE')}
                                         </p>
                                     </div>
-                                    <Link to={`/bookings`}>
+                                    <Link to={`/${tenant}/bookings`}>
                                         <Button variant="outline" size="sm">
                                             Buchung ansehen
                                         </Button>
@@ -258,19 +317,24 @@ export function BelegView() {
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
-                                {beleg.file_name?.match(/\.(jpg|jpeg|png|gif)$/i) && (
+                                {beleg.file_name?.match(/\.(jpg|jpeg|png|gif)$/i) && filePreviewUrl && (
                                     <img
-                                        src={`/api/belege/${id}/download`}
+                                        src={filePreviewUrl}
                                         alt="Beleg Vorschau"
                                         className="w-full h-auto rounded-lg border border-slate-200 dark:border-slate-800"
                                     />
                                 )}
-                                {beleg.file_name?.match(/\.pdf$/i) && (
+                                {beleg.file_name?.match(/\.pdf$/i) && filePreviewUrl && (
                                     <iframe
-                                        src={`/api/belege/${id}/download`}
+                                        src={filePreviewUrl}
                                         className="w-full h-[600px] rounded-lg border border-slate-200 dark:border-slate-800"
                                         title="PDF Vorschau"
                                     />
+                                )}
+                                {!filePreviewUrl && (
+                                    <div className="flex items-center justify-center p-12">
+                                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                                    </div>
                                 )}
                                 {!beleg.file_name?.match(/\.(jpg|jpeg|png|gif|pdf)$/i) && (
                                     <div className="text-center py-12 bg-slate-50 dark:bg-slate-800 rounded-lg">

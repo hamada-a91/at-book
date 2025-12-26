@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import axios from '@/lib/axios';
 import { format } from 'date-fns';
 import { ArrowLeft, Download, Printer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -17,7 +18,7 @@ import { Label } from '@/components/ui/label';
 import { startOfMonth, endOfMonth, startOfYear } from 'date-fns';
 
 export function AccountDetail() {
-    const { id } = useParams();
+    const { tenant, id } = useParams();
     const navigate = useNavigate();
 
     const [fromDate, setFromDate] = useState<string>(format(startOfYear(new Date()), 'yyyy-MM-dd'));
@@ -30,9 +31,8 @@ export function AccountDetail() {
             if (fromDate) params.append('from_date', fromDate);
             if (toDate) params.append('to_date', toDate);
 
-            const res = await fetch(`/api/accounts/${id}?${params}`);
-            if (!res.ok) throw new Error('Failed to fetch account details');
-            return res.json();
+            const { data } = await axios.get(`/api/accounts/${id}?${params.toString()}`);
+            return data;
         },
     });
 
@@ -61,7 +61,7 @@ export function AccountDetail() {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                    <Button variant="ghost" size="icon" onClick={() => navigate('/accounts')}>
+                    <Button variant="ghost" size="icon" onClick={() => navigate(`/${tenant}/accounts`)}>
                         <ArrowLeft className="h-5 w-5" />
                     </Button>
                     <div>

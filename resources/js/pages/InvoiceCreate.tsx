@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, Link } from 'react-router-dom';
+import axios from '@/lib/axios';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,7 +41,7 @@ const TAX_ACCOUNT_MAP: Record<number, string> = {
 
 export function InvoiceCreate() {
     const navigate = useNavigate();
-    const { id } = useParams<{ id: string }>();
+    const { tenant, id } = useParams();
     const queryClient = useQueryClient();
     const isEditMode = !!id;
 
@@ -61,16 +62,16 @@ export function InvoiceCreate() {
     const { data: contacts } = useQuery<Contact[]>({
         queryKey: ['contacts'],
         queryFn: async () => {
-            const res = await fetch('/api/contacts');
-            return res.json();
+            const { data } = await axios.get('/api/contacts');
+            return data;
         },
     });
 
     const { data: accounts } = useQuery<Account[]>({
         queryKey: ['accounts'],
         queryFn: async () => {
-            const res = await fetch('/api/accounts');
-            return res.json();
+            const { data } = await axios.get('/api/accounts');
+            return data;
         },
     });
 
@@ -79,8 +80,8 @@ export function InvoiceCreate() {
         queryKey: ['invoice', id],
         queryFn: async () => {
             if (!id) return null;
-            const res = await fetch(`/api/invoices/${id}`);
-            return res.json();
+            const { data } = await axios.get(`/api/invoices/${id}`);
+            return data;
         },
         enabled: !!id,
     });
@@ -112,13 +113,12 @@ export function InvoiceCreate() {
 
     const createContactMutation = useMutation({
         mutationFn: async (data: any) => {
-            const res = await fetch('/api/contacts', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data),
-            });
-            if (!res.ok) throw new Error('Fehler beim Erstellen des Kunden');
-            return res.json();
+            try {
+                const { data: resData } = await axios.post('/api/contacts', data);
+                return resData;
+            } catch (error: any) {
+                throw new Error('Fehler beim Erstellen des Kunden');
+            }
         },
         onSuccess: (newContact) => {
             queryClient.invalidateQueries({ queryKey: ['contacts'] });
@@ -129,21 +129,18 @@ export function InvoiceCreate() {
     const createInvoiceMutation = useMutation({
         mutationFn: async (data: any) => {
             const url = isEditMode ? `/api/invoices/${id}` : '/api/invoices';
-            const method = isEditMode ? 'PUT' : 'POST';
+            const method = isEditMode ? 'put' : 'post';
 
-            const res = await fetch(url, {
-                method,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data),
-            });
-            if (!res.ok) {
-                const error = await res.json();
-                throw new Error(error.message || 'Fehler beim Speichern');
+            try {
+                // @ts-ignore
+                const { data: resData } = await axios[method](url, data);
+                return resData;
+            } catch (error: any) {
+                throw new Error(error.response?.data?.message || 'Fehler beim Speichern');
             }
-            return res.json();
         },
         onSuccess: (data) => {
-            navigate(`/invoices/${data.id}/preview`);
+            navigate(`/${tenant}/invoices/${data.id}/preview`);
         },
     });
 
@@ -297,7 +294,7 @@ export function InvoiceCreate() {
     return (
         <div className="space-y-6">
             <div className="flex items-center gap-4">
-                <Link to="/invoices">
+                <Link to={`/${tenant}/invoices`}>
                     <Button variant="ghost" size="icon" className="h-10 w-10">
                         <ArrowLeft className="w-5 h-5" />
                     </Button>
@@ -608,7 +605,7 @@ export function InvoiceCreate() {
 
                 {/* Actions */}
                 <div className="flex justify-end gap-4 pb-8">
-                    <Button type="button" variant="outline" onClick={() => navigate('/invoices')} className="gap-2">
+                    <Button type="button" variant="outline" onClick={() => navigate(`/${tenant}/invoices`)} className="gap-2">
                         <X className="w-4 h-4" />
                         Abbrechen
                     </Button>

@@ -1,5 +1,6 @@
-import { Link, useLocation } from "react-router-dom"
+import { Link, useLocation, useParams } from "react-router-dom"
 import { cn } from "@/lib/utils"
+import axios from "@/lib/axios"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import {
@@ -20,13 +21,27 @@ interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> { }
 
 export function Sidebar({ className }: SidebarProps) {
     const location = useLocation()
+    const { tenant } = useParams()
     const pathname = location.pathname
+
+    // Helper function to create tenant-aware URLs
+    const tenantUrl = (path: string) => {
+        return tenant ? `/${tenant}${path}` : path
+    }
+
+    // Helper to check if current path matches (accounting for tenant prefix)
+    const isActive = (path: string) => {
+        if (path === '/') {
+            return pathname === `/${tenant}` || pathname === `/${tenant}/dashboard` || pathname === `/${tenant}/`
+        }
+        return pathname.startsWith(`/${tenant}${path}`)
+    }
 
     const { data: settings } = useQuery({
         queryKey: ['settings'],
         queryFn: async () => {
-            const res = await fetch('/api/settings');
-            return res.json();
+            const { data } = await axios.get('/api/settings');
+            return data;
         },
     });
 
@@ -34,50 +49,50 @@ export function Sidebar({ className }: SidebarProps) {
         {
             label: "Dashboard",
             icon: LayoutDashboard,
-            href: "/",
-            active: pathname === "/",
+            href: tenantUrl("/dashboard"),
+            active: isActive("/dashboard") || isActive("/"),
         },
         {
             label: "Buchungen",
             icon: BookOpen,
-            href: "/bookings",
-            active: pathname.startsWith("/bookings"),
+            href: tenantUrl("/bookings"),
+            active: isActive("/bookings"),
         },
         {
             label: "Konten & Bank",
             icon: CreditCard,
-            href: "/accounts",
-            active: pathname.startsWith("/accounts"),
+            href: tenantUrl("/accounts"),
+            active: isActive("/accounts"),
         },
         {
             label: "Bank Konto",
             icon: Landmark,
-            href: "/bank-accounts",
-            active: pathname.startsWith("/bank-accounts"),
+            href: tenantUrl("/bank-accounts"),
+            active: isActive("/bank-accounts"),
         },
         {
             label: "Journal & Berichte",
             icon: FileText,
-            href: "/reports",
-            active: pathname.startsWith("/reports"),
+            href: tenantUrl("/reports"),
+            active: isActive("/reports"),
         },
         {
             label: "Kontakte",
             icon: Users,
-            href: "/contacts",
-            active: pathname.startsWith("/contacts"),
+            href: tenantUrl("/contacts"),
+            active: isActive("/contacts"),
         },
         {
             label: "Rechnungen",
             icon: FileText,
-            href: "/invoices",
-            active: pathname.startsWith("/invoices"),
+            href: tenantUrl("/invoices"),
+            active: isActive("/invoices"),
         },
         {
             label: "Belege",
             icon: Receipt,
-            href: "/belege",
-            active: pathname.startsWith("/belege"),
+            href: tenantUrl("/belege"),
+            active: isActive("/belege"),
         },
     ]
 
@@ -131,12 +146,12 @@ export function Sidebar({ className }: SidebarProps) {
                         variant="ghost"
                         className={cn(
                             "w-full justify-start text-base font-medium text-blue-900 dark:text-blue-100 hover:bg-blue-200 dark:hover:bg-blue-900",
-                            pathname.startsWith("/settings") && "bg-blue-600 dark:bg-blue-700 shadow-lg text-white hover:bg-blue-700 dark:hover:bg-blue-800"
+                            isActive("/settings") && "bg-blue-600 dark:bg-blue-700 shadow-lg text-white hover:bg-blue-700 dark:hover:bg-blue-800"
                         )}
                         asChild
                     >
-                        <Link to="/settings">
-                            <Settings className={cn("mr-3 h-5 w-5", pathname.startsWith("/settings") ? "text-white" : "text-blue-600 dark:text-blue-400")} />
+                        <Link to={tenantUrl("/settings")}>
+                            <Settings className={cn("mr-3 h-5 w-5", isActive("/settings") ? "text-white" : "text-blue-600 dark:text-blue-400")} />
                             Einstellungen
                         </Link>
                     </Button>

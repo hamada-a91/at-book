@@ -1,5 +1,6 @@
-import { User, Settings, LogOut, UserCircle } from 'lucide-react';
+import { Settings, LogOut, UserCircle } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import axios from '@/lib/axios';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -10,10 +11,14 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
 export function UserProfile() {
     const navigate = useNavigate();
+    const { tenant } = useParams();
+
+    // Helper for tenant-aware URLs
+    const tenantUrl = (path: string) => tenant ? `/${tenant}${path}` : path;
 
     // Mock user data - replace with actual user data from context/API
     const user = {
@@ -23,9 +28,14 @@ export function UserProfile() {
         initials: 'AH',
     };
 
-    const handleLogout = () => {
-        // Implement logout logic here
-        window.location.href = '/logout';
+    const handleLogout = async () => {
+        try {
+            await axios.post('/api/logout');
+        } catch (error) {
+            console.error('Logout error:', error);
+        }
+        // Redirect to login page
+        window.location.href = '/login';
     };
 
     return (
@@ -54,14 +64,14 @@ export function UserProfile() {
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
                     <DropdownMenuItem
-                        onClick={() => navigate('/profile')}
+                        onClick={() => navigate(tenantUrl('/profile'))}
                         className="cursor-pointer"
                     >
                         <UserCircle className="mr-2 h-4 w-4" />
                         <span>Profil</span>
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                        onClick={() => navigate('/settings')}
+                        onClick={() => navigate(tenantUrl('/settings'))}
                         className="cursor-pointer"
                     >
                         <Settings className="mr-2 h-4 w-4" />

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
+import axios from '@/lib/axios';
 import { Settings as SettingsIcon, Save, Upload, Building2, MapPin, Mail, Phone, FileText, Image, AlertCircle, CheckCircle2, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -52,14 +53,17 @@ export function Settings() {
     const queryClient = useQueryClient();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
+    const { tenant } = useParams();
     const fromOnboarding = searchParams.get('from') === 'onboarding';
+
+    // Helper function for tenant-aware URLs
+    const tenantUrl = (path: string) => tenant ? `/${tenant}${path}` : path;
 
     const { data: settings, isLoading } = useQuery<CompanySetting>({
         queryKey: ['settings'],
         queryFn: async () => {
-            const res = await fetch('/api/settings');
-            if (!res.ok) throw new Error('Fehler beim Laden der Einstellungen');
-            return res.json();
+            const { data } = await axios.get('/api/settings');
+            return data;
         },
     });
 
@@ -109,23 +113,51 @@ export function Settings() {
                 formData.append('logo', logoFile);
             }
 
-            const res = await fetch('/api/settings', {
-                method: 'POST',
-                body: formData,
+            const { data: responseData } = await axios.post('/api/settings', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                },
             });
-            if (!res.ok) throw new Error('Fehler beim Speichern');
-            return res.json();
+            return responseData;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['settings'] });
             setLogoFile(null);
             setSaveSuccess(true);
-            setTimeout(() => setSaveSuccess(false), 3000);
+            setLogoError(null); // Clear any previous logo errors
 
             if (fromOnboarding) {
+                // Redirect back to onboarding after a short delay to show success message
                 setTimeout(() => {
-                    window.location.href = '/onboarding';
+                    navigate(tenantUrl('/onboarding'));
                 }, 1500);
+            } else {
+                // Just show success message for 3 seconds
+                setTimeout(() => setSaveSuccess(false), 3000);
+            }
+        },
+        onError: (error: any) => {
+            if (error.response && error.response.status === 422) {
+                const errors = error.response.data.errors;
+
+                // Handle logo errors specifically since it's not a registered form field
+                if (errors.logo) {
+                    setLogoError(Array.isArray(errors.logo) ? errors.logo[0] : errors.logo);
+                }
+
+                // Handle other form field errors
+                Object.keys(errors).forEach((key) => {
+                    if (key !== 'logo') {
+                        // Cast key to keyof SettingsFormValues to satisfy TypeScript
+                        form.setError(key as keyof SettingsFormValues, {
+                            type: 'manual',
+                            message: Array.isArray(errors[key]) ? errors[key][0] : errors[key],
+                        });
+                    }
+                });
+            } else {
+                // Handle generic errors
+                console.error('Settings update error:', error);
             }
         },
     });
@@ -225,7 +257,7 @@ export function Settings() {
                             <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => navigate('/onboarding')}
+                                onClick={() => navigate(tenantUrl('/onboarding'))}
                                 className="hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
                             >
                                 ← Zurück
@@ -550,7 +582,7 @@ export function Settings() {
                             <Button
                                 type="button"
                                 variant="outline"
-                                onClick={() => navigate('/onboarding')}
+                                onClick={() => navigate(tenantUrl('/onboarding'))}
                                 className="hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
                             >
                                 Abbrechen

@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import axios from '@/lib/axios';
 
 import { Button } from '@/components/ui/button';
 import { Printer, Download, Send, Save } from 'lucide-react';
@@ -33,7 +35,10 @@ interface Invoice {
 
 interface CompanySetting {
     company_name: string;
-
+    street?: string;
+    zip?: string;
+    city?: string;
+    country?: string;
     email: string;
     phone: string;
     tax_number: string;
@@ -51,30 +56,31 @@ interface BankAccount {
 }
 
 export function InvoicePreview() {
-    const { id } = useParams<{ id: string }>();
+    const { tenant, id } = useParams();
     const navigate = useNavigate();
+    const [isPrinting, setIsPrinting] = useState(false);
 
     const { data: invoice, isLoading } = useQuery<Invoice>({
         queryKey: ['invoice', id],
         queryFn: async () => {
-            const res = await fetch(`/api/invoices/${id}`);
-            return res.json();
+            const { data } = await axios.get(`/api/invoices/${id}`);
+            return data;
         },
     });
 
     const { data: settings } = useQuery<CompanySetting>({
         queryKey: ['settings'],
         queryFn: async () => {
-            const res = await fetch('/api/settings');
-            return res.json();
+            const { data } = await axios.get('/api/settings');
+            return data;
         },
     });
 
     const { data: bankAccounts } = useQuery<BankAccount[]>({
         queryKey: ['bank-accounts'],
         queryFn: async () => {
-            const res = await fetch('/api/bank-accounts');
-            return res.json();
+            const { data } = await axios.get('/api/bank-accounts');
+            return data;
         },
     });
 
@@ -97,8 +103,22 @@ export function InvoicePreview() {
         window.print();
     };
 
-    const handleDownloadPDF = () => {
-        window.open(`/api/invoices/${id}/pdf`, '_blank');
+    const handleDownloadPDF = async () => {
+        try {
+            const response = await axios.get(`/api/invoices/${id}/pdf`, {
+                responseType: 'blob',
+            });
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `invoice-${invoice?.invoice_number || id}.pdf`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        } catch (error) {
+            console.error('Error downloading PDF:', error);
+            alert('Fehler beim Herunterladen der PDF');
+        }
     };
 
     const handleSend = async () => {
@@ -121,7 +141,7 @@ export function InvoicePreview() {
                 <div className="max-w-4xl mx-auto flex items-center justify-between">
                     <h2 className="text-lg font-semibold">Rechnungsvorschau</h2>
                     <div className="flex gap-2">
-                        <Button variant="outline" size="sm" onClick={() => navigate('/invoices')}>
+                        <Button variant="outline" size="sm" onClick={() => navigate(`/${tenant}/invoices`)}>
                             <Save className="w-4 h-4 mr-1" />
                             Zurück
                         </Button>

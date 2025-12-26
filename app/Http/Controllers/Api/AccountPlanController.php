@@ -32,11 +32,45 @@ class AccountPlanController extends Controller
         ]);
         
         // Prüfe, ob bereits initialisiert
+        // FIX: Remove withoutGlobalScope to ensure we only check the CURRENT tenant's settings
         $settings = \App\Models\CompanySetting::first();
         if ($settings && $settings->account_plan_initialized_at) {
             return response()->json([
                 'message' => 'Kontenplan wurde bereits initialisiert. Verwenden Sie /api/account-plan/extend um weitere Geschäftsmodelle hinzuzufügen.',
                 'initialized_at' => $settings->account_plan_initialized_at
+            ], 400);
+        }
+        
+        // CRITICAL: Get tenant from authenticated user
+        // During onboarding, the tenant middleware may not have set the context yet
+        $currentTenant = null;
+        
+        // First, try to get tenant from the current context (set by middleware)
+        if ($tenant = tenant()) {
+            $currentTenant = $tenant;
+            app()->instance('currentTenant', $tenant);
+        } 
+        // Otherwise, get it from the authenticated user (use 'api' guard for JWT)
+        else if (auth('api')->check()) {
+            // Load the tenant relationship to ensure it's available
+            $user = auth('api')->user()->load('tenant');
+            
+            if ($user->tenant) {
+                $currentTenant = $user->tenant;
+                app()->instance('currentTenant', $user->tenant);
+            }
+        }
+        
+        // If we still don't have a tenant, return an error
+        if (!$currentTenant) {
+            return response()->json([
+                'message' => 'Cannot determine tenant. Please ensure you are logged in.',
+                'error' => 'No tenant context available',
+                'debug' => [
+                    'authenticated' => auth('api')->check(),
+                    'user_id' => auth('api')->id(),
+                    'has_tenant_in_context' => !is_null(tenant()),
+                ]
             ], 400);
         }
         
@@ -52,8 +86,10 @@ class AccountPlanController extends Controller
             $skippedAccounts = 0;
             
             foreach ($accountsData as $accountData) {
-                // Prüfe, ob Konto bereits existiert
-                $existing = Account::where('code', $accountData['code'])->first();
+                // Prüfe, ob Konto bereits existiert (für diesen Tenant)
+                $existing = Account::where('tenant_id', $currentTenant->id)
+                    ->where('code', $accountData['code'])
+                    ->first();
                 
                 if ($existing) {
                     // Konto existiert bereits, überspringe es
@@ -61,7 +97,13 @@ class AccountPlanController extends Controller
                     continue;
                 }
                 
+                // CRITICAL: Explicitly set tenant_id on the account data
+                // This ensures tenant_id is set even if the trait doesn't fire
+                // Or if we are running in a context where global scope might be problematic
+                $accountData['tenant_id'] = $currentTenant->id; // Already there
+                
                 // Erstelle nur neue Konten
+                // Use create directly, tenant scope will handle tenant_id anyway if bound
                 $createdAccounts[] = Account::create($accountData);
             }
             
@@ -70,8 +112,8 @@ class AccountPlanController extends Controller
             $createdTaxCodes = 0;
             
             foreach ($taxCodesData as $taxData) {
-                // Prüfe, ob Tax Code bereits existiert
-                if (TaxCode::where('code', $taxData['code'])->exists()) {
+                // Prüfe, ob Tax Code bereits existiert (für diesen Tenant)
+                if (TaxCode::where('tenant_id', $currentTenant->id)->where('code', $taxData['code'])->exists()) {
                     continue;
                 }
                 
@@ -88,6 +130,9 @@ class AccountPlanController extends Controller
                 }
                 
                 $taxData['account_id'] = $accountId;
+                // CRITICAL: Explicitly set tenant_id for tax codes too
+                $taxData['tenant_id'] = $currentTenant->id;
+                
                 TaxCode::create($taxData);
                 $createdTaxCodes++;
             }
@@ -95,6 +140,7 @@ class AccountPlanController extends Controller
             // 3. Aktualisiere Company Settings
             if (!$settings) {
                 $settings = new \App\Models\CompanySetting();
+                $settings->tenant_id = $currentTenant->id;
             }
             
             $settings->business_models = json_encode($validated['business_models']);

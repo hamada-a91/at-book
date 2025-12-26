@@ -3,11 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\HasTenantScope;
 use App\Modules\Contacts\Models\Contact;
 use Illuminate\Http\Request;
 
 class ContactController extends Controller
 {
+    use HasTenantScope;
     /**
      * Display a listing of the resource.
      */
@@ -16,7 +18,13 @@ class ContactController extends Controller
      */
     public function index()
     {
-        $contacts = Contact::with(['customerAccount.journalEntryLines', 'vendorAccount.journalEntryLines'])->orderBy('id', 'desc')->get();
+        // Get tenant and explicitly filter contacts
+        $tenant = $this->getTenantOrFail();
+        
+        $contacts = Contact::where('tenant_id', $tenant->id)
+            ->with(['customerAccount.journalEntryLines', 'vendorAccount.journalEntryLines'])
+            ->orderBy('id', 'desc')
+            ->get();
         
         return $contacts->map(function ($contact) {
             $data = $contact->toArray();
@@ -145,8 +153,10 @@ class ContactController extends Controller
         // Determine account code based on contact type
         $baseCode = $type === 'customer' ? 10000 : 70000;
         
-        // Find the next available account code
-        $lastAccount = \App\Modules\Accounting\Models\Account::where('code', 'like', $baseCode . '%')
+        // Find the next available account code (tenant-scoped)
+        $tenant = $this->getTenantOrFail();
+        $lastAccount = \App\Modules\Accounting\Models\Account::where('tenant_id', $tenant->id)
+            ->where('code', 'like', $baseCode . '%')
             ->orderBy('code', 'desc')
             ->first();
         

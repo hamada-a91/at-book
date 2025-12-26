@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import axios from '@/lib/axios';
 import { Plus, Search, Pencil, Trash2, Eye, Star, Landmark, CreditCard } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -56,23 +57,19 @@ export function BankAccountsList() {
     const { data: accounts, isLoading } = useQuery<BankAccount[]>({
         queryKey: ['bank-accounts'],
         queryFn: async () => {
-            const res = await fetch('/api/bank-accounts');
-            return res.json();
+            const { data } = await axios.get('/api/bank-accounts');
+            return data;
         },
     });
 
     const createMutation = useMutation({
         mutationFn: async (data: BankAccountFormValues) => {
-            const res = await fetch('/api/bank-accounts', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data),
-            });
-            if (!res.ok) {
-                const error = await res.json();
-                throw new Error(error.message || 'Fehler beim Erstellen');
+            try {
+                const { data: newAccount } = await axios.post('/api/bank-accounts', data);
+                return newAccount;
+            } catch (error: any) {
+                throw new Error(error.response?.data?.message || 'Fehler beim Erstellen');
             }
-            return res.json();
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['bank-accounts'] });
@@ -86,13 +83,12 @@ export function BankAccountsList() {
     const updateMutation = useMutation({
         mutationFn: async (data: BankAccountFormValues) => {
             if (!editAccount) return;
-            const res = await fetch(`/api/bank-accounts/${editAccount.id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data),
-            });
-            if (!res.ok) throw new Error('Fehler beim Aktualisieren');
-            return res.json();
+            try {
+                const { data: updatedAccount } = await axios.put(`/api/bank-accounts/${editAccount.id}`, data);
+                return updatedAccount;
+            } catch (error: any) {
+                throw new Error('Fehler beim Aktualisieren');
+            }
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['bank-accounts'] });
@@ -102,14 +98,13 @@ export function BankAccountsList() {
 
     const deleteMutation = useMutation({
         mutationFn: async (id: number) => {
-            const res = await fetch(`/api/bank-accounts/${id}`, {
-                method: 'DELETE',
-            });
-            if (!res.ok) {
-                const error = await res.json();
-                throw new Error(error.error || 'Fehler beim Löschen');
+            try {
+                const { data } = await axios.delete(`/api/bank-accounts/${id}`);
+                return data;
+            } catch (error: any) {
+                const errorMsg = error.response?.data?.error || 'Fehler beim Löschen';
+                throw new Error(errorMsg);
             }
-            return res.json();
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['bank-accounts'] });
@@ -123,11 +118,8 @@ export function BankAccountsList() {
 
     const setDefaultMutation = useMutation({
         mutationFn: async (id: number) => {
-            const res = await fetch(`/api/bank-accounts/${id}/set-default`, {
-                method: 'POST',
-            });
-            if (!res.ok) throw new Error('Fehler beim Setzen des Standardkontos');
-            return res.json();
+            const { data } = await axios.post(`/api/bank-accounts/${id}/set-default`);
+            return data;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['bank-accounts'] });
@@ -201,9 +193,9 @@ export function BankAccountsList() {
                                     <div className="flex items-center gap-3">
                                         <div className={`h-12 w-12 rounded-xl flex items-center justify-center ${account.type === 'checking' ? 'bg-blue-100 dark:bg-blue-900/30' : account.type === 'savings' ? 'bg-emerald-100 dark:bg-emerald-900/30' : 'bg-purple-100 dark:bg-purple-900/30'}`}>
                                             {account.type === 'credit_card' ? (
-                                                <CreditCard className={`w-6 h-6 ${account.type === 'checking' ? 'text-blue-600 dark:text-blue-400' : account.type === 'savings' ? 'text-emerald-600 dark:text-emerald-400' : 'text-purple-600 dark:text-purple-400'}`} />
+                                                <CreditCard className="w-6 h-6 text-purple-600 dark:text-purple-400" />
                                             ) : (
-                                                <Landmark className={`w-6 h-6 ${account.type === 'checking' ? 'text-blue-600 dark:text-blue-400' : account.type === 'savings' ? 'text-emerald-600 dark:text-emerald-400' : 'text-purple-600 dark:text-purple-400'}`} />
+                                                <Landmark className={`w-6 h-6 ${account.type === 'checking' ? 'text-blue-600 dark:text-blue-400' : 'text-emerald-600 dark:text-emerald-400'}`} />
                                             )}
                                         </div>
                                         <div>

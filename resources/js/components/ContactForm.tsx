@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import axios from '@/lib/axios';
 import { Mail, Building2, User, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -88,8 +89,8 @@ export function ContactForm({ onSubmit, isSubmitting = false, defaultValues }: C
     const { data: accounts } = useQuery({
         queryKey: ['accounts'],
         queryFn: async () => {
-            const res = await fetch('/api/accounts');
-            return res.json();
+            const { data } = await axios.get('/api/accounts');
+            return data;
         },
     });
 

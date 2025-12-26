@@ -3,30 +3,87 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\HasTenantScope;
 use App\Models\CompanySetting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Log;
 
 class CompanySettingController extends Controller
 {
+    use HasTenantScope;
+
     public function show()
     {
-        $settings = CompanySetting::first();
-        
-        if (!$settings) {
-            // Create default settings if none exist
-            $settings = CompanySetting::create([
-                'company_name' => 'AT-Book',
-                'street' => '',
-                'zip' => '',
-                'city' => '',
-                'country' => 'Deutschland',
-                'tax_type' => 'kleinunternehmer',
+        try {
+            // DEBUG: Log request details
+            Log::info('CompanySettingController::show called', [
+                'has_auth_header' => request()->hasHeader('Authorization'),
+                'auth_header' => request()->header('Authorization') ? 'Bearer ***' : 'MISSING',
+                'auth_api_check' => auth('api')->check(),
+                'auth_api_id' => auth('api')->id(),
             ]);
+            
+            $user = auth('api')->user();
+            
+            Log::info('CompanySettingController::show - user check', [
+                'user_exists' => !is_null($user),
+                'user_id' => $user?->id,
+                'user_email' => $user?->email,
+            ]);
+            
+            if (!$user) {
+                Log::warning('CompanySettingController::show - No authenticated user, returning defaults');
+                return response()->json([
+                    'message' => 'Not authenticated - please login',
+                    'debug' => [
+                        'auth_check' => auth('api')->check(),
+                        'has_token' => request()->hasHeader('Authorization'),
+                    ]
+                ], 401);
+            }
+
+            $user->load('tenant');
+            $tenant = $user->tenant;
+            
+            if (!$tenant) {
+                Log::warning('CompanySettingController::show - User has no tenant');
+                return $this->defaultSettings();
+            }
+
+            // Get settings for this specific tenant
+            $settings = CompanySetting::where('tenant_id', $tenant->id)->first();
+            
+            if (!$settings) {
+                // Create default settings for this tenant
+                $settings = CompanySetting::create([
+                    'tenant_id' => $tenant->id,
+                    'company_name' => $tenant->name ?? '',
+                    'street' => '',
+                    'zip' => '',
+                    'city' => '',
+                    'country' => 'Deutschland',
+                    'email' => '',
+                    'phone' => '',
+                    'tax_number' => '',
+                    'tax_type' => 'kleinunternehmer',
+                ]);
+            }
+            
+            return response()->json($settings);
+            
+        } catch (\Exception $e) {
+            Log::error('CompanySettingController::show error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'message' => 'Server error',
+                'error' => $e->getMessage()
+            ], 500);
         }
-        
-        return response()->json($settings);
     }
 
     public function update(Request $request)
@@ -51,10 +108,15 @@ class CompanySettingController extends Controller
             ], 422);
         }
 
-        $settings = CompanySetting::first();
+        // Get tenant
+        $tenant = $this->getTenantOrFail();
+
+        // Get or create settings for this tenant
+        $settings = CompanySetting::where('tenant_id', $tenant->id)->first();
         
         if (!$settings) {
             $settings = new CompanySetting();
+            $settings->tenant_id = $tenant->id;
         }
 
         // Update basic fields
@@ -75,7 +137,7 @@ class CompanySettingController extends Controller
                 Storage::disk('public')->delete($settings->logo_path);
             }
 
-            // Store new logo
+            // Store new logo  
             $logoPath = $request->file('logo')->store('logos', 'public');
             $settings->logo_path = $logoPath;
         }
@@ -85,6 +147,22 @@ class CompanySettingController extends Controller
         return response()->json([
             'message' => 'Einstellungen erfolgreich gespeichert',
             'data' => $settings
+        ]);
+    }
+
+    private function defaultSettings()
+    {
+        return response()->json([
+            'company_name' => '',
+            'street' => '',
+            'zip' => '',
+            'city' => '',
+            'country' => 'Deutschland',
+            'email' => '',
+            'phone' => '',
+            'tax_number' => '',
+            'tax_type' => 'kleinunternehmer',
+            'logo_path' => null,
         ]);
     }
 }
