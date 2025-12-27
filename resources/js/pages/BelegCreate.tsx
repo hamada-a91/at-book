@@ -184,267 +184,273 @@ export function BelegCreate() {
     };
 
     return (
-        <div className="space-y-6">
-            <div className="flex items-center gap-4">
-                <Link to={`/${tenant}/belege`}>
-                    <Button variant="ghost" size="icon" className="h-10 w-10">
-                        <ArrowLeft className="w-5 h-5" />
-                    </Button>
-                </Link>
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-                        {isEditMode ? 'Beleg bearbeiten' : 'Neuer Beleg'}
-                    </h1>
-                    <p className="text-slate-500 dark:text-slate-400">
-                        {isEditMode ? 'Bearbeite die Belegdaten' : 'Erstelle einen neuen Geschäftsbeleg'}
-                    </p>
+        <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-cyan-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 p-6">
+            <div className="max-w-5xl mx-auto space-y-6">
+                <div className="flex items-center gap-4">
+                    <Link to={`/${tenant}/belege`}>
+                        <Button variant="ghost" size="icon" className="h-10 w-10 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
+                            <ArrowLeft className="w-5 h-5" />
+                        </Button>
+                    </Link>
+                    <div>
+                        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+                            {isEditMode ? 'Beleg bearbeiten' : 'Neuer Beleg'}
+                        </h1>
+                        <p className="text-gray-600 dark:text-gray-400 mt-1">
+                            {isEditMode ? 'Bearbeite die Belegdaten' : 'Erstelle einen neuen Geschäftsbeleg'}
+                        </p>
+                    </div>
                 </div>
-            </div>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-                {/* Document Type */}
-                <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Receipt className="w-5 h-5 text-primary" />
-                            Belegart
-                        </CardTitle>
-                        <CardDescription>
-                            Wählen Sie die Art des Belegs aus.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                                Belegart *
-                            </label>
-                            <Select value={documentType} onValueChange={(value) => setDocumentType(value as BelegType)}>
-                                <SelectTrigger className="bg-white dark:bg-slate-950">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="ausgang">Ausgangsbeleg</SelectItem>
-                                    <SelectItem value="eingang">Eingangsbeleg</SelectItem>
-                                    <SelectItem value="offen">Offener Beleg</SelectItem>
-                                    <SelectItem value="sonstige">Sonstiger Beleg</SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
-                                {typeDescriptions[documentType]}
-                            </p>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Document Details */}
-                <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <FileText className="w-5 h-5 text-primary" />
-                            Belegdetails
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                                Titel / Beschreibung *
-                            </label>
-                            <Input
-                                value={title}
-                                onChange={(e) => setTitle(e.target.value)}
-                                placeholder="z.B. Büromaterial Einkauf"
-                                required
-                                className="bg-white dark:bg-slate-950"
-                            />
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <form onSubmit={handleSubmit} className="space-y-6">
+                    {/* Document Type */}
+                    <Card className="border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg">
+                        <CardHeader className="border-b border-gray-200 dark:border-gray-700">
+                            <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white">
+                                <Receipt className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                                Belegart
+                            </CardTitle>
+                            <CardDescription className="text-gray-600 dark:text-gray-400">
+                                Wählen Sie die Art des Belegs aus.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4 pt-6">
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                                    Belegdatum *
+                                <label className="block text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
+                                    Belegart *
                                 </label>
-                                <Input
-                                    type="date"
-                                    value={documentDate}
-                                    onChange={(e) => setDocumentDate(e.target.value)}
-                                    required
-                                    className="bg-white dark:bg-slate-950"
-                                />
-                            </div>
-                            {(documentType === 'offen' || documentType === 'eingang') && (
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                                        Fälligkeitsdatum
-                                    </label>
-                                    <Input
-                                        type="date"
-                                        value={dueDate}
-                                        onChange={(e) => setDueDate(e.target.value)}
-                                        className="bg-white dark:bg-slate-950"
-                                    />
-                                </div>
-                            )}
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Contact Selection */}
-                <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <User className="w-5 h-5 text-primary" />
-                            Kontakt
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                                Kontakt / Lieferant / Kunde
-                            </label>
-                            <ContactSelector
-                                contacts={contacts}
-                                value={contactId}
-                                onChange={setContactId}
-                            />
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Amount Details */}
-                <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Euro className="w-5 h-5 text-primary" />
-                            Beträge
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                                    Gesamtbetrag (Brutto) *
-                                </label>
-                                <Input
-                                    type="number"
-                                    step="0.01"
-                                    value={amount || ''}
-                                    onChange={(e) => handleAmountChange(parseFloat(e.target.value))}
-                                    placeholder="0.00"
-                                    required
-                                    className="bg-white dark:bg-slate-950"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                                    Steuersatz
-                                </label>
-                                <Select value={taxRate.toString()} onValueChange={(value) => handleTaxRateChange(parseFloat(value))}>
-                                    <SelectTrigger className="bg-white dark:bg-slate-950">
+                                <Select value={documentType} onValueChange={(value) => setDocumentType(value as BelegType)}>
+                                    <SelectTrigger className="bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="19">19% USt.</SelectItem>
-                                        <SelectItem value="7">7% USt.</SelectItem>
-                                        <SelectItem value="0">0% (steuerfrei)</SelectItem>
+                                        <SelectItem value="ausgang">Ausgangsbeleg</SelectItem>
+                                        <SelectItem value="eingang">Eingangsbeleg</SelectItem>
+                                        <SelectItem value="offen">Offener Beleg</SelectItem>
+                                        <SelectItem value="sonstige">Sonstiger Beleg</SelectItem>
                                     </SelectContent>
                                 </Select>
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                                    {typeDescriptions[documentType]}
+                                </p>
                             </div>
+                        </CardContent>
+                    </Card>
 
+                    {/* Document Details */}
+                    <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <FileText className="w-5 h-5 text-primary" />
+                                Belegdetails
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                                    Steuerbetrag
+                                    Titel / Beschreibung *
                                 </label>
                                 <Input
-                                    type="number"
-                                    step="0.01"
-                                    value={taxAmount || ''}
-                                    readOnly
-                                    className="bg-slate-50 dark:bg-slate-900 cursor-not-allowed"
+                                    value={title}
+                                    onChange={(e) => setTitle(e.target.value)}
+                                    placeholder="z.B. Büromaterial Einkauf"
+                                    required
+                                    className="bg-white dark:bg-slate-950"
                                 />
                             </div>
-                        </div>
 
-                        <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
-                            <div className="flex justify-between items-center">
-                                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                                    Nettobetrag:
-                                </span>
-                                <span className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                                    {(amount - taxAmount).toFixed(2)} €
-                                </span>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                        Belegdatum *
+                                    </label>
+                                    <Input
+                                        type="date"
+                                        value={documentDate}
+                                        onChange={(e) => setDocumentDate(e.target.value)}
+                                        required
+                                        className="bg-white dark:bg-slate-950"
+                                    />
+                                </div>
+                                {(documentType === 'offen' || documentType === 'eingang') && (
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                            Fälligkeitsdatum
+                                        </label>
+                                        <Input
+                                            type="date"
+                                            value={dueDate}
+                                            onChange={(e) => setDueDate(e.target.value)}
+                                            className="bg-white dark:bg-slate-950"
+                                        />
+                                    </div>
+                                )}
                             </div>
-                        </div>
-                    </CardContent>
-                </Card>
+                        </CardContent>
+                    </Card>
 
-                {/* File Upload */}
-                <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Upload className="w-5 h-5 text-primary" />
-                            Datei hochladen
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                                Beleg-Datei (PDF, JPG, PNG)
-                            </label>
-                            <Input
-                                type="file"
-                                accept=".pdf,.jpg,.jpeg,.png"
-                                onChange={handleFileChange}
-                                className="bg-white dark:bg-slate-950"
+                    {/* Contact Selection */}
+                    <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <User className="w-5 h-5 text-primary" />
+                                Kontakt
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                    Kontakt / Lieferant / Kunde
+                                </label>
+                                <ContactSelector
+                                    contacts={contacts}
+                                    value={contactId}
+                                    onChange={setContactId}
+                                />
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Amount Details */}
+                    <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <Euro className="w-5 h-5 text-primary" />
+                                Beträge
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                        Gesamtbetrag (Brutto) *
+                                    </label>
+                                    <Input
+                                        type="number"
+                                        step="0.01"
+                                        value={amount || ''}
+                                        onChange={(e) => handleAmountChange(parseFloat(e.target.value))}
+                                        placeholder="0.00"
+                                        required
+                                        className="bg-white dark:bg-slate-950"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                        Steuersatz
+                                    </label>
+                                    <Select value={taxRate.toString()} onValueChange={(value) => handleTaxRateChange(parseFloat(value))}>
+                                        <SelectTrigger className="bg-white dark:bg-slate-950">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="19">19% USt.</SelectItem>
+                                            <SelectItem value="7">7% USt.</SelectItem>
+                                            <SelectItem value="0">0% (steuerfrei)</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                        Steuerbetrag
+                                    </label>
+                                    <Input
+                                        type="number"
+                                        step="0.01"
+                                        value={taxAmount || ''}
+                                        readOnly
+                                        className="bg-slate-50 dark:bg-slate-900 cursor-not-allowed"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                        Nettobetrag:
+                                    </span>
+                                    <span className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                                        {(amount - taxAmount).toFixed(2)} €
+                                    </span>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* File Upload */}
+                    <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <Upload className="w-5 h-5 text-primary" />
+                                Datei hochladen
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                    Beleg-Datei (PDF, JPG, PNG)
+                                </label>
+                                <Input
+                                    type="file"
+                                    accept=".pdf,.jpg,.jpeg,.png"
+                                    onChange={handleFileChange}
+                                    className="bg-white dark:bg-slate-950"
+                                />
+                                {selectedFile && (
+                                    <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-2">
+                                        ✓ {selectedFile.name} ausgewählt
+                                    </p>
+                                )}
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Notes */}
+                    <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <FileText className="w-5 h-5 text-primary" />
+                                Notizen
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <Textarea
+                                value={notes}
+                                onChange={(e) => setNotes(e.target.value)}
+                                placeholder="Zusätzliche Notizen oder Bemerkungen..."
+                                rows={4}
+                                className="bg-white dark:bg-slate-950 resize-none"
                             />
-                            {selectedFile && (
-                                <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-2">
-                                    ✓ {selectedFile.name} ausgewählt
-                                </p>
-                            )}
-                        </div>
-                    </CardContent>
-                </Card>
+                        </CardContent>
+                    </Card>
 
-                {/* Notes */}
-                <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <FileText className="w-5 h-5 text-primary" />
-                            Notizen
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <Textarea
-                            value={notes}
-                            onChange={(e) => setNotes(e.target.value)}
-                            placeholder="Zusätzliche Notizen oder Bemerkungen..."
-                            rows={4}
-                            className="bg-white dark:bg-slate-950 resize-none"
-                        />
-                    </CardContent>
-                </Card>
-
-                {/* Actions */}
-                <div className="flex justify-end gap-4 pb-8">
-                    <Button type="button" variant="outline" onClick={() => navigate(`/${tenant}/belege`)} className="gap-2">
-                        <X className="w-4 h-4" />
-                        Abbrechen
-                    </Button>
-                    <Button
-                        type="submit"
-                        disabled={createBelegMutation.isPending || uploadFileMutation.isPending}
-                        variant="outline"
-                        className="gap-2 border-2 border-primary text-primary hover:bg-primary hover:text-white transition-colors"
-                    >
-                        <Save className="w-4 h-4" />
-                        {createBelegMutation.isPending || uploadFileMutation.isPending
-                            ? (isEditMode ? 'Speichere...' : 'Erstelle...')
-                            : (isEditMode ? 'Änderungen speichern' : 'Beleg erstellen')
-                        }
-                    </Button>
-                </div>
-            </form>
+                    {/* Actions */}
+                    <div className="flex justify-end gap-4 pb-8">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => navigate(`/${tenant}/belege`)}
+                            className="gap-2 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white"
+                        >
+                            <X className="w-4 h-4" />
+                            Abbrechen
+                        </Button>
+                        <Button
+                            type="submit"
+                            disabled={createBelegMutation.isPending || uploadFileMutation.isPending}
+                            className="gap-2 bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-700 hover:to-cyan-700 text-white shadow-lg shadow-indigo-500/30"
+                        >
+                            <Save className="w-4 h-4" />
+                            {createBelegMutation.isPending || uploadFileMutation.isPending
+                                ? (isEditMode ? 'Speichere...' : 'Erstelle...')
+                                : (isEditMode ? 'Änderungen speichern' : 'Beleg erstellen')
+                            }
+                        </Button>
+                    </div>
+                </form>
+            </div>
         </div>
     );
 }

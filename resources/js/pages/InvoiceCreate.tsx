@@ -292,336 +292,343 @@ export function InvoiceCreate() {
         : [];
 
     return (
-        <div className="space-y-6">
-            <div className="flex items-center gap-4">
-                <Link to={`/${tenant}/invoices`}>
-                    <Button variant="ghost" size="icon" className="h-10 w-10">
-                        <ArrowLeft className="w-5 h-5" />
-                    </Button>
-                </Link>
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-                        {isEditMode ? 'Rechnung bearbeiten' : 'Neue Rechnung'}
-                    </h1>
-                    <p className="text-slate-500 dark:text-slate-400">
-                        {isEditMode ? 'Bearbeite die Rechnungsdaten' : 'Erstelle eine neue Ausgangsrechnung'}
-                    </p>
+        <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-cyan-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 p-6">
+            <div className="max-w-7xl mx-auto space-y-6">
+                <div className="flex items-center gap-4">
+                    <Link to={`/${tenant}/invoices`}>
+                        <Button variant="ghost" size="icon" className="h-10 w-10 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
+                            <ArrowLeft className="w-5 h-5" />
+                        </Button>
+                    </Link>
+                    <div>
+                        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+                            {isEditMode ? 'Rechnung bearbeiten' : 'Neue Rechnung'}
+                        </h1>
+                        <p className="text-gray-600 dark:text-gray-400 mt-1">
+                            {isEditMode ? 'Bearbeite die Rechnungsdaten' : 'Erstelle eine neue Ausgangsrechnung'}
+                        </p>
+                    </div>
                 </div>
-            </div>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-                {/* Customer Info */}
-                <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <UserPlus className="w-5 h-5 text-primary" />
-                            Kundeninformationen
-                        </CardTitle>
-                        <CardDescription>
-                            Wählen Sie einen bestehenden Kunden oder geben Sie einen neuen ein.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="relative">
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                                    Kundenname *
-                                </label>
-                                <Input
-                                    value={customerName}
-                                    onChange={(e) => {
-                                        setCustomerName(e.target.value);
-                                        setSelectedContactId(null);
-                                    }}
-                                    placeholder="Name eingeben..."
-                                    required
-                                    className="bg-white dark:bg-slate-950"
-                                />
-                                {/* Autocomplete dropdown */}
-                                {customerName && filteredCustomers.length > 0 && !selectedContactId && (
-                                    <div className="absolute z-10 w-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg max-h-60 overflow-auto">
-                                        {filteredCustomers.map((contact) => (
-                                            <button
-                                                key={contact.id}
-                                                type="button"
-                                                onClick={() => handleCustomerSelect(contact)}
-                                                className="px-4 py-2 text-left hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-between"
-                                            >
-                                                <span className="text-slate-900 dark:text-slate-100">{contact.name}</span>
-                                                <span className="text-xs text-slate-500 dark:text-slate-400">Vorhanden</span>
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
-                                {selectedContactId && (
-                                    <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1">
-                                        <span className="inline-block w-4 h-4 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-[10px]">✓</span>
-                                        Kunde ausgewählt
-                                    </p>
-                                )}
-                                {customerName && !selectedContactId && filteredCustomers.length === 0 && (
-                                    <p className="text-xs text-blue-600 dark:text-blue-400 mt-1 flex items-center gap-1">
-                                        <UserPlus className="w-3 h-3" />
-                                        Neuer Kunde wird erstellt
-                                    </p>
-                                )}
+                <form onSubmit={handleSubmit} className="space-y-6">
+                    {/* Customer Info */}
+                    <Card className="border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg">
+                        <CardHeader className="border-b border-gray-200 dark:border-gray-700">
+                            <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white">
+                                <UserPlus className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                                Kundeninformationen
+                            </CardTitle>
+                            <CardDescription className="text-gray-600 dark:text-gray-400">
+                                Wählen Sie einen bestehenden Kunden oder geben Sie einen neuen ein.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="relative">
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                        Kundenname *
+                                    </label>
+                                    <Input
+                                        value={customerName}
+                                        onChange={(e) => {
+                                            setCustomerName(e.target.value);
+                                            setSelectedContactId(null);
+                                        }}
+                                        placeholder="Name eingeben..."
+                                        required
+                                        className="bg-white dark:bg-slate-950"
+                                    />
+                                    {/* Autocomplete dropdown */}
+                                    {customerName && filteredCustomers.length > 0 && !selectedContactId && (
+                                        <div className="absolute z-10 w-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg max-h-60 overflow-auto">
+                                            {filteredCustomers.map((contact) => (
+                                                <button
+                                                    key={contact.id}
+                                                    type="button"
+                                                    onClick={() => handleCustomerSelect(contact)}
+                                                    className="px-4 py-2 text-left hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-between"
+                                                >
+                                                    <span className="text-slate-900 dark:text-slate-100">{contact.name}</span>
+                                                    <span className="text-xs text-slate-500 dark:text-slate-400">Vorhanden</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                    {selectedContactId && (
+                                        <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1">
+                                            <span className="inline-block w-4 h-4 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-[10px]">✓</span>
+                                            Kunde ausgewählt
+                                        </p>
+                                    )}
+                                    {customerName && !selectedContactId && filteredCustomers.length === 0 && (
+                                        <p className="text-xs text-blue-600 dark:text-blue-400 mt-1 flex items-center gap-1">
+                                            <UserPlus className="w-3 h-3" />
+                                            Neuer Kunde wird erstellt
+                                        </p>
+                                    )}
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                        Adresse
+                                    </label>
+                                    <Textarea
+                                        value={customerAddress}
+                                        onChange={(e) => setCustomerAddress(e.target.value)}
+                                        placeholder="Straße, PLZ Stadt"
+                                        rows={3}
+                                        className="bg-white dark:bg-slate-950 resize-none"
+                                    />
+                                </div>
                             </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Invoice Details */}
+                    <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <Calendar className="w-5 h-5 text-primary" />
+                                Rechnungsdetails
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                        Rechnungsdatum *
+                                    </label>
+                                    <Input
+                                        type="date"
+                                        value={invoiceDate}
+                                        onChange={(e) => setInvoiceDate(e.target.value)}
+                                        required
+                                        className="bg-white dark:bg-slate-950"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                        Fälligkeitsdatum *
+                                    </label>
+                                    <Input
+                                        type="date"
+                                        value={dueDate}
+                                        onChange={(e) => setDueDate(e.target.value)}
+                                        required
+                                        className="bg-white dark:bg-slate-950"
+                                    />
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Line Items */}
+                    <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
+                        <CardHeader>
+                            <div className="flex items-center justify-between">
+                                <CardTitle className="flex items-center gap-2">
+                                    <FileText className="w-5 h-5 text-primary" />
+                                    Positionen
+                                </CardTitle>
+                                <Button type="button" size="sm" onClick={addLine} className="gap-2">
+                                    <Plus className="w-4 h-4" />
+                                    Position hinzufügen
+                                </Button>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-4">
+                                {lines.map((line, index) => (
+                                    <div
+                                        key={index}
+                                        className="grid grid-cols-12 gap-4 p-4 bg-slate-50/50 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-800"
+                                    >
+                                        <div className="col-span-12 md:col-span-3">
+                                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                                Beschreibung *
+                                            </label>
+                                            <Input
+                                                value={line.description}
+                                                onChange={(e) => updateLine(index, 'description', e.target.value)}
+                                                required
+                                                placeholder="Leistung/Artikel"
+                                                className="bg-white dark:bg-slate-950"
+                                            />
+                                        </div>
+                                        <div className="col-span-6 md:col-span-1">
+                                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                                Menge *
+                                            </label>
+                                            <Input
+                                                type="number"
+                                                step="0.01"
+                                                value={line.quantity}
+                                                onChange={(e) =>
+                                                    updateLine(index, 'quantity', parseFloat(e.target.value))
+                                                }
+                                                required
+                                                className="bg-white dark:bg-slate-950"
+                                            />
+                                        </div>
+                                        <div className="col-span-6 md:col-span-2">
+                                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                                Einheit *
+                                            </label>
+                                            <Select
+                                                value={line.unit}
+                                                onValueChange={(value) => updateLine(index, 'unit', value)}
+                                            >
+                                                <SelectTrigger className="bg-white dark:bg-slate-950">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="Stück">Stück</SelectItem>
+                                                    <SelectItem value="Stunde">Stunde</SelectItem>
+                                                    <SelectItem value="Tag">Tag</SelectItem>
+                                                    <SelectItem value="Monat">Monat</SelectItem>
+                                                    <SelectItem value="Pauschal">Pauschal</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="col-span-6 md:col-span-2">
+                                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                                Einzelpreis (€) *
+                                            </label>
+                                            <Input
+                                                type="number"
+                                                step="0.01"
+                                                value={line.unit_price}
+                                                onChange={(e) =>
+                                                    updateLine(index, 'unit_price', parseFloat(e.target.value))
+                                                }
+                                                required
+                                                className="bg-white dark:bg-slate-950"
+                                            />
+                                        </div>
+                                        <div className="col-span-6 md:col-span-2">
+                                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                                USt. % *
+                                            </label>
+                                            <Select
+                                                value={line.tax_rate.toString()}
+                                                onValueChange={(value) => handleTaxRateChange(index, parseFloat(value))}
+                                                defaultValue="19"
+                                            >
+                                                <SelectTrigger className="bg-white dark:bg-slate-950">
+                                                    <SelectValue placeholder="19% USt." />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="19">19% USt.</SelectItem>
+                                                    <SelectItem value="7">7% USt.</SelectItem>
+                                                    <SelectItem value="0">0% (steuerfrei)</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="col-span-10 md:col-span-1 flex items-center justify-center pt-6">
+                                            <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                                {(line.quantity * line.unit_price * (1 + line.tax_rate / 100)).toFixed(2)} €
+                                            </span>
+                                        </div>
+                                        <div className="col-span-2 md:col-span-1 flex items-end">
+                                            {lines.length > 1 && (
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    onClick={() => removeLine(index)}
+                                                    className="w-full hover:bg-rose-100 dark:hover:bg-rose-900/30 text-rose-500"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </Button>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Total */}
+                            <div className="mt-6 flex justify-end">
+                                <div className="bg-slate-50 dark:bg-slate-800 p-6 rounded-lg border border-slate-100 dark:border-slate-700 min-w-[250px]">
+                                    <div className="text-sm text-slate-500 dark:text-slate-400 mb-1">Gesamtsumme (inkl. MwSt)</div>
+                                    <div className="text-3xl font-bold text-slate-900 dark:text-slate-100">
+                                        {calculateTotal().toFixed(2)} €
+                                    </div>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Footer Section */}
+                    <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <CreditCard className="w-5 h-5 text-primary" />
+                                Fußbereich (optional)
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                                    Adresse
+                                    Einleitungstext
                                 </label>
                                 <Textarea
-                                    value={customerAddress}
-                                    onChange={(e) => setCustomerAddress(e.target.value)}
-                                    placeholder="Straße, PLZ Stadt"
-                                    rows={3}
+                                    value={introText}
+                                    onChange={(e) => setIntroText(e.target.value)}
+                                    rows={2}
+                                    placeholder="Unsere Lieferungen/Leistungen stellen wir Ihnen wie folgt in Rechnung."
                                     className="bg-white dark:bg-slate-950 resize-none"
                                 />
                             </div>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Invoice Details */}
-                <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Calendar className="w-5 h-5 text-primary" />
-                            Rechnungsdetails
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                                    Rechnungsdatum *
+                                    Zahlungsbedingung
                                 </label>
                                 <Input
-                                    type="date"
-                                    value={invoiceDate}
-                                    onChange={(e) => setInvoiceDate(e.target.value)}
-                                    required
+                                    value={paymentTerms}
+                                    onChange={(e) => setPaymentTerms(e.target.value)}
+                                    placeholder="Zahlbar sofort, rein netto"
                                     className="bg-white dark:bg-slate-950"
                                 />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                                    Fälligkeitsdatum *
+                                    Nachbemerkung
                                 </label>
-                                <Input
-                                    type="date"
-                                    value={dueDate}
-                                    onChange={(e) => setDueDate(e.target.value)}
-                                    required
-                                    className="bg-white dark:bg-slate-950"
+                                <Textarea
+                                    value={footerNote}
+                                    onChange={(e) => setFooterNote(e.target.value)}
+                                    rows={2}
+                                    placeholder="Vielen Dank für die gute Zusammenarbeit."
+                                    className="bg-white dark:bg-slate-950 resize-none"
                                 />
                             </div>
-                        </div>
-                    </CardContent>
-                </Card>
+                        </CardContent>
+                    </Card>
 
-                {/* Line Items */}
-                <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
-                    <CardHeader>
-                        <div className="flex items-center justify-between">
-                            <CardTitle className="flex items-center gap-2">
-                                <FileText className="w-5 h-5 text-primary" />
-                                Positionen
-                            </CardTitle>
-                            <Button type="button" size="sm" onClick={addLine} className="gap-2">
-                                <Plus className="w-4 h-4" />
-                                Position hinzufügen
-                            </Button>
-                        </div>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="space-y-4">
-                            {lines.map((line, index) => (
-                                <div
-                                    key={index}
-                                    className="grid grid-cols-12 gap-4 p-4 bg-slate-50/50 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-800"
-                                >
-                                    <div className="col-span-12 md:col-span-3">
-                                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                            Beschreibung *
-                                        </label>
-                                        <Input
-                                            value={line.description}
-                                            onChange={(e) => updateLine(index, 'description', e.target.value)}
-                                            required
-                                            placeholder="Leistung/Artikel"
-                                            className="bg-white dark:bg-slate-950"
-                                        />
-                                    </div>
-                                    <div className="col-span-6 md:col-span-1">
-                                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                            Menge *
-                                        </label>
-                                        <Input
-                                            type="number"
-                                            step="0.01"
-                                            value={line.quantity}
-                                            onChange={(e) =>
-                                                updateLine(index, 'quantity', parseFloat(e.target.value))
-                                            }
-                                            required
-                                            className="bg-white dark:bg-slate-950"
-                                        />
-                                    </div>
-                                    <div className="col-span-6 md:col-span-2">
-                                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                            Einheit *
-                                        </label>
-                                        <Select
-                                            value={line.unit}
-                                            onValueChange={(value) => updateLine(index, 'unit', value)}
-                                        >
-                                            <SelectTrigger className="bg-white dark:bg-slate-950">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="Stück">Stück</SelectItem>
-                                                <SelectItem value="Stunde">Stunde</SelectItem>
-                                                <SelectItem value="Tag">Tag</SelectItem>
-                                                <SelectItem value="Monat">Monat</SelectItem>
-                                                <SelectItem value="Pauschal">Pauschal</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <div className="col-span-6 md:col-span-2">
-                                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                            Einzelpreis (€) *
-                                        </label>
-                                        <Input
-                                            type="number"
-                                            step="0.01"
-                                            value={line.unit_price}
-                                            onChange={(e) =>
-                                                updateLine(index, 'unit_price', parseFloat(e.target.value))
-                                            }
-                                            required
-                                            className="bg-white dark:bg-slate-950"
-                                        />
-                                    </div>
-                                    <div className="col-span-6 md:col-span-2">
-                                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                            USt. % *
-                                        </label>
-                                        <Select
-                                            value={line.tax_rate.toString()}
-                                            onValueChange={(value) => handleTaxRateChange(index, parseFloat(value))}
-                                            defaultValue="19"
-                                        >
-                                            <SelectTrigger className="bg-white dark:bg-slate-950">
-                                                <SelectValue placeholder="19% USt." />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="19">19% USt.</SelectItem>
-                                                <SelectItem value="7">7% USt.</SelectItem>
-                                                <SelectItem value="0">0% (steuerfrei)</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <div className="col-span-10 md:col-span-1 flex items-center justify-center pt-6">
-                                        <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                                            {(line.quantity * line.unit_price * (1 + line.tax_rate / 100)).toFixed(2)} €
-                                        </span>
-                                    </div>
-                                    <div className="col-span-2 md:col-span-1 flex items-end">
-                                        {lines.length > 1 && (
-                                            <Button
-                                                type="button"
-                                                size="sm"
-                                                variant="ghost"
-                                                onClick={() => removeLine(index)}
-                                                className="w-full hover:bg-rose-100 dark:hover:bg-rose-900/30 text-rose-500"
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </Button>
-                                        )}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-
-                        {/* Total */}
-                        <div className="mt-6 flex justify-end">
-                            <div className="bg-slate-50 dark:bg-slate-800 p-6 rounded-lg border border-slate-100 dark:border-slate-700 min-w-[250px]">
-                                <div className="text-sm text-slate-500 dark:text-slate-400 mb-1">Gesamtsumme (inkl. MwSt)</div>
-                                <div className="text-3xl font-bold text-slate-900 dark:text-slate-100">
-                                    {calculateTotal().toFixed(2)} €
-                                </div>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Footer Section */}
-                <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <CreditCard className="w-5 h-5 text-primary" />
-                            Fußbereich (optional)
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                                Einleitungstext
-                            </label>
-                            <Textarea
-                                value={introText}
-                                onChange={(e) => setIntroText(e.target.value)}
-                                rows={2}
-                                placeholder="Unsere Lieferungen/Leistungen stellen wir Ihnen wie folgt in Rechnung."
-                                className="bg-white dark:bg-slate-950 resize-none"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                                Zahlungsbedingung
-                            </label>
-                            <Input
-                                value={paymentTerms}
-                                onChange={(e) => setPaymentTerms(e.target.value)}
-                                placeholder="Zahlbar sofort, rein netto"
-                                className="bg-white dark:bg-slate-950"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                                Nachbemerkung
-                            </label>
-                            <Textarea
-                                value={footerNote}
-                                onChange={(e) => setFooterNote(e.target.value)}
-                                rows={2}
-                                placeholder="Vielen Dank für die gute Zusammenarbeit."
-                                className="bg-white dark:bg-slate-950 resize-none"
-                            />
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Actions */}
-                <div className="flex justify-end gap-4 pb-8">
-                    <Button type="button" variant="outline" onClick={() => navigate(`/${tenant}/invoices`)} className="gap-2">
-                        <X className="w-4 h-4" />
-                        Abbrechen
-                    </Button>
-                    <Button
-                        type="submit"
-                        disabled={createInvoiceMutation.isPending || createContactMutation.isPending}
-                        className="gap-2 shadow-lg shadow-primary/20"
-                    >
-                        <Save className="w-4 h-4" />
-                        {createInvoiceMutation.isPending || createContactMutation.isPending
-                            ? (isEditMode ? 'Speichere...' : 'Erstelle...')
-                            : (isEditMode ? 'Änderungen speichern' : 'Rechnung erstellen')
-                        }
-                    </Button>
-                </div>
-            </form>
+                    {/* Actions */}
+                    <div className="flex justify-end gap-4 pb-8">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => navigate(`/${tenant}/invoices`)}
+                            className="gap-2 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white"
+                        >
+                            <X className="w-4 h-4" />
+                            Abbrechen
+                        </Button>
+                        <Button
+                            type="submit"
+                            disabled={createInvoiceMutation.isPending || createContactMutation.isPending}
+                            className="gap-2 bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-700 hover:to-cyan-700 text-white shadow-lg shadow-indigo-500/30"
+                        >
+                            <Save className="w-4 h-4" />
+                            {createInvoiceMutation.isPending || createContactMutation.isPending
+                                ? (isEditMode ? 'Speichere...' : 'Erstelle...')
+                                : (isEditMode ? 'Änderungen speichern' : 'Rechnung erstellen')
+                            }
+                        </Button>
+                    </div>
+                </form>
+            </div>
         </div>
     );
 }
