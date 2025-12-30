@@ -184,7 +184,11 @@ export function ContactsList() {
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                                 {filteredContacts?.map((contact) => (
-                                    <tr key={contact.id} className="group hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
+                                    <tr
+                                        key={contact.id}
+                                        className="group hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
+                                        onClick={() => setViewContact(contact)}
+                                    >
                                         <td className="px-6 py-4 font-medium text-slate-900 dark:text-slate-100">{contact.name}</td>
                                         <td className="px-6 py-4">
                                             {contact.type === 'customer' && (
@@ -223,7 +227,7 @@ export function ContactsList() {
                                                 </div>
                                             )}
                                         </td>
-                                        <td className="px-6 py-4 text-right">
+                                        <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                                             <div className="flex justify-end items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                                 <Button
                                                     variant="ghost"

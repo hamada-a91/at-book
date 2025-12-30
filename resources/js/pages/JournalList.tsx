@@ -332,7 +332,8 @@ export function JournalList() {
                                         return (
                                             <TableRow
                                                 key={booking.id}
-                                                className="hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-colors border-slate-100 dark:border-slate-800 group"
+                                                className="hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-colors border-slate-100 dark:border-slate-800 group cursor-pointer"
+                                                onClick={() => viewDetails(booking.id)}
                                             >
                                                 <TableCell className="font-mono font-medium text-slate-500 dark:text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                                                     #{booking.id}
@@ -357,7 +358,7 @@ export function JournalList() {
                                                         <span className="text-xs text-slate-400">Pos.</span>
                                                     </div>
                                                 </TableCell>
-                                                <TableCell className="text-right">
+                                                <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                                                     <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                                                         <Button
                                                             variant="ghost"

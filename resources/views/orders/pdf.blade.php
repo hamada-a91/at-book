@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
-    <title>Rechnung {{$invoice->invoice_number}}</title>
+    <title>Auftragsbestätigung {{$order->order_number}}</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'DejaVu Sans', sans-serif; font-size: 11pt; color: #333; }
@@ -44,11 +44,13 @@
                 @endif
             </div>
             <div class="invoice-info">
-                <h2 style="font-size: 20pt;">Rechnung</h2>
-                <div><strong>Rechnungsnr.:</strong> {{ $invoice->invoice_number }}</div>
-                <div><strong>Kundennr.:</strong> {{ $invoice->contact->id }}</div>
-                <div><strong>Datum:</strong> {{ $invoice->invoice_date->format('d.m.Y') }}</div>
-                <div><strong>Fällig am:</strong> {{ $invoice->due_date->format('d.m.Y') }}</div>
+                <h2 style="font-size: 20pt;">Auftragsbestätigung</h2>
+                <div><strong>Auftragsnr.:</strong> {{ $order->order_number }}</div>
+                <div><strong>Kundennr.:</strong> {{ $order->contact->id }}</div>
+                <div><strong>Datum:</strong> {{ $order->order_date->format('d.m.Y') }}</div>
+                @if($order->delivery_date)
+                    <div><strong>Lieferdatum:</strong> {{ $order->delivery_date->format('d.m.Y') }}</div>
+                @endif
             </div>
         </div>
 
@@ -59,9 +61,9 @@
                     <div class="sender">{{ $settings->company_name }}{{ $settings->company_name && $settings->street ? ', ' : '' }}{{ $settings->street }}{{ $settings->zip || $settings->city ? ', ' : '' }}{{ $settings->zip }} {{ $settings->city }}</div>
                 @endif
                 <div class="recipient">
-                    <div style="font-weight: bold;">{{ $invoice->contact->name }}</div>
-                    @if($invoice->contact->address)
-                        <div>{!! nl2br(e($invoice->contact->address)) !!}</div>
+                    <div style="font-weight: bold;">{{ $order->contact->name }}</div>
+                    @if($order->contact->address)
+                        <div>{!! nl2br(e($order->contact->address)) !!}</div>
                     @endif
                 </div>
             </div>
@@ -85,9 +87,9 @@
         </div>
 
         <!-- Intro -->
-        @if($invoice->intro_text)
+        @if($order->intro_text)
             <div class="intro">
-                <p>{{ $invoice->intro_text }}</p>
+                <p>{{ $order->intro_text }}</p>
             </div>
         @endif
 
@@ -104,7 +106,7 @@
                 </tr>
             </thead>
             <tbody>
-                @foreach($invoice->lines as $index => $line)
+                @foreach($order->lines as $index => $line)
                     <tr>
                         <td>{{ $index + 1 }}</td>
                         <td>
@@ -123,10 +125,10 @@
         <div class="totals">
             <div>
                 <span>Zwischensumme (netto)</span>
-                <span>{{ number_format($invoice->subtotal / 100, 2, ',', '.') }} €</span>
+                <span>{{ number_format($order->subtotal / 100, 2, ',', '.') }} €</span>
             </div>
             @php
-                $taxRates = $invoice->lines->groupBy('tax_rate');
+                $taxRates = $order->lines->groupBy('tax_rate');
             @endphp
             @foreach($taxRates as $taxRate => $lines)
                 @if($taxRate > 0)
@@ -143,19 +145,19 @@
             @endforeach
             <div class="total">
                 <span>Gesamtbetrag</span>
-                <span>{{ number_format($invoice->total / 100, 2, ',', '.') }} €</span>
+                <span>{{ number_format($order->total / 100, 2, ',', '.') }} €</span>
             </div>
         </div>
         <div style="clear: both;"></div>
 
         <!-- Footer Text -->
-        @if($invoice->payment_terms || $invoice->footer_note)
+        @if($order->payment_terms || $order->footer_note)
             <div class="footer-text">
-                @if($invoice->payment_terms)
-                    <p><strong>{{ $invoice->payment_terms }}</strong></p>
+                @if($order->payment_terms)
+                    <p><strong>{{ $order->payment_terms }}</strong></p>
                 @endif
-                @if($invoice->footer_note)
-                    <p>{{ $invoice->footer_note }}</p>
+                @if($order->footer_note)
+                    <p>{{ $order->footer_note }}</p>
                 @endif
             </div>
         @endif

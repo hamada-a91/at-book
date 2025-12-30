@@ -124,6 +124,7 @@ Route::middleware(['api', 'auth:api', \App\Http\Middleware\SetTenantFromUser::cl
         Route::apiResource('invoices', \App\Http\Controllers\Api\InvoiceController::class);
         Route::put('/invoices/{invoice}', [\App\Http\Controllers\Api\InvoiceController::class, 'update']);
         Route::post('/invoices/{invoice}/book', [\App\Http\Controllers\Api\InvoiceController::class, 'book']);
+        Route::post('/invoices/{invoice}/send', [\App\Http\Controllers\Api\InvoiceController::class, 'send']);
         Route::post('/invoices/{invoice}/payment', [\App\Http\Controllers\Api\InvoiceController::class, 'recordPayment']);
         Route::get('/invoices/{invoice}/pdf', [\App\Http\Controllers\Api\InvoiceController::class, 'downloadPDF']);
 
@@ -143,5 +144,23 @@ Route::middleware(['api', 'auth:api', \App\Http\Middleware\SetTenantFromUser::cl
         // Bank Accounts
         Route::apiResource('bank-accounts', \App\Http\Controllers\Api\BankAccountController::class);
         Route::post('/bank-accounts/{id}/set-default', [\App\Http\Controllers\Api\BankAccountController::class, 'setDefault']);
+
+        // Quotes (Angebote)
+        Route::apiResource('quotes', \App\Http\Controllers\Api\QuoteController::class);
+        Route::post('/quotes/{quote}/send', [\App\Http\Controllers\Api\QuoteController::class, 'send']);
+        Route::post('/quotes/{quote}/accept', [\App\Http\Controllers\Api\QuoteController::class, 'accept']);
+        Route::post('/quotes/{quote}/create-order', [\App\Http\Controllers\Api\QuoteController::class, 'createOrder']);
+        Route::get('/quotes/{id}/download-pdf', [\App\Http\Controllers\Api\QuoteController::class, 'downloadPDF']);
+
+        // Orders (Aufträge)
+        Route::apiResource('orders', \App\Http\Controllers\Api\OrderController::class);
+        Route::post('/orders/{order}/send', [\App\Http\Controllers\Api\OrderController::class, 'send']);
+        Route::post('/orders/{order}/create-delivery-note', [\App\Http\Controllers\Api\OrderController::class, 'createDeliveryNote']);
+        Route::post('/orders/{order}/create-invoice', [\App\Http\Controllers\Api\OrderController::class, 'createInvoice']);
+        Route::get('/orders/{id}/download-pdf', [\App\Http\Controllers\Api\OrderController::class, 'downloadPDF']);
+
+        // Delivery Notes (Lieferscheine)
+        Route::apiResource('delivery-notes', \App\Http\Controllers\Api\DeliveryNoteController::class);
+        Route::post('/delivery-notes/{deliveryNote}/create-invoice', [\App\Http\Controllers\Api\DeliveryNoteController::class, 'createInvoice']);
     });
 });

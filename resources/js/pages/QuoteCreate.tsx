@@ -1,14 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useParams, Link, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import axios from '@/lib/axios';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { Plus, Trash2, UserPlus, ArrowLeft, Save, X, Calendar, FileText, CreditCard, Eye, Edit, Euro } from 'lucide-react';
+import { Plus, Trash2, UserPlus, ArrowLeft, Save, X, Calendar, FileText, Eye, Edit, Euro } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 interface Contact {
@@ -18,60 +17,36 @@ interface Contact {
     address?: string;
 }
 
-interface Account {
-    id: number;
-    code: string;
-    name: string;
-    type: string;
-}
-
-interface InvoiceLine {
+interface QuoteLine {
     description: string;
     quantity: number;
     unit: string;
     unit_price: number;
     tax_rate: number;
-    account_id: string;
 }
 
-// Tax rate to revenue account mapping
-const TAX_ACCOUNT_MAP: Record<number, string> = {
-    19: '8400', // Erlöse 19% USt
-    7: '8300',  // Erlöse 7% USt  
-    0: '8100',  // Erlöse steuerfrei
-};
-
-export function InvoiceCreate() {
+export function QuoteCreate() {
     const navigate = useNavigate();
     const { tenant, id } = useParams();
-    const [searchParams] = useSearchParams();
     const queryClient = useQueryClient();
     const isEditMode = !!id;
 
-    // Check if creating from an order
-    const orderIdParam = searchParams.get('from_order');
-    const fromOrderId = orderIdParam ? parseInt(orderIdParam) : null;
-
     const [customerName, setCustomerName] = useState('');
     const [customerAddress, setCustomerAddress] = useState('');
-    const [originalContactAddress, setOriginalContactAddress] = useState<string | null>(null);
     const [selectedContactId, setSelectedContactId] = useState<number | null>(null);
-    const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
-    const [dueDate, setDueDate] = useState(
-        new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    const [quoteDate, setQuoteDate] = useState(new Date().toISOString().split('T')[0]);
+    const [validUntil, setValidUntil] = useState(
+        new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
     );
-    const [introText, setIntroText] = useState('Unsere Lieferungen/Leistungen stellen wir Ihnen wie folgt in Rechnung.');
+    const [introText, setIntroText] = useState('Wir freuen uns, Ihnen folgendes Angebot unterbreiten zu dürfen.');
     const [paymentTerms, setPaymentTerms] = useState('Zahlbar sofort, rein netto');
-    const [footerNote, setFooterNote] = useState('Vielen Dank für die gute Zusammenarbeit.');
-    const [lines, setLines] = useState<InvoiceLine[]>([
-        { description: '', quantity: 1, unit: 'Stück', unit_price: 0, tax_rate: 19, account_id: '' },
+    const [footerNote, setFooterNote] = useState('Wir freuen uns auf Ihre Auftragserteilung.');
+    const [status, setStatus] = useState('draft');
+    const [lines, setLines] = useState<QuoteLine[]>([
+        { description: '', quantity: 1, unit: 'Stück', unit_price: 0, tax_rate: 19 },
     ]);
 
-    // Address change dialog state
-    const [addressDialogOpen, setAddressDialogOpen] = useState(false);
-    const [pendingSubmitData, setPendingSubmitData] = useState<any>(null);
-
-    // Preview mode state - show preview before final save
+    // Preview mode state
     const [showPreview, setShowPreview] = useState(false);
 
     const { data: contacts } = useQuery<Contact[]>({
@@ -82,99 +57,41 @@ export function InvoiceCreate() {
         },
     });
 
-    const { data: accounts } = useQuery<Account[]>({
-        queryKey: ['accounts'],
-        queryFn: async () => {
-            const { data } = await axios.get('/api/accounts');
-            return data;
-        },
-    });
-
-    // Load existing invoice data if editing
-    const { data: existingInvoice } = useQuery({
-        queryKey: ['invoice', id],
+    // Load existing quote data if editing
+    const { data: existingQuote } = useQuery({
+        queryKey: ['quote', id],
         queryFn: async () => {
             if (!id) return null;
-            const { data } = await axios.get(`/api/invoices/${id}`);
+            const { data } = await axios.get(`/api/quotes/${id}`);
             return data;
         },
         enabled: !!id,
     });
 
-    // Fetch order data if creating from order
-    const { data: sourceOrder } = useQuery({
-        queryKey: ['order', fromOrderId],
-        queryFn: async () => {
-            if (!fromOrderId) return null;
-            const { data } = await axios.get(`/api/orders/${fromOrderId}`);
-            return data;
-        },
-        enabled: !!fromOrderId && !isEditMode,
-    });
-
-    // Populate form from order data
+    // Populate form when quote data loads
     useEffect(() => {
-        if (sourceOrder && !isEditMode) {
-            setCustomerName(sourceOrder.contact?.name || '');
-            setCustomerAddress(sourceOrder.contact?.address || '');
-            setSelectedContactId(sourceOrder.contact?.id || null);
-            setIntroText(sourceOrder.intro_text || 'Unsere Lieferungen/Leistungen stellen wir Ihnen wie folgt in Rechnung.');
-            setPaymentTerms(sourceOrder.payment_terms || 'Zahlbar sofort, rein netto');
-            setFooterNote(sourceOrder.footer_note || 'Vielen Dank für die gute Zusammenarbeit.');
+        if (existingQuote) {
+            setCustomerName(existingQuote.contact?.name || '');
+            setCustomerAddress(existingQuote.contact?.address || '');
+            setSelectedContactId(existingQuote.contact?.id || null);
+            setQuoteDate(existingQuote.quote_date?.split('T')[0] || '');
+            setValidUntil(existingQuote.valid_until?.split('T')[0] || '');
+            setIntroText(existingQuote.intro_text || 'Wir freuen uns, Ihnen folgendes Angebot unterbreiten zu dürfen.');
+            setPaymentTerms(existingQuote.payment_terms || 'Zahlbar sofort, rein netto');
+            setFooterNote(existingQuote.footer_note || 'Wir freuen uns auf Ihre Auftragserteilung.');
+            setStatus(existingQuote.status || 'draft');
 
-            if (sourceOrder.lines && sourceOrder.lines.length > 0) {
-                setLines(sourceOrder.lines.map((line: any) => {
-                    // Try to find the right account based on tax rate
-                    let accountId = '';
-                    if (accounts && accounts.length > 0) {
-                        const taxRate = parseFloat(line.tax_rate) || 19;
-                        const accountCode = TAX_ACCOUNT_MAP[taxRate] || TAX_ACCOUNT_MAP[19];
-                        let account = accounts.find(a => a.code === accountCode);
-                        if (!account) {
-                            account = accounts.find(a => a.type === 'revenue' && a.code.startsWith('8'));
-                        }
-                        if (account) {
-                            accountId = account.id.toString();
-                        }
-                    }
-
-                    return {
-                        description: line.description,
-                        quantity: parseFloat(line.quantity) || 1,
-                        unit: line.unit || 'Stück',
-                        unit_price: (line.unit_price / 100) || 0,
-                        tax_rate: parseFloat(line.tax_rate) || 19,
-                        account_id: accountId,
-                    };
-                }));
-            }
-        }
-    }, [sourceOrder, isEditMode, accounts]);
-
-    // Populate form when invoice data loads
-    useEffect(() => {
-        if (existingInvoice) {
-            setCustomerName(existingInvoice.contact?.name || '');
-            setCustomerAddress(existingInvoice.contact?.address || '');
-            setSelectedContactId(existingInvoice.contact?.id || null);
-            setInvoiceDate(existingInvoice.invoice_date?.split('T')[0] || '');
-            setDueDate(existingInvoice.due_date?.split('T')[0] || '');
-            setIntroText(existingInvoice.intro_text || 'Unsere Lieferungen/Leistungen stellen wir Ihnen wie folgt in Rechnung.');
-            setPaymentTerms(existingInvoice.payment_terms || 'Zahlbar sofort, rein netto');
-            setFooterNote(existingInvoice.footer_note || 'Vielen Dank für die gute Zusammenarbeit.');
-
-            if (existingInvoice.lines && existingInvoice.lines.length > 0) {
-                setLines(existingInvoice.lines.map((line: any) => ({
+            if (existingQuote.lines && existingQuote.lines.length > 0) {
+                setLines(existingQuote.lines.map((line: any) => ({
                     description: line.description,
                     quantity: parseFloat(line.quantity) || 1,
                     unit: line.unit || 'Stück',
                     unit_price: (line.unit_price / 100) || 0, // Convert from cents
                     tax_rate: parseFloat(line.tax_rate) || 19,
-                    account_id: line.account_id?.toString() || '',
                 })));
             }
         }
-    }, [existingInvoice]);
+    }, [existingQuote]);
 
     const createContactMutation = useMutation({
         mutationFn: async (data: any) => {
@@ -191,9 +108,9 @@ export function InvoiceCreate() {
         },
     });
 
-    const createInvoiceMutation = useMutation({
+    const createQuoteMutation = useMutation({
         mutationFn: async (data: any) => {
-            const url = isEditMode ? `/api/invoices/${id}` : '/api/invoices';
+            const url = isEditMode ? `/api/quotes/${id}` : '/api/quotes';
             const method = isEditMode ? 'put' : 'post';
 
             try {
@@ -204,8 +121,8 @@ export function InvoiceCreate() {
                 throw new Error(error.response?.data?.message || 'Fehler beim Speichern');
             }
         },
-        onSuccess: (data) => {
-            navigate(`/${tenant}/invoices/${data.id}/preview`);
+        onSuccess: () => {
+            navigate(`/${tenant}/quotes`);
         },
     });
 
@@ -215,83 +132,16 @@ export function InvoiceCreate() {
     const handleCustomerSelect = (contact: Contact) => {
         setCustomerName(contact.name);
         setCustomerAddress(contact.address || '');
-        setOriginalContactAddress(contact.address || '');
         setSelectedContactId(contact.id);
     };
 
-    // Auto-select revenue account based on tax rate when accounts load or when lines change (e.g. from order)
-    useEffect(() => {
-        if (accounts && accounts.length > 0 && lines.length > 0) {
-            const hasEmptyAccountIds = lines.some(line => !line.account_id);
-            if (hasEmptyAccountIds) {
-                setLines(prevLines =>
-                    prevLines.map(line => {
-                        // Only auto-set if account_id is empty
-                        if (!line.account_id) {
-                            const accountCode = TAX_ACCOUNT_MAP[line.tax_rate] || TAX_ACCOUNT_MAP[19];
-                            let account = accounts.find(a => a.code === accountCode);
-                            if (!account) {
-                                account = accounts.find(a => a.type === 'revenue' && a.code.startsWith('8'));
-                            }
-                            if (account) {
-                                return { ...line, account_id: account.id.toString() };
-                            }
-                        }
-                        return line;
-                    })
-                );
-            }
-        }
-    }, [accounts, lines.length]);
-
-    // Update tax rate and auto-select revenue account
-    const handleTaxRateChange = (index: number, taxRate: number) => {
-        const newLines = [...lines];
-        newLines[index] = {
-            ...newLines[index],
-            tax_rate: taxRate,
-        };
-
-        // Auto-select revenue account based on tax rate
-        const accountCode = TAX_ACCOUNT_MAP[taxRate];
-        if (accountCode && accounts) {
-            // First try exact match
-            let account = accounts.find(a => a.code === accountCode);
-
-            // If not found, try any revenue account starting with 8
-            if (!account) {
-                account = accounts.find(a => a.type === 'revenue' && a.code.startsWith('8'));
-            }
-
-            if (account) {
-                newLines[index].account_id = account.id.toString();
-            }
-        }
-
-        setLines(newLines);
-    };
-
     const addLine = () => {
-        // Find default account for 19% tax
-        let defaultAccountId = '';
-        if (accounts) {
-            const accountCode = TAX_ACCOUNT_MAP[19];
-            let account = accounts.find(a => a.code === accountCode);
-            if (!account) {
-                account = accounts.find(a => a.type === 'revenue' && a.code.startsWith('8'));
-            }
-            if (account) {
-                defaultAccountId = account.id.toString();
-            }
-        }
-
         setLines([...lines, {
             description: '',
             quantity: 1,
             unit: 'Stück',
             unit_price: 0,
             tax_rate: 19,
-            account_id: defaultAccountId
         }]);
     };
 
@@ -299,13 +149,13 @@ export function InvoiceCreate() {
         setLines(lines.filter((_, i) => i !== index));
     };
 
-    const updateLine = (index: number, field: keyof InvoiceLine, value: any) => {
+    const updateLine = (index: number, field: keyof QuoteLine, value: any) => {
         const newLines = [...lines];
         newLines[index] = { ...newLines[index], [field]: value };
         setLines(newLines);
     };
 
-    const handleSubmit = async (e: React.FormEvent, saveAddressPermanently: boolean = false) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
         let contactId = selectedContactId;
@@ -323,69 +173,26 @@ export function InvoiceCreate() {
                 alert('Fehler beim Erstellen des Kunden');
                 return;
             }
-        } else {
-            // Check if address was changed for existing contact
-            const addressChanged = originalContactAddress !== null && customerAddress !== originalContactAddress;
-
-            if (addressChanged && !pendingSubmitData) {
-                // Store pending data and show dialog
-                setPendingSubmitData({
-                    contactId,
-                    formattedLines: lines.map((line) => ({
-                        description: line.description,
-                        quantity: parseFloat(line.quantity.toString()),
-                        unit: line.unit,
-                        unit_price: Math.round(parseFloat(line.unit_price.toString()) * 100),
-                        tax_rate: parseFloat(line.tax_rate.toString()),
-                        account_id: parseInt(line.account_id),
-                    })),
-                });
-                setAddressDialogOpen(true);
-                return;
-            }
-
-            // Update contact address if user chose to save permanently
-            if (saveAddressPermanently && addressChanged) {
-                try {
-                    await axios.put(`/api/contacts/${contactId}`, {
-                        address: customerAddress,
-                    });
-                    queryClient.invalidateQueries({ queryKey: ['contacts'] });
-                } catch (error) {
-                    console.error('Fehler beim Aktualisieren der Adresse');
-                }
-            }
         }
 
-        const formattedLines = pendingSubmitData?.formattedLines || lines.map((line) => ({
+        const formattedLines = lines.map((line) => ({
             description: line.description,
             quantity: parseFloat(line.quantity.toString()),
             unit: line.unit,
-            unit_price: Math.round(parseFloat(line.unit_price.toString()) * 100),
+            unit_price: Math.round(parseFloat(line.unit_price.toString()) * 100), // convert to cents
             tax_rate: parseFloat(line.tax_rate.toString()),
-            account_id: parseInt(line.account_id),
         }));
 
-        // Clear pending data
-        setPendingSubmitData(null);
-        setAddressDialogOpen(false);
-
-        createInvoiceMutation.mutate({
-            contact_id: pendingSubmitData?.contactId || contactId,
-            order_id: fromOrderId,
-            invoice_date: invoiceDate,
-            due_date: dueDate,
+        createQuoteMutation.mutate({
+            contact_id: contactId,
+            quote_date: quoteDate,
+            valid_until: validUntil,
             intro_text: introText,
             payment_terms: paymentTerms,
             footer_note: footerNote,
+            status: status,
             lines: formattedLines,
         });
-    };
-
-    // Handle address dialog responses
-    const handleAddressDialogResponse = (savePermanently: boolean) => {
-        const fakeEvent = { preventDefault: () => { } } as React.FormEvent;
-        handleSubmit(fakeEvent, savePermanently);
     };
 
     const calculateTotal = () => {
@@ -418,7 +225,7 @@ export function InvoiceCreate() {
     const canShowPreview = () => {
         return customerName.trim() !== '' &&
             lines.length > 0 &&
-            lines.every(line => line.description.trim() !== '' && line.account_id !== '');
+            lines.every(line => line.description.trim() !== '');
     };
 
     // Filter customers for autocomplete
@@ -432,7 +239,7 @@ export function InvoiceCreate() {
         <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-cyan-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 p-6">
             <div className="max-w-7xl mx-auto space-y-6">
                 {showPreview ? (
-                    /* Preview Mode - Show invoice preview before saving */
+                    /* Preview Mode - Show quote preview before saving */
                     <>
                         <div className="flex items-center gap-4">
                             <Button
@@ -445,7 +252,7 @@ export function InvoiceCreate() {
                             </Button>
                             <div>
                                 <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-                                    Vorschau der Rechnung
+                                    Vorschau des Angebots
                                 </h1>
                                 <p className="text-gray-600 dark:text-gray-400 mt-1">
                                     Überprüfen Sie die Daten bevor Sie speichern
@@ -462,10 +269,10 @@ export function InvoiceCreate() {
                                             Entwurf - Noch nicht gespeichert
                                         </Badge>
                                         <CardTitle className="text-2xl">
-                                            Rechnungsdatum: {new Date(invoiceDate).toLocaleDateString('de-DE')}
+                                            Angebotsdatum: {new Date(quoteDate).toLocaleDateString('de-DE')}
                                         </CardTitle>
                                         <CardDescription>
-                                            Fällig am: {new Date(dueDate).toLocaleDateString('de-DE')}
+                                            Gültig bis: {new Date(validUntil).toLocaleDateString('de-DE')}
                                         </CardDescription>
                                     </div>
                                     <div className="text-right">
@@ -482,7 +289,7 @@ export function InvoiceCreate() {
                                     <div>
                                         <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2 flex items-center gap-2">
                                             <FileText className="w-4 h-4" />
-                                            Rechnungsempfänger
+                                            Angebotsempfänger
                                         </h3>
                                         <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-lg">
                                             <p className="font-semibold text-slate-900 dark:text-slate-100">{customerName}</p>
@@ -492,16 +299,16 @@ export function InvoiceCreate() {
                                     <div>
                                         <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2 flex items-center gap-2">
                                             <Calendar className="w-4 h-4" />
-                                            Rechnungsdetails
+                                            Angebotsdetails
                                         </h3>
                                         <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-lg space-y-2">
                                             <div className="flex justify-between">
-                                                <span className="text-slate-600 dark:text-slate-400">Rechnungsdatum:</span>
-                                                <span className="font-medium">{new Date(invoiceDate).toLocaleDateString('de-DE')}</span>
+                                                <span className="text-slate-600 dark:text-slate-400">Angebotsdatum:</span>
+                                                <span className="font-medium">{new Date(quoteDate).toLocaleDateString('de-DE')}</span>
                                             </div>
                                             <div className="flex justify-between">
-                                                <span className="text-slate-600 dark:text-slate-400">Fällig am:</span>
-                                                <span className="font-medium">{new Date(dueDate).toLocaleDateString('de-DE')}</span>
+                                                <span className="text-slate-600 dark:text-slate-400">Gültig bis:</span>
+                                                <span className="font-medium">{new Date(validUntil).toLocaleDateString('de-DE')}</span>
                                             </div>
                                         </div>
                                     </div>
@@ -601,7 +408,7 @@ export function InvoiceCreate() {
                                 Zurück zum Bearbeiten
                             </Button>
                             <div className="flex gap-3">
-                                <Link to={`/${tenant}/invoices`}>
+                                <Link to={`/${tenant}/quotes`}>
                                     <Button variant="ghost" className="gap-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50">
                                         <X className="w-4 h-4" />
                                         Verwerfen
@@ -609,11 +416,11 @@ export function InvoiceCreate() {
                                 </Link>
                                 <Button
                                     onClick={() => handleSubmit({ preventDefault: () => { } } as React.FormEvent)}
-                                    disabled={createInvoiceMutation.isPending || createContactMutation.isPending}
+                                    disabled={createQuoteMutation.isPending || createContactMutation.isPending}
                                     className="gap-2 shadow-lg shadow-emerald-100/20 hover:shadow-emerald-200/30 transition-all duration-300 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700"
                                 >
                                     <Save className="w-4 h-4" />
-                                    {createInvoiceMutation.isPending ? 'Speichere...' : 'Rechnung erstellen'}
+                                    {createQuoteMutation.isPending ? 'Speichere...' : 'Angebot erstellen'}
                                 </Button>
                             </div>
                         </div>
@@ -622,31 +429,22 @@ export function InvoiceCreate() {
                     /* Edit Mode - Show the form */
                     <>
                         <div className="flex items-center gap-4">
-                            <Link to={`/${tenant}/invoices`}>
+                            <Link to={`/${tenant}/quotes`}>
                                 <Button variant="ghost" size="icon" className="h-10 w-10 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
                                     <ArrowLeft className="w-5 h-5" />
                                 </Button>
                             </Link>
                             <div>
                                 <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-                                    {isEditMode ? 'Rechnung bearbeiten' : 'Neue Rechnung'}
+                                    {isEditMode ? 'Angebot bearbeiten' : 'Neues Angebot'}
                                 </h1>
                                 <p className="text-gray-600 dark:text-gray-400 mt-1">
-                                    {isEditMode ? 'Bearbeite die Rechnungsdaten' : 'Erstelle eine neue Ausgangsrechnung'}
+                                    {isEditMode ? 'Bearbeite die Angebotsdaten' : 'Erstelle ein neues Angebot'}
                                 </p>
                             </div>
                         </div>
 
                         <form onSubmit={handleSubmit} className="space-y-6">
-                            {/* Info when creating from order */}
-                            {sourceOrder && (
-                                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                                    <p className="text-blue-700 dark:text-blue-300 text-sm">
-                                        <strong>Hinweis:</strong> Diese Rechnung wird aus Auftrag <strong>{sourceOrder.order_number}</strong> erstellt.
-                                        Die Positionen wurden automatisch übernommen. Bitte prüfen Sie die Daten und wählen Sie die Erlöskonten aus.
-                                    </p>
-                                </div>
-                            )}
                             {/* Customer Info */}
                             <Card className="border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg">
                                 <CardHeader className="border-b border-gray-200 dark:border-gray-700">
@@ -682,7 +480,7 @@ export function InvoiceCreate() {
                                                             key={contact.id}
                                                             type="button"
                                                             onClick={() => handleCustomerSelect(contact)}
-                                                            className="px-4 py-2 text-left hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-between"
+                                                            className="px-4 py-2 text-left hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-between w-full"
                                                         >
                                                             <span className="text-slate-900 dark:text-slate-100">{contact.name}</span>
                                                             <span className="text-xs text-slate-500 dark:text-slate-400">Vorhanden</span>
@@ -719,37 +517,36 @@ export function InvoiceCreate() {
                                 </CardContent>
                             </Card>
 
-                            {/* Invoice Details */}
+                            {/* Quote Details */}
                             <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
                                 <CardHeader>
                                     <CardTitle className="flex items-center gap-2">
                                         <Calendar className="w-5 h-5 text-primary" />
-                                        Rechnungsdetails
+                                        Angebotsdetails
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <div>
                                             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                                                Rechnungsdatum *
+                                                Angebotsdatum *
                                             </label>
                                             <Input
                                                 type="date"
-                                                value={invoiceDate}
-                                                onChange={(e) => setInvoiceDate(e.target.value)}
+                                                value={quoteDate}
+                                                onChange={(e) => setQuoteDate(e.target.value)}
                                                 required
                                                 className="bg-white dark:bg-slate-950"
                                             />
                                         </div>
                                         <div>
                                             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                                                Fälligkeitsdatum *
+                                                Gültig bis
                                             </label>
                                             <Input
                                                 type="date"
-                                                value={dueDate}
-                                                onChange={(e) => setDueDate(e.target.value)}
-                                                required
+                                                value={validUntil}
+                                                onChange={(e) => setValidUntil(e.target.value)}
                                                 className="bg-white dark:bg-slate-950"
                                             />
                                         </div>
@@ -762,10 +559,31 @@ export function InvoiceCreate() {
                                             value={introText}
                                             onChange={(e) => setIntroText(e.target.value)}
                                             rows={2}
-                                            placeholder="Unsere Lieferungen/Leistungen stellen wir Ihnen wie folgt in Rechnung."
+                                            placeholder="Wir freuen uns, Ihnen folgendes Angebot unterbreiten zu dürfen."
                                             className="bg-white dark:bg-slate-950 resize-none"
                                         />
                                     </div>
+                                    {isEditMode && (
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                                Status
+                                            </label>
+                                            <Select value={status} onValueChange={setStatus}>
+                                                <SelectTrigger className="bg-white dark:bg-slate-950">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="draft">Entwurf</SelectItem>
+                                                    <SelectItem value="sent">Versendet</SelectItem>
+                                                    <SelectItem value="accepted">Akzeptiert</SelectItem>
+                                                    <SelectItem value="rejected">Abgelehnt</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                                Status kann bei Bedarf manuell geändert werden
+                                            </p>
+                                        </div>
+                                    )}
                                 </CardContent>
                             </Card>
 
@@ -808,10 +626,11 @@ export function InvoiceCreate() {
                                                     </label>
                                                     <Input
                                                         type="number"
-                                                        step="0.01"
+                                                        step="1"
+                                                        min="1"
                                                         value={line.quantity}
                                                         onChange={(e) =>
-                                                            updateLine(index, 'quantity', parseFloat(e.target.value))
+                                                            updateLine(index, 'quantity', parseInt(e.target.value) || 1)
                                                         }
                                                         required
                                                         className="bg-white dark:bg-slate-950"
@@ -858,7 +677,7 @@ export function InvoiceCreate() {
                                                     </label>
                                                     <Select
                                                         value={line.tax_rate.toString()}
-                                                        onValueChange={(value) => handleTaxRateChange(index, parseFloat(value))}
+                                                        onValueChange={(value) => updateLine(index, 'tax_rate', parseFloat(value))}
                                                         defaultValue="19"
                                                     >
                                                         <SelectTrigger className="bg-white dark:bg-slate-950">
@@ -909,7 +728,7 @@ export function InvoiceCreate() {
                             <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
                                 <CardHeader>
                                     <CardTitle className="flex items-center gap-2">
-                                        <CreditCard className="w-5 h-5 text-primary" />
+                                        <FileText className="w-5 h-5 text-primary" />
                                         Zahlungsangaben (optional)
                                     </CardTitle>
                                 </CardHeader>
@@ -933,7 +752,7 @@ export function InvoiceCreate() {
                                             value={footerNote}
                                             onChange={(e) => setFooterNote(e.target.value)}
                                             rows={2}
-                                            placeholder="Vielen Dank für die gute Zusammenarbeit."
+                                            placeholder="Wir freuen uns auf Ihre Auftragserteilung."
                                             className="bg-white dark:bg-slate-950 resize-none"
                                         />
                                     </div>
@@ -941,8 +760,8 @@ export function InvoiceCreate() {
                             </Card>
 
                             {/* Actions */}
-                            <div className="flex justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
-                                <Link to={`/${tenant}/invoices`}>
+                            <div className="flex justify-end gap-4 pb-8">
+                                <Link to={`/${tenant}/quotes`}>
                                     <Button type="button" variant="outline" className="gap-2">
                                         <X className="w-4 h-4" />
                                         Abbrechen
@@ -951,11 +770,11 @@ export function InvoiceCreate() {
                                 {isEditMode ? (
                                     <Button
                                         type="submit"
-                                        disabled={createInvoiceMutation.isPending || createContactMutation.isPending}
-                                        className="gap-2 shadow-lg shadow-indigo-100/20 hover:shadow-indigo-200/30 transition-all duration-300 bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-700 hover:to-cyan-700"
+                                        disabled={createQuoteMutation.isPending || createContactMutation.isPending}
+                                        className="gap-2 bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-700 hover:to-cyan-700 text-white shadow-lg shadow-indigo-500/30"
                                     >
                                         <Save className="w-4 h-4" />
-                                        {createInvoiceMutation.isPending ? 'Speichere...' : 'Änderungen speichern'}
+                                        {createQuoteMutation.isPending ? 'Speichere...' : 'Änderungen speichern'}
                                     </Button>
                                 ) : (
                                     <Button
@@ -964,10 +783,10 @@ export function InvoiceCreate() {
                                             if (canShowPreview()) {
                                                 setShowPreview(true);
                                             } else {
-                                                alert('Bitte füllen Sie alle Pflichtfelder aus (Kunde, Beschreibung, Konto).');
+                                                alert('Bitte füllen Sie alle Pflichtfelder aus (Kunde, Beschreibung).');
                                             }
                                         }}
-                                        className="gap-2 shadow-lg shadow-indigo-100/20 hover:shadow-indigo-200/30 transition-all duration-300 bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-700 hover:to-cyan-700"
+                                        className="gap-2 bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-700 hover:to-cyan-700 text-white shadow-lg shadow-indigo-500/30"
                                     >
                                         <Eye className="w-4 h-4" />
                                         Vorschau anzeigen
@@ -977,37 +796,8 @@ export function InvoiceCreate() {
                         </form>
                     </>
                 )}
-
-                {/* Address Change Dialog */}
-                <Dialog open={addressDialogOpen} onOpenChange={setAddressDialogOpen}>
-                    <DialogContent className="sm:max-w-md">
-                        <DialogHeader>
-                            <DialogTitle>Adresse geändert</DialogTitle>
-                            <DialogDescription>
-                                Die Adresse wurde geändert. Möchten Sie die neue Adresse dauerhaft beim Kunden speichern?
-                            </DialogDescription>
-                        </DialogHeader>
-                        <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-md text-sm">
-                            <p className="font-medium text-slate-700 dark:text-slate-300 mb-1">Neue Adresse:</p>
-                            <p className="text-slate-600 dark:text-slate-400 whitespace-pre-line">{customerAddress}</p>
-                        </div>
-                        <DialogFooter className="flex gap-2 sm:gap-0">
-                            <Button
-                                variant="outline"
-                                onClick={() => handleAddressDialogResponse(false)}
-                            >
-                                Nur für diese Rechnung
-                            </Button>
-                            <Button
-                                onClick={() => handleAddressDialogResponse(true)}
-                                className="bg-gradient-to-r from-indigo-600 to-cyan-600"
-                            >
-                                Dauerhaft speichern
-                            </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
             </div>
         </div>
     );
 }
+

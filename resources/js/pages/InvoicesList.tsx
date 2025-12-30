@@ -8,8 +8,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { Plus, FileText, Trash2, Send, Euro, Eye, Edit, Search } from 'lucide-react';
+import { Plus, FileText, Trash2, Send, Euro, Eye, Edit, Search, Package } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { SendEmailModal, EmailData } from '@/components/SendEmailModal';
 
 interface Invoice {
     id: number;
@@ -17,6 +18,11 @@ interface Invoice {
     contact: {
         id: number;
         name: string;
+        email?: string;
+    };
+    order?: {
+        id: number;
+        order_number: string;
     };
     invoice_date: string;
     due_date: string;
@@ -32,6 +38,7 @@ export function InvoicesList() {
     const [paymentAccount, setPaymentAccount] = useState('');
     const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
     const [searchTerm, setSearchTerm] = useState('');
+    const [emailModal, setEmailModal] = useState<{ open: boolean; invoice: Invoice | null }>({ open: false, invoice: null });
 
     const { data: invoices, isLoading } = useQuery<Invoice[]>({
         queryKey: ['invoices'],
@@ -58,6 +65,26 @@ export function InvoicesList() {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['invoices'] });
+        },
+    });
+
+    const sendMutation = useMutation({
+        mutationFn: async ({ id, emailData }: { id: number; emailData: EmailData }) => {
+            const { data } = await axios.post(`/api/invoices/${id}/send`, emailData);
+            return data;
+        },
+        onSuccess: () => {
+            setEmailModal({ open: false, invoice: null });
+            queryClient.invalidateQueries({ queryKey: ['invoices'] });
+        },
+    });
+
+    // Fetch company settings for email signature
+    const { data: settings } = useQuery({
+        queryKey: ['settings'],
+        queryFn: async () => {
+            const { data } = await axios.get('/api/settings');
+            return data;
         },
     });
 
@@ -129,6 +156,10 @@ export function InvoicesList() {
         if (confirm('Rechnung jetzt buchen? Dies kann nicht rückgängig gemacht werden.')) {
             bookMutation.mutate(id);
         }
+    };
+
+    const handleSend = (invoice: Invoice) => {
+        setEmailModal({ open: true, invoice });
     };
 
     const filteredInvoices = invoices?.filter(invoice =>
@@ -218,7 +249,11 @@ export function InvoicesList() {
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                                 {filteredInvoices?.map((invoice) => (
-                                    <tr key={invoice.id} className="group hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
+                                    <tr
+                                        key={invoice.id}
+                                        className="group hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
+                                        onClick={() => navigate(`/${tenant}/invoices/${invoice.id}/preview`)}
+                                    >
                                         <td className="px-6 py-4 font-mono font-medium text-slate-900 dark:text-slate-100">
                                             {invoice.invoice_number}
                                         </td>
@@ -235,11 +270,19 @@ export function InvoicesList() {
                                             {formatCurrency(invoice.total)}
                                         </td>
                                         <td className="px-6 py-4">
-                                            <Badge variant="outline" className={`font-normal ${statusStyles[invoice.status] || 'bg-slate-100 text-slate-700 border-slate-200'}`}>
-                                                {statusLabels[invoice.status] || invoice.status}
-                                            </Badge>
+                                            <div className="flex items-center gap-2">
+                                                <Badge variant="outline" className={`font-normal ${statusStyles[invoice.status] || 'bg-slate-100 text-slate-700 border-slate-200'}`}>
+                                                    {statusLabels[invoice.status] || invoice.status}
+                                                </Badge>
+                                                {invoice.order && (
+                                                    <Badge variant="outline" className="font-normal bg-indigo-50 text-indigo-600 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-400 dark:border-indigo-800">
+                                                        <Package className="w-3 h-3 mr-1" />
+                                                        aus Auftrag
+                                                    </Badge>
+                                                )}
+                                            </div>
                                         </td>
-                                        <td className="px-6 py-4 text-right">
+                                        <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                                             <div className="flex justify-end items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                                 {/* View Button - Always */}
                                                 <Button
@@ -268,7 +311,7 @@ export function InvoicesList() {
                                                             size="icon"
                                                             variant="ghost"
                                                             className="h-8 w-8 text-slate-500 hover:text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20"
-                                                            onClick={() => navigate(`/invoices/${invoice.id}/edit`)}
+                                                            onClick={() => navigate(`/${tenant}/invoices/${invoice.id}/edit`)}
                                                             title="Bearbeiten"
                                                         >
                                                             <Edit className="w-4 h-4" />
@@ -284,6 +327,19 @@ export function InvoicesList() {
                                                             <Trash2 className="w-4 h-4" />
                                                         </Button>
                                                     </>
+                                                )}
+                                                {invoice.status !== 'draft' && (
+                                                    <Button
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        className="h-8 px-2 text-purple-600 hover:text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-900/20"
+                                                        onClick={() => handleSend(invoice)}
+                                                        disabled={sendMutation.isPending}
+                                                        title="Versenden"
+                                                    >
+                                                        <Send className="w-4 h-4 mr-1" />
+                                                        <span className="text-xs font-medium">Senden</span>
+                                                    </Button>
                                                 )}
                                                 {(invoice.status === 'booked' || invoice.status === 'sent') && (
                                                     <Button
@@ -368,6 +424,25 @@ export function InvoicesList() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* Send Email Modal */}
+            {emailModal.invoice && (
+                <SendEmailModal
+                    open={emailModal.open}
+                    onOpenChange={(open) => !open && setEmailModal({ open: false, invoice: null })}
+                    documentType="invoice"
+                    documentNumber={emailModal.invoice.invoice_number}
+                    customerEmail={emailModal.invoice.contact.email}
+                    customerName={emailModal.invoice.contact.name}
+                    companyName={settings?.company_name || ''}
+                    onSend={async (data) => {
+                        if (emailModal.invoice) {
+                            await sendMutation.mutateAsync({ id: emailModal.invoice.id, emailData: data });
+                        }
+                    }}
+                    isPending={sendMutation.isPending}
+                />
+            )}
         </div>
     );
 }

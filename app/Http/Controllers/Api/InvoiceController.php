@@ -14,7 +14,7 @@ class InvoiceController extends Controller
     {
         $tenant = $this->getTenantOrFail();
         $invoices = Invoice::where('tenant_id', $tenant->id)
-            ->with(['contact', 'lines'])
+            ->with(['contact', 'lines', 'order'])
             ->orderBy('id', 'desc')
             ->get();
         return response()->json($invoices);
@@ -24,6 +24,7 @@ class InvoiceController extends Controller
     {
         $validated = $request->validate([
             'contact_id' => 'required|exists:contacts,id',
+            'order_id' => 'nullable|exists:orders,id',
             'invoice_date' => 'required|date',
             'due_date' => 'required|date',
             'notes' => 'nullable|string',
@@ -74,6 +75,7 @@ class InvoiceController extends Controller
             'intro_text' => $validated['intro_text'] ?? 'Unsere Lieferungen/Leistungen stellen wir Ihnen wie folgt in Rechnung.',
             'payment_terms' => $validated['payment_terms'] ?? 'Zahlbar sofort, rein netto',
             'footer_note' => $validated['footer_note'] ?? 'Vielen Dank für die gute Zusammenarbeit.',
+            'order_id' => $validated['order_id'] ?? null,
             'status' => 'draft',
         ]);
 
@@ -89,6 +91,14 @@ class InvoiceController extends Controller
                 'line_total' => $lineTotal,
                 'account_id' => $line['account_id'],
             ]);
+        }
+
+        // Update order status if invoice was created from an order
+        if (!empty($validated['order_id'])) {
+            $order = \App\Models\Order::find($validated['order_id']);
+            if ($order) {
+                $order->update(['status' => 'invoiced']);
+            }
         }
 
         return response()->json($invoice->load(['contact', 'lines']), 201);
@@ -108,6 +118,15 @@ class InvoiceController extends Controller
             return response()->json(['error' => 'Nur Entwürfe können gelöscht werden'], 400);
         }
 
+        // Reset order status if invoice was created from an order
+        if ($invoice->order_id) {
+            $order = \App\Models\Order::find($invoice->order_id);
+            if ($order) {
+                $order->update(['status' => 'open']);
+            }
+        }
+
+        // Hard delete for drafts (Invoice doesn't use SoftDeletes)
         $invoice->delete();
         return response()->json(['message' => 'Rechnung gelöscht']);
     }
@@ -336,6 +355,93 @@ class InvoiceController extends Controller
     }
 
     /**
+     * Send invoice by email
+     */
+    public function send(Request $request, Invoice $invoice)
+    {
+        $tenant = $this->getTenantOrFail();
+        
+        // Validate tenant ownership
+        if ($invoice->tenant_id !== $tenant->id) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        // Allow sending from any status (user can resend if needed)
+
+        $validated = $request->validate([
+            'to' => 'required|email',
+            'cc' => 'nullable|email',
+            'subject' => 'required|string',
+            'body' => 'required|string',
+            'signature' => 'nullable|string',
+        ]);
+
+        // Load relations needed for PDF
+        $invoice->load(['contact', 'lines.account']);
+        $settings = \App\Models\CompanySetting::first();
+
+        // Generate PDF
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('invoices.pdf', [
+            'invoice' => $invoice,
+            'settings' => $settings,
+        ])->setPaper('a4');
+
+        // Save PDF temporarily
+        $pdfPath = storage_path("app/temp/invoice-{$invoice->invoice_number}.pdf");
+        
+        // Ensure directory exists
+        if (!is_dir(storage_path('app/temp'))) {
+            mkdir(storage_path('app/temp'), 0755, true);
+        }
+        
+        $pdf->save($pdfPath);
+
+        try {
+            // Create and send the mailable
+            $mail = new \App\Mail\SendDocumentMail(
+                $validated['subject'],
+                $validated['body'],
+                $validated['signature'] ?? '',
+                $pdfPath,
+                "Rechnung-{$invoice->invoice_number}.pdf"
+            );
+
+            $to = $validated['to'];
+            if (!empty($validated['cc'])) {
+                \Illuminate\Support\Facades\Mail::to($to)
+                    ->cc($validated['cc'])
+                    ->send($mail);
+            } else {
+                \Illuminate\Support\Facades\Mail::to($to)->send($mail);
+            }
+
+            // Update invoice status only if currently booked
+            if ($invoice->status === 'booked') {
+                $invoice->update(['status' => 'sent']);
+            }
+
+            // Clean up temp file
+            if (file_exists($pdfPath)) {
+                unlink($pdfPath);
+            }
+
+            return response()->json([
+                'message' => 'Rechnung erfolgreich versendet',
+                'invoice' => $invoice->fresh(['contact', 'lines']),
+            ]);
+        } catch (\Exception $e) {
+            // Clean up temp file on error
+            if (file_exists($pdfPath)) {
+                unlink($pdfPath);
+            }
+            
+            return response()->json([
+                'error' => 'Fehler beim Senden der E-Mail: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Download invoice as PDF
      */
     public function downloadPDF(Request $request, int $id)
@@ -354,3 +460,4 @@ class InvoiceController extends Controller
         return $pdf->download("Rechnung-{$invoice->invoice_number}.pdf");
     }
 }
+

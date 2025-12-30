@@ -274,7 +274,11 @@ export function BelegeList() {
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                                 {filteredBelege?.map((beleg) => (
-                                    <tr key={beleg.id} className="group hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
+                                    <tr
+                                        key={beleg.id}
+                                        className="group hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
+                                        onClick={() => navigate(`/${tenant}/belege/${beleg.id}`)}
+                                    >
                                         <td className="px-6 py-4 font-mono font-medium text-slate-900 dark:text-slate-100">
                                             {beleg.document_number}
                                         </td>
@@ -300,7 +304,7 @@ export function BelegeList() {
                                                 {statusLabels[beleg.status]}
                                             </Badge>
                                         </td>
-                                        <td className="px-6 py-4 text-right">
+                                        <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                                             <div className="flex justify-end items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                                 {/* View Button */}
                                                 <Button

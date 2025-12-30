@@ -13,6 +13,8 @@ import {
     BookOpen,
     Receipt,
     Landmark,
+    FileCheck,
+    ShoppingCart,
 } from "lucide-react"
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
@@ -81,6 +83,18 @@ export function Sidebar({ className }: SidebarProps) {
             icon: Users,
             href: tenantUrl("/contacts"),
             active: isActive("/contacts"),
+        },
+        {
+            label: "Angebote",
+            icon: FileCheck,
+            href: tenantUrl("/quotes"),
+            active: isActive("/quotes"),
+        },
+        {
+            label: "Aufträge",
+            icon: ShoppingCart,
+            href: tenantUrl("/orders"),
+            active: isActive("/orders"),
         },
         {
             label: "Rechnungen",

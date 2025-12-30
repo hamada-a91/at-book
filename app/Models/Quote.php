@@ -4,31 +4,31 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Concerns\BelongsToTenant;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
-class Invoice extends Model
+class Quote extends Model
 {
-    use BelongsToTenant;
+    use BelongsToTenant, SoftDeletes;
     
     protected $fillable = [
-        'invoice_number',
         'contact_id',
-        'order_id',
-        'invoice_date',
-        'due_date',
+        'quote_number',
+        'quote_date',
+        'valid_until',
         'status',
         'subtotal',
         'tax_total',
         'total',
-        'journal_entry_id',
-        'notes',
         'intro_text',
         'payment_terms',
         'footer_note',
+        'notes',
+        'order_id',
     ];
 
     protected $casts = [
-        'invoice_date' => 'date',
-        'due_date' => 'date',
+        'quote_date' => 'date',
+        'valid_until' => 'date',
     ];
 
     public function contact()
@@ -38,12 +38,7 @@ class Invoice extends Model
 
     public function lines()
     {
-        return $this->hasMany(InvoiceLine::class);
-    }
-
-    public function journalEntry()
-    {
-        return $this->belongsTo(\App\Modules\Accounting\Models\JournalEntry::class);
+        return $this->hasMany(QuoteLine::class);
     }
 
     public function order()

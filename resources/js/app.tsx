@@ -18,6 +18,11 @@ import { BelegeList } from './pages/BelegeList';
 import { BelegCreate } from './pages/BelegCreate';
 import { BelegView } from './pages/BelegView';
 import { BankAccountsList } from './pages/BankAccountsList';
+import { QuotesList } from './pages/QuotesList';
+import { QuoteCreate } from './pages/QuoteCreate';
+import { OrdersList } from './pages/OrdersList';
+import { OrderDetail } from './pages/OrderDetail';
+import { QuotePreview } from './pages/QuotePreview';
 import Onboarding from './pages/Onboarding';
 import Welcome from './pages/Welcome';
 import Register from './pages/Auth/Register';
@@ -187,6 +192,13 @@ function TenantRoutes() {
                             <Route path="/invoices/create" element={<InvoiceCreate />} />
                             <Route path="/invoices/:id/preview" element={<InvoicePreview />} />
                             <Route path="/invoices/:id/edit" element={<InvoiceCreate />} />
+                            <Route path="/quotes" element={<QuotesList />} />
+                            <Route path="/quotes/create" element={<QuoteCreate />} />
+                            <Route path="/quotes/:id" element={<QuotePreview />} />
+                            <Route path="/quotes/:id/edit" element={<QuoteCreate />} />
+                            <Route path="/orders" element={<OrdersList />} />
+                            <Route path="/orders/:id" element={<OrderDetail />} />
+                            <Route path="/orders/create" element={<QuoteCreate />} />
                             <Route path="/belege" element={<BelegeList />} />
                             <Route path="/belege/create" element={<BelegCreate />} />
                             <Route path="/belege/:id" element={<BelegView />} />
