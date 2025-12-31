@@ -68,6 +68,7 @@ export function ContactSelector({ contacts, value, onChange }: ContactSelectorPr
             <Popover open={open} onOpenChange={setOpen}>
                 <PopoverTrigger asChild>
                     <Button
+                        type="button"
                         variant="outline"
                         role="combobox"
                         aria-expanded={open}
@@ -135,6 +136,7 @@ export function ContactSelector({ contacts, value, onChange }: ContactSelectorPr
                     <div className="p-2 border-t bg-slate-50">
                         <DialogTrigger asChild>
                             <Button
+                                type="button"
                                 variant="secondary"
                                 size="sm"
                                 className="w-full justify-start"

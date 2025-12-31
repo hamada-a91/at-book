@@ -9,12 +9,20 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ArrowLeft, Save, X, Calendar, FileText, Upload, Receipt, Euro, User } from 'lucide-react';
 import { ContactSelector } from '@/components/ContactSelector';
+import { AccountSelector } from '@/components/AccountSelector';
 import { BelegType } from '@/types/beleg';
 
 interface Contact {
     id: number;
     name: string;
     type: 'customer' | 'vendor' | 'both' | 'other';
+}
+
+interface Account {
+    id: number;
+    code: string;
+    name: string;
+    type: string;
 }
 
 export function BelegCreate() {
@@ -32,12 +40,24 @@ export function BelegCreate() {
     const [contactId, setContactId] = useState<string>('');
     const [notes, setNotes] = useState('');
     const [dueDate, setDueDate] = useState('');
+    const [categoryAccountId, setCategoryAccountId] = useState<string>('');
+    const [isPaid, setIsPaid] = useState(false);
+    const [paymentAccountId, setPaymentAccountId] = useState<string>('');
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
     const { data: contacts } = useQuery<Contact[]>({
         queryKey: ['contacts'],
         queryFn: async () => {
             const { data } = await axios.get('/api/contacts');
+            return data;
+        },
+    });
+
+    // Fetch expense/revenue accounts for Sachkonto selection
+    const { data: accounts } = useQuery<Account[]>({
+        queryKey: ['accounts'],
+        queryFn: async () => {
+            const { data } = await axios.get('/api/accounts');
             return data;
         },
     });
@@ -74,6 +94,9 @@ export function BelegCreate() {
             }
 
             setContactId(existingBeleg.contact_id?.toString() || '');
+            setCategoryAccountId(existingBeleg.category_account_id?.toString() || '');
+            setIsPaid(existingBeleg.is_paid || false);
+            setPaymentAccountId(existingBeleg.payment_account_id?.toString() || '');
             setNotes(existingBeleg.notes || '');
             setDueDate(existingBeleg.due_date?.split('T')[0] || '');
         }
@@ -140,6 +163,9 @@ export function BelegCreate() {
             amount: Math.round((amount || 0) * 100),
             tax_amount: Math.round((taxAmount || 0) * 100),
             contact_id: contactId ? parseInt(contactId) : null,
+            category_account_id: categoryAccountId ? parseInt(categoryAccountId) : null,
+            is_paid: isPaid,
+            payment_account_id: isPaid && paymentAccountId ? parseInt(paymentAccountId) : null,
             notes: notes || null,
             due_date: dueDate || null,
         });
@@ -311,7 +337,84 @@ export function BelegCreate() {
                         </CardContent>
                     </Card>
 
-                    {/* Amount Details */}
+                    {/* Sachkonto (Category) Selection */}
+                    <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <Receipt className="w-5 h-5 text-primary" />
+                                Sachkonto (Kategorie)
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                    {documentType === 'ausgang' ? 'Erlöskonto' : 'Aufwandskonto'} *
+                                </label>
+                                <AccountSelector
+                                    accounts={accounts}
+                                    value={categoryAccountId}
+                                    onChange={setCategoryAccountId}
+                                    filterType={documentType === 'ausgang' ? ['revenue'] : ['expense']}
+                                    placeholder="Sachkonto suchen..."
+                                />
+                                <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                                    {documentType === 'ausgang'
+                                        ? 'Z.B. Umsatzerlöse 19%, Sonstige Erlöse'
+                                        : 'Z.B. Büromaterial, Reisekosten, Telefon'}
+                                </p>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Direct Payment Option */}
+                    <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <Euro className="w-5 h-5 text-primary" />
+                                Direkte Zahlung
+                            </CardTitle>
+                            <CardDescription>
+                                Optional: Bei Buchung wird gleichzeitig die Zahlung erfasst
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="flex items-center space-x-3">
+                                <input
+                                    type="checkbox"
+                                    id="isPaid"
+                                    checked={isPaid}
+                                    onChange={(e) => {
+                                        setIsPaid(e.target.checked);
+                                        if (!e.target.checked) {
+                                            setPaymentAccountId('');
+                                        }
+                                    }}
+                                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                                />
+                                <label htmlFor="isPaid" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                    Bereits bezahlt (Barzahlung / sofort überwiesen)
+                                </label>
+                            </div>
+
+                            {isPaid && (
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                        Zahlungskonto *
+                                    </label>
+                                    <AccountSelector
+                                        accounts={accounts}
+                                        value={paymentAccountId}
+                                        onChange={setPaymentAccountId}
+                                        filterType={['asset']}
+                                        placeholder="Bank / Kasse wählen..."
+                                    />
+                                    <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                                        Z.B. Bank, Kasse, PayPal
+                                    </p>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
                     <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2">

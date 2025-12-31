@@ -46,22 +46,37 @@ class Skr03AccountPlanGenerator
     {
         $newAccounts = [];
         
+        // Get current tenant
+        $tenant = tenant();
+        if (!$tenant && auth('api')->check()) {
+            $tenant = auth('api')->user()->tenant;
+        }
+        
+        if (!$tenant) {
+            throw new \Exception('No tenant context available');
+        }
+        
         // 1. Sammle alle Ziel-Konten für neue Business-Models
         foreach ($newBusinessModels as $model) {
             $newAccounts = array_merge($newAccounts, $this->getBusinessModelAccounts($model));
         }
         
-        // 2. Prüfe, welche Konten bereits existieren
-        $existingCodes = Account::pluck('code')->toArray();
+        // 2. Remove duplicates from the new accounts list itself (based on code)
+        $newAccounts = $this->removeDuplicates($newAccounts);
         
-        // 3. Filtere nur fehlende Konten
+        // 3. Prüfe, welche Konten bereits existieren für diesen Tenant
+        $existingCodes = Account::where('tenant_id', $tenant->id)->pluck('code')->toArray();
+        
+        // 4. Filtere nur fehlende Konten
         $missingAccounts = array_filter($newAccounts, fn($acc) => 
             !in_array($acc['code'], $existingCodes)
         );
         
-        // 4. Lege nur neue Konten an (bestehende NIEMALS anfassen!)
+        // 5. Lege nur neue Konten an (bestehende NIEMALS anfassen!)
         $createdAccounts = [];
         foreach ($missingAccounts as $account) {
+            // Ensure tenant_id is set
+            $account['tenant_id'] = $tenant->id;
             $createdAccounts[] = Account::create($account);
         }
         
@@ -435,6 +450,32 @@ class Skr03AccountPlanGenerator
                 'default_tax_code' => 'VST19',
                 'default_tax_rate' => 19,
                 'tax_automation_type' => 'default',
+                'is_system' => true,
+                'is_generated' => true
+            ],
+            [
+                'code' => '0480',
+                'name' => 'Geringwertige Wirtschaftsgüter (GWG)',
+                'type' => 'asset',
+                'category' => 'Anlagevermögen',
+                'skr03_class' => 0,
+                'account_purpose' => 'balance_sheet',
+                'default_tax_code' => 'VST19',
+                'default_tax_rate' => 19,
+                'tax_automation_type' => 'default',
+                'is_system' => true,
+                'is_generated' => true
+            ],
+            [
+                'code' => '4855',
+                'name' => 'Sofortabschreibung GWG',
+                'type' => 'expense',
+                'category' => 'Abschreibungen',
+                'skr03_class' => 4,
+                'account_purpose' => 'income_statement',
+                'default_tax_code' => null,
+                'default_tax_rate' => null,
+                'tax_automation_type' => 'none',
                 'is_system' => true,
                 'is_generated' => true
             ],

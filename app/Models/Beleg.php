@@ -20,17 +20,21 @@ class Beleg extends Model
         'amount',
         'tax_amount',
         'contact_id',
+        'category_account_id',
         'journal_entry_id',
         'file_path',
         'file_name',
         'notes',
         'status',
         'due_date',
+        'is_paid',
+        'payment_account_id',
     ];
 
     protected $casts = [
         'document_date' => 'datetime:Y-m-d',
         'due_date' => 'datetime:Y-m-d',
+        'is_paid' => 'boolean',
     ];
 
     public function contact()
@@ -41,5 +45,15 @@ class Beleg extends Model
     public function journalEntry()
     {
         return $this->belongsTo(\App\Modules\Accounting\Models\JournalEntry::class);
+    }
+
+    public function categoryAccount()
+    {
+        return $this->belongsTo(\App\Modules\Accounting\Models\Account::class, 'category_account_id');
+    }
+
+    public function paymentAccount()
+    {
+        return $this->belongsTo(\App\Modules\Accounting\Models\Account::class, 'payment_account_id');
     }
 }

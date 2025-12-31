@@ -128,7 +128,10 @@ export function ContactForm({ onSubmit, isSubmitting = false, defaultValues }: C
 
     return (
         <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <form onSubmit={(e) => {
+                e.stopPropagation();
+                form.handleSubmit(onSubmit)(e);
+            }} className="space-y-4">
                 {/* Required Fields */}
                 <FormField
                     control={form.control}

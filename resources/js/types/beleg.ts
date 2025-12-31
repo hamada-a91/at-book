@@ -14,6 +14,19 @@ export interface Beleg {
         id: number;
         name: string;
     };
+    category_account_id: number | null;
+    category_account?: {
+        id: number;
+        code: string;
+        name: string;
+    };
+    is_paid: boolean;
+    payment_account_id: number | null;
+    payment_account?: {
+        id: number;
+        code: string;
+        name: string;
+    };
     journal_entry_id: number | null;
     journalEntry?: {
         id: number;

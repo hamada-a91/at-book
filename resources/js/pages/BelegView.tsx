@@ -386,6 +386,38 @@ export function BelegView() {
                         </CardContent>
                     </Card>
 
+                    {/* Payment Info */}
+                    {beleg.is_paid && beleg.payment_account && (
+                        <Card className="shadow-sm border-none bg-gradient-to-br from-green-500/5 to-green-500/10 dark:from-green-500/10 dark:to-green-500/20">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2 text-lg">
+                                    <Euro className="w-5 h-5 text-green-600" />
+                                    Zahlungsdetails
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sm text-slate-600 dark:text-slate-400">Status:</span>
+                                    <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800">
+                                        Bezahlt
+                                    </Badge>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sm text-slate-600 dark:text-slate-400">Zahlungskonto:</span>
+                                    <span className="font-medium text-slate-900 dark:text-slate-100">
+                                        {beleg.payment_account.code} - {beleg.payment_account.name}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sm text-slate-600 dark:text-slate-400">Betrag:</span>
+                                    <span className="font-medium text-green-600 dark:text-green-400">
+                                        {formatCurrency(beleg.amount)}
+                                    </span>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
+
                     {/* File Info */}
                     {beleg.file_path && (
                         <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
