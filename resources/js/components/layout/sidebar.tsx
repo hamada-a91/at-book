@@ -15,6 +15,7 @@ import {
     Landmark,
     FileCheck,
     ShoppingCart,
+    Package,
 } from "lucide-react"
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
@@ -83,6 +84,12 @@ export function Sidebar({ className }: SidebarProps) {
             icon: Users,
             href: tenantUrl("/contacts"),
             active: isActive("/contacts"),
+        },
+        {
+            label: "Produkte",
+            icon: Package,
+            href: tenantUrl("/products"),
+            active: isActive("/products"),
         },
         {
             label: "Angebote",

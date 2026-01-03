@@ -141,6 +141,18 @@ Route::middleware(['api', 'auth:api', \App\Http\Middleware\SetTenantFromUser::cl
         Route::post('/bookings/{id}/lock', [JournalEntryController::class, 'lock']);
         Route::post('/bookings/{id}/reverse', [JournalEntryController::class, 'reverse']);
 
+        // Inventory Report
+        Route::get('/inventory-report', [\App\Http\Controllers\Api\InventoryReportController::class, 'index']);
+
+        // Products & Inventory
+        Route::apiResource('products', \App\Http\Controllers\Api\ProductController::class);
+        
+        // Product Categories
+        Route::get('/product-categories', [\App\Http\Controllers\Api\ProductCategoryController::class, 'index']);
+        Route::post('/product-categories', [\App\Http\Controllers\Api\ProductCategoryController::class, 'store']);
+        Route::put('/product-categories/{id}', [\App\Http\Controllers\Api\ProductCategoryController::class, 'update']);
+        Route::delete('/product-categories/{id}', [\App\Http\Controllers\Api\ProductCategoryController::class, 'destroy']);
+
         // Bank Accounts
         Route::apiResource('bank-accounts', \App\Http\Controllers\Api\BankAccountController::class);
         Route::post('/bank-accounts/{id}/set-default', [\App\Http\Controllers\Api\BankAccountController::class, 'setDefault']);

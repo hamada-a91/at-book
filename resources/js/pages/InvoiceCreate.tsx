@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Plus, Trash2, UserPlus, ArrowLeft, Save, X, Calendar, FileText, CreditCard, Eye, Edit, Euro } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { ProductSelector } from '@/components/ProductSelector';
 
 interface Contact {
     id: number;
@@ -26,12 +27,23 @@ interface Account {
 }
 
 interface InvoiceLine {
+    product_id?: number | null;
     description: string;
     quantity: number;
     unit: string;
     unit_price: number;
     tax_rate: number;
     account_id: string;
+}
+
+interface Product {
+    id: number;
+    name: string;
+    type: string;
+    unit: string;
+    price_net: number;
+    price_gross: number;
+    tax_rate: number;
 }
 
 // Tax rate to revenue account mapping
@@ -286,6 +298,7 @@ export function InvoiceCreate() {
         }
 
         setLines([...lines, {
+            product_id: null,
             description: '',
             quantity: 1,
             unit: 'Stück',
@@ -302,6 +315,39 @@ export function InvoiceCreate() {
     const updateLine = (index: number, field: keyof InvoiceLine, value: any) => {
         const newLines = [...lines];
         newLines[index] = { ...newLines[index], [field]: value };
+        setLines(newLines);
+    };
+
+    const handleProductSelect = (index: number, product: Product | null) => {
+        if (!product) {
+            return;
+        }
+
+        const newLines = [...lines];
+
+        // Auto-fill fields from product
+        newLines[index] = {
+            ...newLines[index],
+            product_id: product.id,
+            description: product.name,
+            quantity: 1,
+            unit: product.unit,
+            unit_price: product.price_net / 100, // Convert from cents
+            tax_rate: product.tax_rate,
+        };
+
+        // Auto-select revenue account based on tax rate
+        const accountCode = TAX_ACCOUNT_MAP[product.tax_rate] || TAX_ACCOUNT_MAP[19];
+        if (accountCode && accounts) {
+            let account = accounts.find(a => a.code === accountCode);
+            if (!account) {
+                account = accounts.find(a => a.type === 'revenue' && a.code.startsWith('8'));
+            }
+            if (account) {
+                newLines[index].account_id = account.id.toString();
+            }
+        }
+
         setLines(newLines);
     };
 
@@ -358,6 +404,7 @@ export function InvoiceCreate() {
         }
 
         const formattedLines = pendingSubmitData?.formattedLines || lines.map((line) => ({
+            product_id: line.product_id || null,
             description: line.description,
             quantity: parseFloat(line.quantity.toString()),
             unit: line.unit,
@@ -790,17 +837,17 @@ export function InvoiceCreate() {
                                                 key={index}
                                                 className="grid grid-cols-12 gap-4 p-4 bg-slate-50/50 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-800"
                                             >
-                                                <div className="col-span-12 md:col-span-3">
+                                                <div className="col-span-12 md:col-span-4">
                                                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                                        Beschreibung *
+                                                        Produkt *
                                                     </label>
-                                                    <Input
-                                                        value={line.description}
-                                                        onChange={(e) => updateLine(index, 'description', e.target.value)}
-                                                        required
-                                                        placeholder="Leistung/Artikel"
-                                                        className="bg-white dark:bg-slate-950"
+                                                    <ProductSelector
+                                                        value={line.product_id}
+                                                        onChange={(product) => handleProductSelect(index, product)}
                                                     />
+                                                    {line.description && line.product_id && (
+                                                        <p className="text-xs text-gray-500 mt-1">{line.description}</p>
+                                                    )}
                                                 </div>
                                                 <div className="col-span-6 md:col-span-1">
                                                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">

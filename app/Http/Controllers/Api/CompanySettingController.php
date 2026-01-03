@@ -68,6 +68,7 @@ class CompanySettingController extends Controller
                     'phone' => '',
                     'tax_number' => '',
                     'tax_type' => 'kleinunternehmer',
+                    'module_inventory_enabled' => false,
                 ]);
             }
             
@@ -98,6 +99,7 @@ class CompanySettingController extends Controller
             'phone' => 'nullable|string|max:50',
             'tax_number' => 'nullable|string|max:100',
             'tax_type' => 'required|in:kleinunternehmer,umsatzsteuer_pflichtig',
+            'module_inventory_enabled' => 'nullable|boolean',
             'logo' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
         ]);
 
@@ -129,6 +131,7 @@ class CompanySettingController extends Controller
         $settings->phone = $request->input('phone');
         $settings->tax_number = $request->input('tax_number');
         $settings->tax_type = $request->input('tax_type');
+        $settings->module_inventory_enabled = $request->input('module_inventory_enabled', false);
 
         // Handle logo upload
         if ($request->hasFile('logo')) {
@@ -162,6 +165,7 @@ class CompanySettingController extends Controller
             'phone' => '',
             'tax_number' => '',
             'tax_type' => 'kleinunternehmer',
+            'module_inventory_enabled' => false,
             'logo_path' => null,
         ]);
     }

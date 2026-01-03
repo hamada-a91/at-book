@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import axios from '@/lib/axios';
-import { Settings as SettingsIcon, Save, Upload, Building2, MapPin, Mail, Phone, FileText, Image, AlertCircle, CheckCircle2, X } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Upload, Building2, MapPin, Mail, Phone, FileText, Image, AlertCircle, CheckCircle2, X, Package } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { AccountPlanManagement } from '@/components/AccountPlanManagement';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
@@ -26,6 +27,7 @@ interface CompanySetting {
     tax_number: string | null;
     tax_type: 'kleinunternehmer' | 'umsatzsteuer_pflichtig';
     logo_path: string | null;
+    module_inventory_enabled: boolean;
 }
 
 const settingsSchema = z.object({
@@ -38,6 +40,7 @@ const settingsSchema = z.object({
     phone: z.string().min(5, 'Telefonnummer muss mindestens 5 Zeichen lang sein'),
     tax_number: z.string().optional(),
     tax_type: z.enum(['kleinunternehmer', 'umsatzsteuer_pflichtig']),
+    module_inventory_enabled: z.boolean().optional(),
 });
 
 type SettingsFormValues = z.infer<typeof settingsSchema>;
@@ -79,6 +82,7 @@ export function Settings() {
             phone: '',
             tax_number: '',
             tax_type: 'kleinunternehmer',
+            module_inventory_enabled: false,
         },
     });
 
@@ -94,6 +98,7 @@ export function Settings() {
                 phone: settings.phone || '',
                 tax_number: settings.tax_number || '',
                 tax_type: settings.tax_type || 'kleinunternehmer',
+                module_inventory_enabled: settings.module_inventory_enabled || false,
             });
             if (settings.logo_path) {
                 setLogoPreview(`/storage/${settings.logo_path}`);
@@ -106,7 +111,12 @@ export function Settings() {
             const formData = new FormData();
             Object.entries(data).forEach(([key, value]) => {
                 if (value !== null && value !== undefined) {
-                    formData.append(key, value as string);
+                    // Convert boolean to '1' or '0' for Laravel
+                    if (typeof value === 'boolean') {
+                        formData.append(key, value ? '1' : '0');
+                    } else {
+                        formData.append(key, value as string);
+                    }
                 }
             });
             if (logoFile) {
@@ -570,6 +580,43 @@ export function Settings() {
                                             Wählen Sie die zutreffende Steuerart für Ihr Unternehmen
                                         </FormDescription>
                                         <FormMessage className="text-xs" />
+                                    </FormItem>
+                                )}
+                            />
+                        </CardContent>
+                    </Card>
+
+                    {/* Module Settings Card */}
+                    <Card className="shadow-lg border-slate-200 dark:border-slate-800 hover:shadow-xl transition-all duration-300">
+                        <CardHeader>
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/20 rounded-lg flex items-center justify-center">
+                                    <Package className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                                </div>
+                                <div>
+                                    <CardTitle className="text-xl">Module</CardTitle>
+                                    <CardDescription>Aktivieren oder deaktivieren Sie optionale Module</CardDescription>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            <FormField
+                                control={form.control}
+                                name="module_inventory_enabled"
+                                render={({ field }) => (
+                                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 bg-slate-50 dark:bg-slate-900">
+                                        <div className="space-y-0.5">
+                                            <FormLabel className="text-base font-semibold">Lagerverwaltung</FormLabel>
+                                            <FormDescription>
+                                                Aktivieren Sie die Lagerverwaltung, um Produktbestände zu verfolgen und Lagerbewegungen zu dokumentieren
+                                            </FormDescription>
+                                        </div>
+                                        <FormControl>
+                                            <Switch
+                                                checked={field.value}
+                                                onCheckedChange={field.onChange}
+                                            />
+                                        </FormControl>
                                     </FormItem>
                                 )}
                             />

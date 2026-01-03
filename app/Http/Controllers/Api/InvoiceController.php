@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Concerns\HasTenantScope;
 use App\Models\Invoice;
+use App\Models\Product;
+use App\Services\InventoryService;
 use Illuminate\Http\Request;
 
 class InvoiceController extends Controller
@@ -32,6 +34,7 @@ class InvoiceController extends Controller
             'payment_terms' => 'nullable|string',
             'footer_note' => 'nullable|string',
             'lines' => 'required|array|min:1',
+            'lines.*.product_id' => 'nullable|exists:products,id',
             'lines.*.description' => 'required|string',
             'lines.*.quantity' => 'required|numeric|min:0',
             'lines.*.unit_price' => 'required|integer',
@@ -83,6 +86,7 @@ class InvoiceController extends Controller
         foreach ($validated['lines'] as $line) {
             $lineTotal = $line['quantity'] * $line['unit_price'];
             $invoice->lines()->create([
+                'product_id' => $line['product_id'] ?? null,
                 'description' => $line['description'],
                 'quantity' => $line['quantity'],
                 'unit' => $line['unit'] ?? 'Stück',
@@ -223,6 +227,24 @@ class InvoiceController extends Controller
                 'status' => 'booked',
                 'journal_entry_id' => $journalEntry->id,
             ]);
+
+            // Reduce inventory for products with tracking enabled
+            $inventoryService = new InventoryService();
+            foreach ($invoice->lines as $line) {
+                // Check if line has a product_id
+                if (!empty($line->product_id)) {
+                    $product = Product::find($line->product_id);
+                    if ($product) {
+                        $inventoryService->removeStock(
+                            $product,
+                            $line->quantity,
+                            'sale',
+                            "Verkauf via Rechnung {$invoice->invoice_number}",
+                            $invoice
+                        );
+                    }
+                }
+            }
 
             return response()->json($invoice->load(['contact', 'lines', 'journalEntry']));
             

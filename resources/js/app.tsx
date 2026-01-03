@@ -23,10 +23,13 @@ import { QuoteCreate } from './pages/QuoteCreate';
 import { OrdersList } from './pages/OrdersList';
 import { OrderDetail } from './pages/OrderDetail';
 import { QuotePreview } from './pages/QuotePreview';
+import { InventoryReport } from './pages/InventoryReport';
 import Onboarding from './pages/Onboarding';
 import Welcome from './pages/Welcome';
 import Register from './pages/Auth/Register';
 import Login from './pages/Auth/Login';
+import ProductList from './pages/Products/ProductList';
+import ProductCreate from './pages/Products/ProductCreate';
 import { MainLayout } from '@/components/layout/main-layout';
 import { ThemeProvider } from '@/components/theme-provider';
 import { useEffect, useState } from 'react';
@@ -188,6 +191,10 @@ function TenantRoutes() {
                             <Route path="/accounts/create" element={<AccountCreate />} />
                             <Route path="/accounts/:id" element={<AccountDetail />} />
                             <Route path="/contacts" element={<ContactsList />} />
+                            <Route path="/products" element={<ProductList />} />
+                            <Route path="/products/create" element={<ProductCreate />} />
+                            <Route path="/products/:id/edit" element={<ProductCreate />} />
+                            <Route path="/inventory-report" element={<InventoryReport />} />
                             <Route path="/invoices" element={<InvoicesList />} />
                             <Route path="/invoices/create" element={<InvoiceCreate />} />
                             <Route path="/invoices/:id/preview" element={<InvoicePreview />} />

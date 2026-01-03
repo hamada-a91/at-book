@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Concerns\HasTenantScope;
 use App\Models\Beleg;
+use App\Models\Product;
+use App\Services\InventoryService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
@@ -316,6 +318,22 @@ class BelegController extends Controller
                 'status' => ($beleg->is_paid && $beleg->payment_account_id) ? 'paid' : 'booked',
                 'journal_entry_id' => $journalEntry->id,
             ]);
+
+            // Add inventory for products if product_id is set (purchase)
+            // Note: Beleg doesn't have line items currently, but if product_id exists on beleg:
+            if (!empty($beleg->product_id) && $beleg->document_type === 'eingang') {
+                $inventoryService = new InventoryService();
+                $product = Product::find($beleg->product_id);
+                if ($product && !empty($beleg->quantity)) {
+                    $inventoryService->addStock(
+                        $product,
+                        $beleg->quantity,
+                        'purchase',
+                        "Einkauf via Beleg {$beleg->document_number}",
+                        $beleg
+                    );
+                }
+            }
 
             DB::commit();
 
