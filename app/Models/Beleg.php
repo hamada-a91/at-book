@@ -56,4 +56,9 @@ class Beleg extends Model
     {
         return $this->belongsTo(\App\Modules\Accounting\Models\Account::class, 'payment_account_id');
     }
+
+    public function lines()
+    {
+        return $this->hasMany(BelegLine::class);
+    }
 }

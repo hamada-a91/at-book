@@ -19,7 +19,7 @@ class BelegController extends Controller
     {
         $tenant = $this->getTenantOrFail();
         $query = Beleg::where('tenant_id', $tenant->id)
-            ->with(['contact', 'journalEntry']);
+            ->with(['contact', 'journalEntry', 'lines.product']);
 
         // Filter by document type
         if ($request->has('document_type')) {
@@ -63,7 +63,16 @@ class BelegController extends Controller
             'payment_account_id' => 'nullable|exists:accounts,id',
             'notes' => 'nullable|string',
             'due_date' => 'nullable|date',
-            'file' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240', // 10MB max
+            'file' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
+            // Line items (optional)
+            'lines' => 'nullable|array',
+            'lines.*.product_id' => 'nullable|exists:products,id',
+            'lines.*.description' => 'required|string',
+            'lines.*.quantity' => 'required|numeric|min:0',
+            'lines.*.unit' => 'nullable|string',
+            'lines.*.unit_price' => 'required|integer',
+            'lines.*.tax_rate' => 'nullable|numeric|min:0',
+            'lines.*.account_id' => 'nullable|exists:accounts,id',
         ]);
 
         // Generate document number (BEL-2025-0001)
@@ -99,15 +108,32 @@ class BelegController extends Controller
             'status' => 'draft',
         ]);
 
+        // Create beleg lines if provided
+        if (!empty($validated['lines'])) {
+            foreach ($validated['lines'] as $line) {
+                $lineTotal = ($line['quantity'] ?? 1) * ($line['unit_price'] ?? 0);
+                $beleg->lines()->create([
+                    'product_id' => $line['product_id'] ?? null,
+                    'description' => $line['description'],
+                    'quantity' => $line['quantity'] ?? 1,
+                    'unit' => $line['unit'] ?? 'Stück',
+                    'unit_price' => $line['unit_price'] ?? 0,
+                    'tax_rate' => $line['tax_rate'] ?? 19,
+                    'line_total' => $lineTotal,
+                    'account_id' => $line['account_id'] ?? null,
+                ]);
+            }
+        }
+
         // Load relationships and return
-        $beleg->load(['contact', 'journalEntry', 'categoryAccount', 'paymentAccount']);
+        $beleg->load(['contact', 'journalEntry', 'categoryAccount', 'paymentAccount', 'lines.product']);
         
         return response()->json($beleg, 201);
     }
 
     public function show(Beleg $beleg)
     {
-        $beleg->load(['contact', 'journalEntry', 'categoryAccount', 'paymentAccount']);
+        $beleg->load(['contact', 'journalEntry', 'categoryAccount', 'paymentAccount', 'lines.product']);
         return response()->json($beleg);
     }
 
@@ -319,25 +345,40 @@ class BelegController extends Controller
                 'journal_entry_id' => $journalEntry->id,
             ]);
 
-            // Add inventory for products if product_id is set (purchase)
-            // Note: Beleg doesn't have line items currently, but if product_id exists on beleg:
-            if (!empty($beleg->product_id) && $beleg->document_type === 'eingang') {
-                $inventoryService = new InventoryService();
-                $product = Product::find($beleg->product_id);
-                if ($product && !empty($beleg->quantity)) {
-                    $inventoryService->addStock(
-                        $product,
-                        $beleg->quantity,
-                        'purchase',
-                        "Einkauf via Beleg {$beleg->document_number}",
-                        $beleg
-                    );
+            // Process inventory for product lines
+            $beleg->load('lines.product');
+            $inventoryService = new InventoryService();
+            
+            foreach ($beleg->lines as $line) {
+                if (!empty($line->product_id)) {
+                    $product = Product::find($line->product_id);
+                    if ($product && $line->quantity > 0) {
+                        if ($beleg->document_type === 'eingang') {
+                            // Incoming (purchase) - add stock
+                            $inventoryService->addStock(
+                                $product,
+                                $line->quantity,
+                                'purchase',
+                                "Einkauf via Beleg {$beleg->document_number}",
+                                $beleg
+                            );
+                        } elseif ($beleg->document_type === 'ausgang') {
+                            // Outgoing (sale) - remove stock
+                            $inventoryService->removeStock(
+                                $product,
+                                $line->quantity,
+                                'sale',
+                                "Verkauf via Beleg {$beleg->document_number}",
+                                $beleg
+                            );
+                        }
+                    }
                 }
             }
 
             DB::commit();
 
-            return response()->json($beleg);
+            return response()->json($beleg->load(['contact', 'journalEntry', 'lines.product']));
 
         } catch (\Exception $e) {
             DB::rollBack();

@@ -7,10 +7,31 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Save, X, Calendar, FileText, Upload, Receipt, Euro, User } from 'lucide-react';
+import { ArrowLeft, Save, X, Calendar, FileText, Upload, Receipt, Euro, User, Plus, Trash2, Package } from 'lucide-react';
 import { ContactSelector } from '@/components/ContactSelector';
 import { AccountSelector } from '@/components/AccountSelector';
+import { ProductSelector } from '@/components/ProductSelector';
 import { BelegType } from '@/types/beleg';
+
+interface Product {
+    id: number;
+    name: string;
+    type: string;
+    article_number: string | null;
+    price_net: number;
+    price_gross: number;
+    tax_rate: number;
+    unit: string;
+}
+
+interface BelegLine {
+    product_id: number | null;
+    description: string;
+    quantity: number;
+    unit: string;
+    unit_price: number;
+    tax_rate: number;
+}
 
 interface Contact {
     id: number;
@@ -44,6 +65,8 @@ export function BelegCreate() {
     const [isPaid, setIsPaid] = useState(false);
     const [paymentAccountId, setPaymentAccountId] = useState<string>('');
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [showProductLines, setShowProductLines] = useState(false);
+    const [lines, setLines] = useState<BelegLine[]>([]);
 
     const { data: contacts } = useQuery<Contact[]>({
         queryKey: ['contacts'],
@@ -156,6 +179,16 @@ export function BelegCreate() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
+        // Format lines for backend
+        const formattedLines = lines.map((line) => ({
+            product_id: line.product_id,
+            description: line.description,
+            quantity: line.quantity,
+            unit: line.unit,
+            unit_price: Math.round(line.unit_price * 100),
+            tax_rate: line.tax_rate,
+        }));
+
         createBelegMutation.mutate({
             document_type: documentType,
             title,
@@ -168,6 +201,7 @@ export function BelegCreate() {
             payment_account_id: isPaid && paymentAccountId ? parseInt(paymentAccountId) : null,
             notes: notes || null,
             due_date: dueDate || null,
+            lines: formattedLines.length > 0 ? formattedLines : undefined,
         });
     };
 
@@ -175,6 +209,42 @@ export function BelegCreate() {
         if (e.target.files && e.target.files[0]) {
             setSelectedFile(e.target.files[0]);
         }
+    };
+
+    const addLine = () => {
+        setLines([...lines, {
+            product_id: null,
+            description: '',
+            quantity: 1,
+            unit: 'Stück',
+            unit_price: 0,
+            tax_rate: 19,
+        }]);
+    };
+
+    const removeLine = (index: number) => {
+        setLines(lines.filter((_, i) => i !== index));
+    };
+
+    const updateLine = (index: number, field: keyof BelegLine, value: any) => {
+        const newLines = [...lines];
+        newLines[index] = { ...newLines[index], [field]: value };
+        setLines(newLines);
+    };
+
+    const handleProductSelect = (index: number, product: Product | null) => {
+        if (!product) return;
+
+        const newLines = [...lines];
+        newLines[index] = {
+            ...newLines[index],
+            product_id: product.id,
+            description: product.name,
+            unit: product.unit,
+            unit_price: product.price_net / 100,
+            tax_rate: product.tax_rate,
+        };
+        setLines(newLines);
     };
 
     const handleAmountChange = (value: number) => {
@@ -364,6 +434,105 @@ export function BelegCreate() {
                                 </p>
                             </div>
                         </CardContent>
+                    </Card>
+
+                    {/* Product Lines (Optional - for inventory tracking) */}
+                    <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
+                        <CardHeader>
+                            <div className="flex items-center justify-between">
+                                <CardTitle className="flex items-center gap-2">
+                                    <Package className="w-5 h-5 text-primary" />
+                                    Produktpositionen (Optional)
+                                </CardTitle>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setShowProductLines(!showProductLines)}
+                                    className="gap-1"
+                                >
+                                    {showProductLines ? 'Ausblenden' : 'Produkte hinzufügen'}
+                                </Button>
+                            </div>
+                            <CardDescription>
+                                {documentType === 'eingang'
+                                    ? 'Fügen Sie Produkte hinzu, um den Lagerbestand beim Buchen automatisch zu erhöhen.'
+                                    : 'Fügen Sie Produkte hinzu, um den Lagerbestand beim Buchen automatisch zu reduzieren.'}
+                            </CardDescription>
+                        </CardHeader>
+                        {showProductLines && (
+                            <CardContent className="space-y-4">
+                                {lines.map((line, index) => (
+                                    <div key={index} className="grid grid-cols-12 gap-3 p-4 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                                        <div className="col-span-12 md:col-span-4">
+                                            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+                                                Produkt
+                                            </label>
+                                            <ProductSelector
+                                                value={line.product_id}
+                                                onChange={(product) => handleProductSelect(index, product)}
+                                            />
+                                        </div>
+                                        <div className="col-span-6 md:col-span-2">
+                                            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+                                                Menge
+                                            </label>
+                                            <Input
+                                                type="number"
+                                                step="0.01"
+                                                min="0"
+                                                value={line.quantity}
+                                                onChange={(e) => updateLine(index, 'quantity', parseFloat(e.target.value) || 0)}
+                                                className="bg-white dark:bg-slate-950"
+                                            />
+                                        </div>
+                                        <div className="col-span-6 md:col-span-2">
+                                            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+                                                Einheit
+                                            </label>
+                                            <Input
+                                                value={line.unit}
+                                                onChange={(e) => updateLine(index, 'unit', e.target.value)}
+                                                className="bg-white dark:bg-slate-950"
+                                            />
+                                        </div>
+                                        <div className="col-span-6 md:col-span-2">
+                                            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+                                                Preis (netto)
+                                            </label>
+                                            <Input
+                                                type="number"
+                                                step="0.01"
+                                                min="0"
+                                                value={line.unit_price}
+                                                onChange={(e) => updateLine(index, 'unit_price', parseFloat(e.target.value) || 0)}
+                                                className="bg-white dark:bg-slate-950"
+                                            />
+                                        </div>
+                                        <div className="col-span-4 md:col-span-1 flex items-end">
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => removeLine(index)}
+                                                className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ))}
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={addLine}
+                                    className="w-full gap-2 border-dashed"
+                                >
+                                    <Plus className="w-4 h-4" />
+                                    Position hinzufügen
+                                </Button>
+                            </CardContent>
+                        )}
                     </Card>
 
                     {/* Direct Payment Option */}

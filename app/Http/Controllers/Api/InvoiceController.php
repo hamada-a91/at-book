@@ -325,6 +325,7 @@ class InvoiceController extends Controller
             'payment_terms' => 'nullable|string',
             'footer_note' => 'nullable|string',
             'lines' => 'required|array',
+            'lines.*.product_id' => 'nullable|exists:products,id',
             'lines.*.description' => 'required|string',
             'lines.*.quantity' => 'required|numeric|min:0',
             'lines.*.unit' => 'required|string',
@@ -363,6 +364,7 @@ class InvoiceController extends Controller
         foreach ($validated['lines'] as $line) {
             $lineTotal = $line['quantity'] * $line['unit_price'];
             $invoice->lines()->create([
+                'product_id' => $line['product_id'] ?? null,
                 'description' => $line['description'],
                 'quantity' => $line['quantity'],
                 'unit' => $line['unit'],

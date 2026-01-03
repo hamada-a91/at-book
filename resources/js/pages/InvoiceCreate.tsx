@@ -76,7 +76,7 @@ export function InvoiceCreate() {
     const [paymentTerms, setPaymentTerms] = useState('Zahlbar sofort, rein netto');
     const [footerNote, setFooterNote] = useState('Vielen Dank für die gute Zusammenarbeit.');
     const [lines, setLines] = useState<InvoiceLine[]>([
-        { description: '', quantity: 1, unit: 'Stück', unit_price: 0, tax_rate: 19, account_id: '' },
+        { product_id: null, description: '', quantity: 1, unit: 'Stück', unit_price: 0, tax_rate: 19, account_id: '' },
     ]);
 
     // Address change dialog state
@@ -151,6 +151,7 @@ export function InvoiceCreate() {
                     }
 
                     return {
+                        product_id: line.product_id || null,
                         description: line.description,
                         quantity: parseFloat(line.quantity) || 1,
                         unit: line.unit || 'Stück',
@@ -177,6 +178,7 @@ export function InvoiceCreate() {
 
             if (existingInvoice.lines && existingInvoice.lines.length > 0) {
                 setLines(existingInvoice.lines.map((line: any) => ({
+                    product_id: line.product_id || null,
                     description: line.description,
                     quantity: parseFloat(line.quantity) || 1,
                     unit: line.unit || 'Stück',
@@ -319,8 +321,12 @@ export function InvoiceCreate() {
     };
 
     const handleProductSelect = (index: number, product: Product | null) => {
+        console.log('handleProductSelect called with:', product);
         if (!product) {
             return;
+        }
+        if (!product.id) {
+            console.error('CRITICAL: Selected product has no ID:', product);
         }
 
         const newLines = [...lines];
@@ -375,16 +381,21 @@ export function InvoiceCreate() {
 
             if (addressChanged && !pendingSubmitData) {
                 // Store pending data and show dialog
+                console.log('Updating pendingSubmitData with lines:', lines);
                 setPendingSubmitData({
                     contactId,
-                    formattedLines: lines.map((line) => ({
-                        description: line.description,
-                        quantity: parseFloat(line.quantity.toString()),
-                        unit: line.unit,
-                        unit_price: Math.round(parseFloat(line.unit_price.toString()) * 100),
-                        tax_rate: parseFloat(line.tax_rate.toString()),
-                        account_id: parseInt(line.account_id),
-                    })),
+                    formattedLines: lines.map((line) => {
+                        console.log('Mapping line:', line, 'Product ID:', line.product_id);
+                        return {
+                            product_id: line.product_id || null,
+                            description: line.description,
+                            quantity: parseFloat(line.quantity.toString()),
+                            unit: line.unit,
+                            unit_price: Math.round(parseFloat(line.unit_price.toString()) * 100),
+                            tax_rate: parseFloat(line.tax_rate.toString()),
+                            account_id: parseInt(line.account_id),
+                        };
+                    }),
                 });
                 setAddressDialogOpen(true);
                 return;

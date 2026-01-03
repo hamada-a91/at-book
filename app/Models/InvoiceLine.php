@@ -8,6 +8,7 @@ class InvoiceLine extends Model
 {
     protected $fillable = [
         'invoice_id',
+        'product_id',
         'description',
         'quantity',
         'unit',
@@ -25,5 +26,10 @@ class InvoiceLine extends Model
     public function account()
     {
         return $this->belongsTo(\App\Modules\Accounting\Models\Account::class);
+    }
+
+    public function product()
+    {
+        return $this->belongsTo(Product::class);
     }
 }
