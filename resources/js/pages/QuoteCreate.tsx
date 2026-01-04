@@ -7,8 +7,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Trash2, UserPlus, ArrowLeft, Save, X, Calendar, FileText, Eye, Edit, Euro } from 'lucide-react';
+import { Plus, Trash2, UserPlus, ArrowLeft, Save, X, Calendar, FileText, Eye, Edit, Euro, Package } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { ProductSelector } from '@/components/ProductSelector';
 
 interface Contact {
     id: number;
@@ -17,13 +18,25 @@ interface Contact {
     address?: string;
 }
 
+interface Product {
+    id: number;
+    name: string;
+    type: string;
+    unit: string;
+    price_net: number;
+    price_gross: number;
+    tax_rate: number;
+}
+
 interface QuoteLine {
+    product_id?: number | null;
     description: string;
     quantity: number;
     unit: string;
     unit_price: number;
     tax_rate: number;
 }
+
 
 export function QuoteCreate() {
     const navigate = useNavigate();
@@ -43,7 +56,7 @@ export function QuoteCreate() {
     const [footerNote, setFooterNote] = useState('Wir freuen uns auf Ihre Auftragserteilung.');
     const [status, setStatus] = useState('draft');
     const [lines, setLines] = useState<QuoteLine[]>([
-        { description: '', quantity: 1, unit: 'Stück', unit_price: 0, tax_rate: 19 },
+        { product_id: null, description: '', quantity: 1, unit: 'Stück', unit_price: 0, tax_rate: 19 },
     ]);
 
     // Preview mode state
@@ -137,6 +150,7 @@ export function QuoteCreate() {
 
     const addLine = () => {
         setLines([...lines, {
+            product_id: null,
             description: '',
             quantity: 1,
             unit: 'Stück',
@@ -152,6 +166,22 @@ export function QuoteCreate() {
     const updateLine = (index: number, field: keyof QuoteLine, value: any) => {
         const newLines = [...lines];
         newLines[index] = { ...newLines[index], [field]: value };
+        setLines(newLines);
+    };
+
+    const handleProductSelect = (index: number, product: Product | null) => {
+        if (!product) return;
+
+        const newLines = [...lines];
+        newLines[index] = {
+            ...newLines[index],
+            product_id: product.id,
+            description: product.name,
+            quantity: 1,
+            unit: product.unit,
+            unit_price: product.price_net / 100, // Convert from cents
+            tax_rate: product.tax_rate,
+        };
         setLines(newLines);
     };
 
@@ -176,6 +206,7 @@ export function QuoteCreate() {
         }
 
         const formattedLines = lines.map((line) => ({
+            product_id: line.product_id || null,
             description: line.description,
             quantity: parseFloat(line.quantity.toString()),
             unit: line.unit,
@@ -608,17 +639,32 @@ export function QuoteCreate() {
                                                 key={index}
                                                 className="grid grid-cols-12 gap-4 p-4 bg-slate-50/50 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-800"
                                             >
-                                                <div className="col-span-12 md:col-span-3">
+                                                <div className="col-span-12 md:col-span-4">
                                                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                                        Beschreibung *
+                                                        <Package className="w-4 h-4 inline mr-1" />
+                                                        Produkt wählen
                                                     </label>
-                                                    <Input
-                                                        value={line.description}
-                                                        onChange={(e) => updateLine(index, 'description', e.target.value)}
-                                                        required
-                                                        placeholder="Leistung/Artikel"
-                                                        className="bg-white dark:bg-slate-950"
+                                                    <ProductSelector
+                                                        value={line.product_id}
+                                                        onChange={(product) => handleProductSelect(index, product)}
                                                     />
+                                                    {line.description && (
+                                                        <Input
+                                                            value={line.description}
+                                                            onChange={(e) => updateLine(index, 'description', e.target.value)}
+                                                            placeholder="Beschreibung"
+                                                            className="mt-2 bg-white dark:bg-slate-950 text-sm"
+                                                        />
+                                                    )}
+                                                    {!line.product_id && (
+                                                        <Input
+                                                            value={line.description}
+                                                            onChange={(e) => updateLine(index, 'description', e.target.value)}
+                                                            placeholder="Oder: Beschreibung eingeben"
+                                                            className="mt-2 bg-white dark:bg-slate-950"
+                                                            required={!line.product_id}
+                                                        />
+                                                    )}
                                                 </div>
                                                 <div className="col-span-6 md:col-span-1">
                                                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">

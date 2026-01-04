@@ -34,6 +34,7 @@ class OrderController extends Controller
             'footer_note' => 'nullable|string',
             'notes' => 'nullable|string',
             'lines' => 'required|array|min:1',
+            'lines.*.product_id' => 'nullable|exists:products,id',
             'lines.*.description' => 'required|string',
             'lines.*.quantity' => 'required|numeric|min:0',
             'lines.*.unit' => 'nullable|string',
@@ -85,6 +86,7 @@ class OrderController extends Controller
         foreach ($validated['lines'] as $line) {
             $lineTotal = $line['quantity'] * $line['unit_price'];
             $order->lines()->create([
+                'product_id' => $line['product_id'] ?? null,
                 'description' => $line['description'],
                 'quantity' => $line['quantity'],
                 'delivered_quantity' => 0,
@@ -104,7 +106,7 @@ class OrderController extends Controller
         $tenant = $this->getTenantOrFail();
         $order = Order::where('tenant_id', $tenant->id)->findOrFail($id);
         
-        return response()->json($order->load(['contact', 'lines', 'quote', 'deliveryNotes', 'invoices']));
+        return response()->json($order->load(['contact', 'lines.product', 'quote', 'deliveryNotes', 'invoices']));
     }
 
     public function update(Request $request, Order $order)

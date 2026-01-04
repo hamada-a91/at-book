@@ -15,7 +15,7 @@ class InventoryReportController extends Controller
     {
         $tenant = $this->getTenantOrFail();
         
-        $query = InventoryTransaction::with(['product'])
+        $query = InventoryTransaction::with(['product.category'])
             ->whereHas('product', function($q) use ($tenant) {
                 $q->where('tenant_id', $tenant->id);
             });
@@ -40,7 +40,7 @@ class InventoryReportController extends Controller
         }
 
         return response()->json(
-            $query->latest()->paginate(50)
+            $query->latest()->paginate(100)
         );
     }
 }

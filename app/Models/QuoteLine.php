@@ -8,6 +8,7 @@ class QuoteLine extends Model
 {
     protected $fillable = [
         'quote_id',
+        'product_id',
         'description',
         'quantity',
         'unit',
@@ -20,4 +21,10 @@ class QuoteLine extends Model
     {
         return $this->belongsTo(Quote::class);
     }
+
+    public function product()
+    {
+        return $this->belongsTo(Product::class);
+    }
 }
+

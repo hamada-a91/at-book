@@ -45,7 +45,7 @@ interface Product {
         name: string;
         color: string | null;
     };
-    inventoryTransactions?: any[];
+    inventory_transactions?: any[];
 }
 
 export default function ProductList() {
@@ -122,6 +122,15 @@ export default function ProductList() {
                     </p>
                 </div>
                 <div className="flex gap-3">
+                    <Link to={`/${tenant}/products/movements`}>
+                        <Button
+                            variant="outline"
+                            className="bg-white dark:bg-slate-800"
+                        >
+                            <HistoryIcon className="w-4 h-4 mr-2" />
+                            Lagerbewegungen
+                        </Button>
+                    </Link>
                     <Button
                         variant="outline"
                         onClick={() => setCategoryManagerOpen(true)}
@@ -263,9 +272,9 @@ export default function ProductList() {
                             Lagerbewegungen: {selectedProductForHistory?.name}
                         </DialogTitle>
                     </DialogHeader>
-                    {selectedProductForHistory?.inventoryTransactions && (
+                    {selectedProductForHistory?.inventory_transactions && (
                         <InventoryHistory
-                            transactions={selectedProductForHistory.inventoryTransactions}
+                            transactions={selectedProductForHistory.inventory_transactions}
                         />
                     )}
                 </DialogContent>

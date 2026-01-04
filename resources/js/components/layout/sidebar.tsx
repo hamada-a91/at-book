@@ -9,13 +9,16 @@ import {
     FileText,
     Settings,
     Menu,
-    CreditCard,
     BookOpen,
     Receipt,
     Landmark,
     FileCheck,
     ShoppingCart,
     Package,
+    BarChart3,
+    ChevronDown,
+    ChevronRight,
+    Layers,
 } from "lucide-react"
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
@@ -26,18 +29,23 @@ export function Sidebar({ className }: SidebarProps) {
     const location = useLocation()
     const { tenant } = useParams()
     const pathname = location.pathname
+    const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+        products: true, // Default expanded
+    })
 
-    // Helper function to create tenant-aware URLs
     const tenantUrl = (path: string) => {
         return tenant ? `/${tenant}${path}` : path
     }
 
-    // Helper to check if current path matches (accounting for tenant prefix)
     const isActive = (path: string) => {
         if (path === '/') {
             return pathname === `/${tenant}` || pathname === `/${tenant}/dashboard` || pathname === `/${tenant}/`
         }
         return pathname.startsWith(`/${tenant}${path}`)
+    }
+
+    const toggleSection = (section: string) => {
+        setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }))
     }
 
     const { data: settings } = useQuery({
@@ -48,7 +56,8 @@ export function Sidebar({ className }: SidebarProps) {
         },
     });
 
-    const routes = [
+    // Routes grouped by category
+    const mainRoutes = [
         {
             label: "Dashboard",
             icon: LayoutDashboard,
@@ -62,13 +71,13 @@ export function Sidebar({ className }: SidebarProps) {
             active: isActive("/bookings"),
         },
         {
-            label: "Konten & Bank",
-            icon: CreditCard,
+            label: "Sachkonten",
+            icon: Layers,
             href: tenantUrl("/accounts"),
             active: isActive("/accounts"),
         },
         {
-            label: "Bank Konto",
+            label: "Bankkonten",
             icon: Landmark,
             href: tenantUrl("/bank-accounts"),
             active: isActive("/bank-accounts"),
@@ -85,12 +94,30 @@ export function Sidebar({ className }: SidebarProps) {
             href: tenantUrl("/contacts"),
             active: isActive("/contacts"),
         },
-        {
-            label: "Produkte",
-            icon: Package,
-            href: tenantUrl("/products"),
-            active: isActive("/products"),
-        },
+    ]
+
+    // Products section with sub-items
+    const productsSection = {
+        label: "Produkte",
+        icon: Package,
+        expanded: expandedSections.products,
+        active: isActive("/products"),
+        items: [
+            {
+                label: "Alle Produkte",
+                href: tenantUrl("/products"),
+                active: pathname === `/${tenant}/products` || pathname === `/${tenant}/products/create`,
+            },
+            {
+                label: "Lagerbestand",
+                href: tenantUrl("/products/movements"),
+                active: isActive("/products/movements"),
+            },
+        ]
+    }
+
+    // Sales/Documents routes
+    const salesRoutes = [
         {
             label: "Angebote",
             icon: FileCheck,
@@ -117,6 +144,27 @@ export function Sidebar({ className }: SidebarProps) {
         },
     ]
 
+    const renderRouteButton = (route: any, isSubItem = false) => (
+        <Button
+            key={route.href}
+            variant={route.active ? "secondary" : "ghost"}
+            className={cn(
+                "w-full justify-start text-base font-medium transition-all duration-200",
+                isSubItem && "pl-10 text-sm",
+                route.active
+                    ? "bg-blue-600 dark:bg-blue-700 shadow-lg text-white hover:bg-blue-700 dark:hover:bg-blue-800 scale-[1.02]"
+                    : "text-blue-900 dark:text-blue-100 hover:bg-blue-200 dark:hover:bg-blue-900 hover:text-blue-950 dark:hover:text-white"
+            )}
+            asChild
+        >
+            <Link to={route.href}>
+                {!isSubItem && route.icon && <route.icon className={cn("mr-3 h-5 w-5", route.active ? "text-white" : "text-blue-600 dark:text-blue-400")} />}
+                {isSubItem && <span className="mr-3 h-5 w-5 flex items-center justify-center text-xs">•</span>}
+                {route.label}
+            </Link>
+        </Button>
+    )
+
     return (
         <div className={cn("pb-12 h-screen overflow-y-auto bg-gradient-to-b from-blue-50 to-blue-100 dark:from-blue-950 dark:to-slate-950 border-r border-blue-200 dark:border-blue-900", className)}>
             <div className="space-y-4 py-4 flex flex-col h-full">
@@ -140,25 +188,67 @@ export function Sidebar({ className }: SidebarProps) {
                             <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Buchhaltung</p>
                         </div>
                     </div>
+
+                    {/* Main Routes */}
                     <div className="space-y-1">
-                        {routes.map((route) => (
-                            <Button
-                                key={route.href}
-                                variant={route.active ? "secondary" : "ghost"}
+                        {mainRoutes.map((route) => renderRouteButton(route))}
+
+                        {/* Products Section with Sub-items */}
+                        <div className="space-y-1">
+                            <button
+                                onClick={() => toggleSection('products')}
                                 className={cn(
-                                    "w-full justify-start text-base font-medium transition-all duration-200",
-                                    route.active
-                                        ? "bg-blue-600 dark:bg-blue-700 shadow-lg text-white hover:bg-blue-700 dark:hover:bg-blue-800 scale-105"
-                                        : "text-blue-900 dark:text-blue-100 hover:bg-blue-200 dark:hover:bg-blue-900 hover:text-blue-950 dark:hover:text-white"
+                                    "w-full flex items-center justify-between px-3 py-2 text-base font-medium rounded-md transition-all duration-200",
+                                    productsSection.active
+                                        ? "bg-blue-100 dark:bg-blue-900/50 text-blue-900 dark:text-blue-100"
+                                        : "text-blue-900 dark:text-blue-100 hover:bg-blue-200 dark:hover:bg-blue-900"
                                 )}
-                                asChild
                             >
-                                <Link to={route.href}>
-                                    <route.icon className={cn("mr-3 h-5 w-5", route.active ? "text-white" : "text-blue-600 dark:text-blue-400")} />
-                                    {route.label}
-                                </Link>
-                            </Button>
-                        ))}
+                                <div className="flex items-center">
+                                    <Package className={cn("mr-3 h-5 w-5", productsSection.active ? "text-blue-600 dark:text-blue-400" : "text-blue-600 dark:text-blue-400")} />
+                                    Produkte
+                                </div>
+                                {productsSection.expanded ? (
+                                    <ChevronDown className="h-4 w-4 text-blue-500" />
+                                ) : (
+                                    <ChevronRight className="h-4 w-4 text-blue-500" />
+                                )}
+                            </button>
+                            {productsSection.expanded && (
+                                <div className="space-y-1 ml-2">
+                                    {productsSection.items.map((item) => (
+                                        <Button
+                                            key={item.href}
+                                            variant={item.active ? "secondary" : "ghost"}
+                                            className={cn(
+                                                "w-full justify-start text-sm font-medium pl-10 transition-all duration-200",
+                                                item.active
+                                                    ? "bg-blue-600 dark:bg-blue-700 shadow text-white hover:bg-blue-700 dark:hover:bg-blue-800"
+                                                    : "text-blue-800 dark:text-blue-200 hover:bg-blue-200 dark:hover:bg-blue-900"
+                                            )}
+                                            asChild
+                                        >
+                                            <Link to={item.href}>
+                                                <span className="mr-2">
+                                                    {item.label === "Lagerbestand" ? (
+                                                        <BarChart3 className="h-4 w-4 inline" />
+                                                    ) : (
+                                                        <Package className="h-4 w-4 inline" />
+                                                    )}
+                                                </span>
+                                                {item.label}
+                                            </Link>
+                                        </Button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Divider */}
+                        <div className="my-3 border-t border-blue-200 dark:border-blue-800" />
+
+                        {/* Sales Routes */}
+                        {salesRoutes.map((route) => renderRouteButton(route))}
                     </div>
                 </div>
 

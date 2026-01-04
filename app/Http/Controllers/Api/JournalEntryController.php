@@ -76,7 +76,7 @@ class JournalEntryController extends Controller
         $tenant = $this->getTenantOrFail();
         $query = \App\Modules\Accounting\Models\JournalEntry::where('tenant_id', $tenant->id)
             ->with(['lines.account', 'beleg'])
-            ->orderBy('booking_date', 'desc');
+            ->orderBy('id', 'desc');
 
         if ($request->has('status')) {
             $query->where('status', $request->status);

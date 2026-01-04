@@ -8,6 +8,7 @@ class OrderLine extends Model
 {
     protected $fillable = [
         'order_id',
+        'product_id',
         'description',
         'quantity',
         'delivered_quantity',
@@ -23,8 +24,14 @@ class OrderLine extends Model
         return $this->belongsTo(Order::class);
     }
 
+    public function product()
+    {
+        return $this->belongsTo(Product::class);
+    }
+
     public function deliveryNoteLines()
     {
         return $this->hasMany(DeliveryNoteLine::class);
     }
 }
+

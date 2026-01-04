@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Plus, FileText, Trash2, Send, CheckCircle, FileCheck, Edit, Search, Download, Eye } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { SendEmailModal, EmailData } from '@/components/SendEmailModal';
 
 interface Quote {
     id: number;
@@ -30,6 +31,7 @@ export function QuotesList() {
     const queryClient = useQueryClient();
     const [searchTerm, setSearchTerm] = useState('');
     const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+    const [sendEmailModalOpen, setSendEmailModalOpen] = useState(false);
     const [selectedQuote, setSelectedQuote] = useState<Quote | null>(null);
     const [emailInput, setEmailInput] = useState('');
 
@@ -52,12 +54,13 @@ export function QuotesList() {
     });
 
     const sendMutation = useMutation({
-        mutationFn: async (id: number) => {
-            const { data } = await axios.post(`/api/quotes/${id}/send`);
+        mutationFn: async ({ id, emailData }: { id: number; emailData: EmailData }) => {
+            const { data } = await axios.post(`/api/quotes/${id}/send`, emailData);
             return data;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['quotes'] });
+            setSendEmailModalOpen(false);
         },
     });
 
@@ -143,9 +146,9 @@ export function QuotesList() {
             return;
         }
 
-        if (confirm('Angebot jetzt versenden?')) {
-            sendMutation.mutate(quote.id);
-        }
+        // Open email modal for full email composition
+        setSelectedQuote(quote);
+        setSendEmailModalOpen(true);
     };
 
     const handleEmailSubmit = async () => {
@@ -161,10 +164,12 @@ export function QuotesList() {
             setEmailDialogOpen(false);
             setEmailInput('');
 
-            // Now send the quote
-            if (confirm('Email gespeichert! Angebot jetzt versenden?')) {
-                sendMutation.mutate(selectedQuote.id);
-            }
+            // Update local quote reference with email
+            const updatedQuote = { ...selectedQuote, contact: { ...selectedQuote.contact, email: emailInput } };
+            setSelectedQuote(updatedQuote);
+
+            // Open send email modal
+            setSendEmailModalOpen(true);
         } catch (error) {
             alert('Fehler beim Speichern der Email');
         }
@@ -457,6 +462,23 @@ export function QuotesList() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* Send Email Modal */}
+            {selectedQuote && (
+                <SendEmailModal
+                    open={sendEmailModalOpen}
+                    onOpenChange={setSendEmailModalOpen}
+                    documentType="quote"
+                    documentNumber={selectedQuote.quote_number}
+                    customerEmail={selectedQuote.contact.email}
+                    customerName={selectedQuote.contact.name}
+                    companyName=""
+                    onSend={async (emailData) => {
+                        await sendMutation.mutateAsync({ id: selectedQuote.id, emailData });
+                    }}
+                    isPending={sendMutation.isPending}
+                />
+            )}
         </div>
     );
 }

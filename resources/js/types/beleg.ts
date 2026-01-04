@@ -1,6 +1,22 @@
 export type BelegType = 'ausgang' | 'eingang' | 'offen' | 'sonstige';
 export type BelegStatus = 'draft' | 'booked' | 'paid' | 'cancelled';
 
+export interface BelegLine {
+    id: number;
+    product_id: number | null;
+    product?: {
+        id: number;
+        name: string;
+        article_number: string | null;
+    };
+    description: string;
+    quantity: number;
+    unit: string;
+    unit_price: number;
+    tax_rate: number;
+    line_total: number;
+}
+
 export interface Beleg {
     id: number;
     document_number: string;
@@ -33,6 +49,7 @@ export interface Beleg {
         description: string;
         booking_date: string;
     };
+    lines?: BelegLine[];
     file_path: string | null;
     file_name: string | null;
     notes: string | null;

@@ -82,6 +82,11 @@ export function CategorySelector({ value, onChange, onManageCategories }: Catego
                                         onChange(category.id === value ? null : category.id);
                                         setOpen(false);
                                     }}
+                                    onClick={() => {
+                                        onChange(category.id === value ? null : category.id);
+                                        setOpen(false);
+                                    }}
+                                    className="cursor-pointer"
                                 >
                                     <Check
                                         className={cn(

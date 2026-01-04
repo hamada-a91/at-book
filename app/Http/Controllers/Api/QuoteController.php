@@ -33,6 +33,7 @@ class QuoteController extends Controller
             'footer_note' => 'nullable|string',
             'notes' => 'nullable|string',
             'lines' => 'required|array|min:1',
+            'lines.*.product_id' => 'nullable|exists:products,id',
             'lines.*.description' => 'required|string',
             'lines.*.quantity' => 'required|numeric|min:0',
             'lines.*.unit' => 'nullable|string',
@@ -84,6 +85,7 @@ class QuoteController extends Controller
         foreach ($validated['lines'] as $line) {
             $lineTotal = $line['quantity'] * $line['unit_price'];
             $quote->lines()->create([
+                'product_id' => $line['product_id'] ?? null,
                 'description' => $line['description'],
                 'quantity' => $line['quantity'],
                 'unit' => $line['unit'] ?? 'Stück',
@@ -101,7 +103,7 @@ class QuoteController extends Controller
         $tenant = $this->getTenantOrFail();
         $quote = Quote::where('tenant_id', $tenant->id)->findOrFail($id);
         
-        return response()->json($quote->load(['contact', 'lines', 'order']));
+        return response()->json($quote->load(['contact', 'lines.product', 'order']));
     }
 
     public function update(Request $request, Quote $quote)
@@ -120,6 +122,7 @@ class QuoteController extends Controller
             'footer_note' => 'nullable|string',
             'notes' => 'nullable|string',
             'lines' => 'required|array',
+            'lines.*.product_id' => 'nullable|exists:products,id',
             'lines.*.description' => 'required|string',
             'lines.*.quantity' => 'required|numeric|min:0',
             'lines.*.unit' => 'required|string',
@@ -158,6 +161,7 @@ class QuoteController extends Controller
         foreach ($validated['lines'] as $line) {
             $lineTotal = $line['quantity'] * $line['unit_price'];
             $quote->lines()->create([
+                'product_id' => $line['product_id'] ?? null,
                 'description' => $line['description'],
                 'quantity' => $line['quantity'],
                 'unit' => $line['unit'],
@@ -323,6 +327,7 @@ class QuoteController extends Controller
         // Copy quote lines to order lines
         foreach ($quote->lines as $quoteLine) {
             $order->lines()->create([
+                'product_id' => $quoteLine->product_id,
                 'description' => $quoteLine->description,
                 'quantity' => $quoteLine->quantity,
                 'delivered_quantity' => 0,

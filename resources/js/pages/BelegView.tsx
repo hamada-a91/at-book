@@ -307,6 +307,49 @@ export function BelegView() {
                         </Card>
                     )}
 
+                    {/* Product Lines */}
+                    {beleg.lines && beleg.lines.length > 0 && (
+                        <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Receipt className="w-5 h-5 text-primary" />
+                                    Produktpositionen
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="space-y-3">
+                                    {beleg.lines.map((line: any, index: number) => (
+                                        <div key={index} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                                            <div className="flex-1">
+                                                <p className="font-medium text-slate-900 dark:text-slate-100">
+                                                    {line.product?.name || line.description}
+                                                </p>
+                                                {line.product?.article_number && (
+                                                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                                                        Art.-Nr.: {line.product.article_number}
+                                                    </p>
+                                                )}
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="font-medium text-slate-900 dark:text-slate-100">
+                                                    {parseFloat(line.quantity).toLocaleString('de-DE')} {line.unit}
+                                                </p>
+                                                <p className="text-sm text-slate-500 dark:text-slate-400">
+                                                    à {formatCurrency(line.unit_price)}
+                                                </p>
+                                            </div>
+                                            <div className="text-right ml-4">
+                                                <p className="font-bold text-slate-900 dark:text-slate-100">
+                                                    {formatCurrency(line.line_total)}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
+
                     {/* File Preview */}
                     {beleg.file_path && (
                         <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">

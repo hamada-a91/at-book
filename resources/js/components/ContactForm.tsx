@@ -69,6 +69,8 @@ export function ContactForm({ onSubmit, isSubmitting = false, defaultValues }: C
     const [showNotice, setShowNotice] = useState(!!defaultValues?.notice);
     const [accountCodeError, setAccountCodeError] = useState<string | null>(null);
     const [checkingAccountCode, setCheckingAccountCode] = useState(false);
+    const [accountSuggestions, setAccountSuggestions] = useState<{ code: string, name: string }[]>([]);
+    const [nextAvailableCode, setNextAvailableCode] = useState<string | null>(null);
 
     const form = useForm<ContactFormValues>({
         resolver: zodResolver(contactSchema),
@@ -99,12 +101,64 @@ export function ContactForm({ onSubmit, isSubmitting = false, defaultValues }: C
         const subscription = form.watch((value, { name }) => {
             if (name === 'type' && value.type !== 'other') {
                 setAccountCodeError(null);
+                setAccountSuggestions([]);
+                setNextAvailableCode(null);
             }
         });
         return () => subscription.unsubscribe();
     }, [form]);
 
-    // Check if account code already exists
+    // Find suggestions and next available code based on prefix
+    const findAccountSuggestions = (prefix: string) => {
+        if (!prefix || prefix.trim() === '' || !accounts) {
+            setAccountSuggestions([]);
+            setNextAvailableCode(null);
+            return;
+        }
+
+        // Find accounts that start with this prefix
+        const matchingAccounts = accounts
+            .filter((acc: any) => acc.code.toString().startsWith(prefix))
+            .map((acc: any) => ({ code: acc.code.toString(), name: acc.name }))
+            .sort((a: any, b: any) => a.code.localeCompare(b.code))
+            .slice(-5); // Show last 5 matching accounts
+
+        setAccountSuggestions(matchingAccounts);
+
+        // Calculate next available code
+        if (matchingAccounts.length > 0) {
+            const lastCode = matchingAccounts[matchingAccounts.length - 1].code;
+            const lastNumber = parseInt(lastCode, 10);
+            if (!isNaN(lastNumber)) {
+                const nextCode = (lastNumber + 1).toString();
+                // Check if next code already exists
+                const nextExists = accounts.some((acc: any) => acc.code.toString() === nextCode);
+                if (!nextExists) {
+                    setNextAvailableCode(nextCode);
+                } else {
+                    // Find next available
+                    let candidate = lastNumber + 1;
+                    while (accounts.some((acc: any) => acc.code.toString() === candidate.toString())) {
+                        candidate++;
+                    }
+                    setNextAvailableCode(candidate.toString());
+                }
+            }
+        } else {
+            // No matching accounts, suggest the prefix itself if it's a number
+            const prefixNum = parseInt(prefix, 10);
+            if (!isNaN(prefixNum)) {
+                const exists = accounts.some((acc: any) => acc.code.toString() === prefix);
+                if (!exists) {
+                    setNextAvailableCode(prefix);
+                } else {
+                    setNextAvailableCode((prefixNum + 1).toString());
+                }
+            }
+        }
+    };
+
+    // Check if account code already exists (on blur)
     const checkAccountCode = async (code: string) => {
         if (!code || code.trim() === '') {
             setAccountCodeError(null);
@@ -187,13 +241,49 @@ export function ContactForm({ onSubmit, isSubmitting = false, defaultValues }: C
                                             <Input
                                                 {...field}
                                                 placeholder="z.B. 1300"
+                                                onChange={(e) => {
+                                                    field.onChange(e);
+                                                    findAccountSuggestions(e.target.value);
+                                                }}
                                                 onBlur={(e) => {
                                                     field.onBlur();
                                                     checkAccountCode(e.target.value);
+                                                    // Clear suggestions on blur after a short delay
+                                                    setTimeout(() => setAccountSuggestions([]), 200);
                                                 }}
                                                 className={accountCodeError ? 'border-red-500' : ''}
                                             />
                                         </FormControl>
+
+                                        {/* Account Suggestions */}
+                                        {accountSuggestions.length > 0 && (
+                                            <div className="mt-2 p-2 border rounded-md bg-white dark:bg-slate-800 text-xs space-y-1">
+                                                <p className="text-slate-500 dark:text-slate-400 font-medium mb-1">Vorhandene Konten:</p>
+                                                {accountSuggestions.map((acc) => (
+                                                    <div key={acc.code} className="flex justify-between text-slate-600 dark:text-slate-300">
+                                                        <span className="font-mono">{acc.code}</span>
+                                                        <span className="truncate ml-2">{acc.name}</span>
+                                                    </div>
+                                                ))}
+                                                {nextAvailableCode && (
+                                                    <div className="pt-1 mt-1 border-t border-slate-200 dark:border-slate-700">
+                                                        <button
+                                                            type="button"
+                                                            className="w-full text-left flex justify-between items-center text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded px-1 py-0.5"
+                                                            onClick={() => {
+                                                                form.setValue('account_code', nextAvailableCode);
+                                                                setAccountSuggestions([]);
+                                                                setAccountCodeError(null);
+                                                            }}
+                                                        >
+                                                            <span className="font-mono font-semibold">{nextAvailableCode}</span>
+                                                            <span className="text-emerald-500">← Nächste freie Nr.</span>
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
                                         {accountCodeError && (
                                             <p className="text-sm text-red-500">{accountCodeError}</p>
                                         )}

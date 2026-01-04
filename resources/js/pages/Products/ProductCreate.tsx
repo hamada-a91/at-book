@@ -296,21 +296,33 @@ export default function ProductCreate() {
                             </div>
                             <div className="mt-4 w-full md:w-1/3">
                                 <Label htmlFor="unit" className="mb-2 block">Einheit</Label>
-                                <Input
-                                    id="unit"
-                                    value={unit}
-                                    onChange={e => setUnit(e.target.value)}
-                                    className="bg-white dark:bg-slate-950"
-                                    list="units"
-                                />
-                                <datalist id="units">
-                                    <option value="Stück" />
-                                    <option value="Stunde" />
-                                    <option value="Meter" />
-                                    <option value="kg" />
-                                    <option value="Liter" />
-                                    <option value="Pauschale" />
-                                </datalist>
+                                <Select value={unit} onValueChange={setUnit}>
+                                    <SelectTrigger className="bg-white dark:bg-slate-950">
+                                        <SelectValue placeholder="Einheit wählen" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="Stück">Stück</SelectItem>
+                                        <SelectItem value="Stunde">Stunde</SelectItem>
+                                        <SelectItem value="Stunden">Stunden</SelectItem>
+                                        <SelectItem value="Tag">Tag</SelectItem>
+                                        <SelectItem value="Tage">Tage</SelectItem>
+                                        <SelectItem value="Woche">Woche</SelectItem>
+                                        <SelectItem value="Monat">Monat</SelectItem>
+                                        <SelectItem value="Jahr">Jahr</SelectItem>
+                                        <SelectItem value="Meter">Meter</SelectItem>
+                                        <SelectItem value="m²">m² (Quadratmeter)</SelectItem>
+                                        <SelectItem value="m³">m³ (Kubikmeter)</SelectItem>
+                                        <SelectItem value="km">km (Kilometer)</SelectItem>
+                                        <SelectItem value="kg">kg (Kilogramm)</SelectItem>
+                                        <SelectItem value="g">g (Gramm)</SelectItem>
+                                        <SelectItem value="Liter">Liter</SelectItem>
+                                        <SelectItem value="ml">ml (Milliliter)</SelectItem>
+                                        <SelectItem value="Pauschale">Pauschale</SelectItem>
+                                        <SelectItem value="Paket">Paket</SelectItem>
+                                        <SelectItem value="Karton">Karton</SelectItem>
+                                        <SelectItem value="Set">Set</SelectItem>
+                                    </SelectContent>
+                                </Select>
                             </div>
                         </CardContent>
                     </Card>

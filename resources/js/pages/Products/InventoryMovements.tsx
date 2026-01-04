@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useParams, Link } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import axios from "@/lib/axios";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -28,17 +28,16 @@ import {
     AlertCircle,
     RotateCcw,
     Package,
-    PackageSearch,
     TrendingUp,
     TrendingDown,
     Activity,
     Filter,
-    Download,
     RefreshCw,
+    ArrowLeft,
     Calendar,
     Layers,
     FileSpreadsheet,
-    BarChart3
+    PackageSearch
 } from "lucide-react";
 import { format } from "date-fns";
 import { de } from "date-fns/locale";
@@ -47,7 +46,7 @@ interface Product {
     id: number;
     name: string;
     article_number: string | null;
-    stock_quantity: number;
+    stock_quantity?: number;
     category?: {
         id: number;
         name: string;
@@ -74,7 +73,7 @@ interface InventoryTransaction {
     product: Product;
 }
 
-export function InventoryReport() {
+export default function InventoryMovements() {
     const { tenant } = useParams();
 
     // Filter states
@@ -95,7 +94,7 @@ export function InventoryReport() {
     });
     const categories = categoriesData || [];
 
-    // Fetch products for filter and stock summary
+    // Fetch products
     const { data: productsData } = useQuery<Product[]>({
         queryKey: ['products'],
         queryFn: async () => {
@@ -107,7 +106,7 @@ export function InventoryReport() {
 
     // Fetch all inventory transactions
     const { data: transactionsResponse, isLoading, refetch } = useQuery({
-        queryKey: ['inventory-report', productId, dateFrom, dateTo, typeFilter],
+        queryKey: ['inventory-movements', productId, dateFrom, dateTo, typeFilter],
         queryFn: async () => {
             const params = new URLSearchParams();
             if (productId && productId !== 'all') params.append('product_id', productId);
@@ -134,8 +133,8 @@ export function InventoryReport() {
             // Search filter
             if (searchQuery) {
                 const search = searchQuery.toLowerCase();
-                const matchesProduct = tx.product?.name.toLowerCase().includes(search);
-                const matchesDescription = tx.description.toLowerCase().includes(search);
+                const matchesProduct = tx.product?.name?.toLowerCase().includes(search);
+                const matchesDescription = tx.description?.toLowerCase().includes(search);
                 const matchesArticleNumber = tx.product?.article_number?.toLowerCase().includes(search);
                 if (!matchesProduct && !matchesDescription && !matchesArticleNumber) {
                     return false;
@@ -145,25 +144,40 @@ export function InventoryReport() {
         });
     }, [allTransactions, categoryId, searchQuery]);
 
-    // Calculate stats
+    // Calculate summary stats - with safe number handling
     const stats = useMemo(() => {
         const purchases = filteredTransactions.filter(t => t.type === 'purchase');
         const sales = filteredTransactions.filter(t => t.type === 'sale');
+        const corrections = filteredTransactions.filter(t => t.type === 'correction');
+        const returns = filteredTransactions.filter(t => t.type === 'return');
 
-        const totalIn = purchases.reduce((sum, t) => sum + Math.abs(t.quantity), 0);
-        const totalOut = Math.abs(sales.reduce((sum, t) => sum + t.quantity, 0));
+        // Safe number parsing
+        const parseQty = (val: any) => {
+            const num = parseFloat(val);
+            return isNaN(num) ? 0 : num;
+        };
 
-        // Product stock summary
-        const productsWithStock = products.filter(p => p.stock_quantity > 0);
-        const lowStockProducts = products.filter(p => p.stock_quantity > 0 && p.stock_quantity <= 5);
+        const totalIn = purchases.reduce((sum, t) => sum + Math.abs(parseQty(t.quantity)), 0) +
+            returns.reduce((sum, t) => sum + Math.abs(parseQty(t.quantity)), 0);
+        const totalOut = Math.abs(sales.reduce((sum, t) => sum + parseQty(t.quantity), 0));
+
+        // Product stats
+        const productsWithStock = products.filter(p => (p.stock_quantity || 0) > 0);
+        const lowStockProducts = products.filter(p => (p.stock_quantity || 0) > 0 && (p.stock_quantity || 0) <= 5);
+        const totalStock = products.reduce((sum, p) => sum + (p.stock_quantity || 0), 0);
 
         return {
             totalMovements: filteredTransactions.length,
-            totalIn,
-            totalOut,
+            totalIn: isNaN(totalIn) ? 0 : totalIn,
+            totalOut: isNaN(totalOut) ? 0 : totalOut,
+            netChange: (isNaN(totalIn) ? 0 : totalIn) - (isNaN(totalOut) ? 0 : totalOut),
+            purchaseCount: purchases.length,
+            saleCount: sales.length,
+            correctionCount: corrections.length,
+            returnCount: returns.length,
             productsWithStock: productsWithStock.length,
             lowStockWarnings: lowStockProducts.length,
-            totalStock: products.reduce((sum, p) => sum + (p.stock_quantity || 0), 0),
+            totalStock: isNaN(totalStock) ? 0 : totalStock,
         };
     }, [filteredTransactions, products]);
 
@@ -212,39 +226,74 @@ export function InventoryReport() {
         setSearchQuery('');
     };
 
+    // Export to CSV
+    const handleExport = () => {
+        if (filteredTransactions.length === 0) return;
+
+        const headers = ['Datum', 'Zeit', 'Produkt', 'Artikelnummer', 'Kategorie', 'Typ', 'Beschreibung', 'Menge', 'Bestand danach'];
+        const rows = filteredTransactions.map(tx => [
+            format(new Date(tx.created_at), "dd.MM.yyyy", { locale: de }),
+            format(new Date(tx.created_at), "HH:mm", { locale: de }),
+            tx.product?.name || `Produkt #${tx.product_id}`,
+            tx.product?.article_number || '',
+            tx.product?.category?.name || '',
+            getTypeLabel(tx.type),
+            tx.description,
+            parseFloat(tx.quantity.toString()).toLocaleString('de-DE'),
+            parseFloat(tx.balance_after.toString()).toLocaleString('de-DE'),
+        ]);
+
+        const csvContent = [
+            headers.join(';'),
+            ...rows.map(row => row.map(cell => `"${cell}"`).join(';'))
+        ].join('\n');
+
+        const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `lagerbewegungen_${format(new Date(), 'yyyy-MM-dd')}.csv`;
+        link.click();
+    };
+
     return (
         <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-cyan-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 p-6">
             <div className="max-w-7xl mx-auto space-y-6">
                 {/* Header */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <div>
-                        <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
-                            <BarChart3 className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
-                            Lagerbestandsbericht
-                        </h1>
-                        <p className="text-gray-500 dark:text-gray-400 mt-1">
-                            Übersicht aller Produkte und Lagerbewegungen
-                        </p>
-                    </div>
-                    <div className="flex gap-2">
-                        <Link to={`/${tenant}/products/movements`}>
-                            <Button variant="outline" className="gap-2">
-                                <Activity className="w-4 h-4" />
-                                Alle Bewegungen
+                    <div className="flex items-center gap-4">
+                        <Link to={`/${tenant}/products`}>
+                            <Button variant="ghost" size="icon" className="h-10 w-10 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
+                                <ArrowLeft className="w-5 h-5" />
                             </Button>
                         </Link>
+                        <div>
+                            <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+                                <Activity className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
+                                Lagerbewegungen & Bestand
+                            </h1>
+                            <p className="text-gray-500 dark:text-gray-400 mt-1">
+                                Alle Ein- und Ausgänge Ihrer Produkte mit Filteroptionen
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex gap-2">
                         <Button variant="outline" onClick={() => refetch()} className="gap-2">
                             <RefreshCw className="w-4 h-4" />
                             Aktualisieren
                         </Button>
-                        <Button variant="outline" className="gap-2 bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800">
+                        <Button
+                            variant="outline"
+                            onClick={handleExport}
+                            disabled={filteredTransactions.length === 0}
+                            className="gap-2 bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800"
+                        >
                             <FileSpreadsheet className="w-4 h-4" />
-                            Excel Export
+                            CSV Export
                         </Button>
                     </div>
                 </div>
 
-                {/* Stats Cards Grid */}
+                {/* Stats Cards - 6 cards grid */}
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                     <Card className="border-none shadow-lg bg-white dark:bg-slate-900">
                         <CardContent className="p-4">
@@ -298,39 +347,50 @@ export function InventoryReport() {
                         <CardContent className="p-4">
                             <div className="flex items-center justify-between">
                                 <div>
+                                    <p className="text-xs text-emerald-600 uppercase tracking-wide font-medium">Eingänge</p>
+                                    <p className="text-2xl font-bold text-emerald-600 mt-1">
+                                        +{stats.totalIn.toLocaleString('de-DE')}
+                                    </p>
+                                </div>
+                                <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg flex items-center justify-center">
+                                    <TrendingUp className="w-5 h-5 text-emerald-600" />
+                                </div>
+                            </div>
+                            <p className="text-xs text-gray-400 mt-2">{stats.purchaseCount} Einkäufe, {stats.returnCount} Retouren</p>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="border-none shadow-lg bg-white dark:bg-slate-900">
+                        <CardContent className="p-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-xs text-blue-600 uppercase tracking-wide font-medium">Ausgänge</p>
+                                    <p className="text-2xl font-bold text-blue-600 mt-1">
+                                        -{stats.totalOut.toLocaleString('de-DE')}
+                                    </p>
+                                </div>
+                                <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+                                    <TrendingDown className="w-5 h-5 text-blue-600" />
+                                </div>
+                            </div>
+                            <p className="text-xs text-gray-400 mt-2">{stats.saleCount} Verkäufe</p>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="border-none shadow-lg bg-white dark:bg-slate-900">
+                        <CardContent className="p-4">
+                            <div className="flex items-center justify-between">
+                                <div>
                                     <p className="text-xs text-gray-500 uppercase tracking-wide">Bewegungen</p>
                                     <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-                                        {stats.totalMovements}
+                                        {stats.totalMovements.toLocaleString('de-DE')}
                                     </p>
                                 </div>
                                 <div className="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-lg flex items-center justify-center">
                                     <Activity className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                                 </div>
                             </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="border-none shadow-lg bg-gradient-to-br from-emerald-500 to-emerald-600 text-white">
-                        <CardContent className="p-4">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-emerald-100 text-xs uppercase tracking-wide">Eingänge</p>
-                                    <p className="text-2xl font-bold mt-1">+{stats.totalIn.toLocaleString('de-DE')}</p>
-                                </div>
-                                <TrendingUp className="w-8 h-8 text-emerald-200" />
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="border-none shadow-lg bg-gradient-to-br from-blue-500 to-blue-600 text-white">
-                        <CardContent className="p-4">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-blue-100 text-xs uppercase tracking-wide">Ausgänge</p>
-                                    <p className="text-2xl font-bold mt-1">-{stats.totalOut.toLocaleString('de-DE')}</p>
-                                </div>
-                                <TrendingDown className="w-8 h-8 text-blue-200" />
-                            </div>
+                            <p className="text-xs text-gray-400 mt-2">{stats.correctionCount} Korrekturen</p>
                         </CardContent>
                     </Card>
                 </div>
@@ -344,7 +404,7 @@ export function InventoryReport() {
                                 <CardTitle>Filter</CardTitle>
                             </div>
                             <Button variant="ghost" size="sm" onClick={resetFilters} className="text-gray-500 hover:text-gray-700">
-                                Zurücksetzen
+                                Filter zurücksetzen
                             </Button>
                         </div>
                     </CardHeader>
@@ -420,10 +480,30 @@ export function InventoryReport() {
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="all">Alle Typen</SelectItem>
-                                        <SelectItem value="purchase">Einkauf</SelectItem>
-                                        <SelectItem value="sale">Verkauf</SelectItem>
-                                        <SelectItem value="correction">Korrektur</SelectItem>
-                                        <SelectItem value="return">Retoure</SelectItem>
+                                        <SelectItem value="purchase">
+                                            <div className="flex items-center gap-2">
+                                                <ArrowDownLeft className="w-4 h-4 text-emerald-600" />
+                                                Einkauf
+                                            </div>
+                                        </SelectItem>
+                                        <SelectItem value="sale">
+                                            <div className="flex items-center gap-2">
+                                                <ArrowUpRight className="w-4 h-4 text-blue-600" />
+                                                Verkauf
+                                            </div>
+                                        </SelectItem>
+                                        <SelectItem value="correction">
+                                            <div className="flex items-center gap-2">
+                                                <AlertCircle className="w-4 h-4 text-orange-600" />
+                                                Korrektur
+                                            </div>
+                                        </SelectItem>
+                                        <SelectItem value="return">
+                                            <div className="flex items-center gap-2">
+                                                <RotateCcw className="w-4 h-4 text-purple-600" />
+                                                Retoure
+                                            </div>
+                                        </SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -466,7 +546,7 @@ export function InventoryReport() {
                     <CardHeader className="border-b border-gray-100 dark:border-gray-800">
                         <div className="flex items-center justify-between">
                             <div>
-                                <CardTitle>Letzte Bewegungen</CardTitle>
+                                <CardTitle>Bewegungen</CardTitle>
                                 <CardDescription>
                                     {filteredTransactions.length} Einträge gefunden
                                 </CardDescription>
@@ -485,7 +565,7 @@ export function InventoryReport() {
                                     Keine Bewegungen gefunden.
                                 </p>
                                 <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">
-                                    Erstellen Sie Belege oder Rechnungen um Lagerbewegungen zu erzeugen.
+                                    Passen Sie die Filter an oder erstellen Sie Belege/Rechnungen.
                                 </p>
                             </div>
                         ) : (
@@ -499,7 +579,7 @@ export function InventoryReport() {
                                             <TableHead className="font-semibold">Typ</TableHead>
                                             <TableHead className="font-semibold">Beschreibung</TableHead>
                                             <TableHead className="text-right font-semibold">Menge</TableHead>
-                                            <TableHead className="text-right font-semibold">Bestand danach</TableHead>
+                                            <TableHead className="text-right font-semibold">Bestand</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -558,17 +638,17 @@ export function InventoryReport() {
                                                     {tx.description}
                                                 </TableCell>
                                                 <TableCell className="text-right">
-                                                    <span className={`font-bold text-lg ${tx.quantity > 0
-                                                            ? 'text-emerald-600 dark:text-emerald-400'
-                                                            : 'text-blue-600 dark:text-blue-400'
+                                                    <span className={`font-bold text-lg ${parseFloat(tx.quantity?.toString() || '0') > 0
+                                                        ? 'text-emerald-600 dark:text-emerald-400'
+                                                        : 'text-blue-600 dark:text-blue-400'
                                                         }`}>
-                                                        {tx.quantity > 0 ? '+' : ''}
-                                                        {parseFloat(tx.quantity.toString()).toLocaleString('de-DE')}
+                                                        {parseFloat(tx.quantity?.toString() || '0') > 0 ? '+' : ''}
+                                                        {parseFloat(tx.quantity?.toString() || '0').toLocaleString('de-DE')}
                                                     </span>
                                                 </TableCell>
                                                 <TableCell className="text-right">
                                                     <span className="font-medium text-gray-900 dark:text-gray-100">
-                                                        {parseFloat(tx.balance_after.toString()).toLocaleString('de-DE')}
+                                                        {parseFloat(tx.balance_after?.toString() || '0').toLocaleString('de-DE')}
                                                     </span>
                                                 </TableCell>
                                             </TableRow>

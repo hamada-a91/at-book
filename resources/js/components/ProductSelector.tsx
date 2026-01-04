@@ -1,13 +1,22 @@
-import { useEffect } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import axios from '@/lib/axios';
+import { Check, ChevronsUpDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
+    Command,
+    CommandEmpty,
+    CommandGroup,
+    CommandInput,
+    CommandItem,
+    CommandList,
+} from '@/components/ui/command';
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from '@/components/ui/popover';
 import { Badge } from '@/components/ui/badge';
 
 interface Product {
@@ -19,6 +28,8 @@ interface Product {
     price_gross: number;
     tax_rate: number;
     unit: string;
+    stock_quantity?: number;
+    track_stock?: boolean;
     category?: {
         id: number;
         name: string;
@@ -33,12 +44,13 @@ interface ProductSelectorProps {
 }
 
 export function ProductSelector({ value, onChange, typeFilter = null }: ProductSelectorProps) {
+    const [open, setOpen] = useState(false);
+
     const { data: productsData, isLoading } = useQuery<Product[]>({
         queryKey: ['products', typeFilter],
         queryFn: async () => {
             const params = typeFilter ? `?type=${typeFilter}` : '';
             const { data } = await axios.get(`/api/products${params}`);
-            // Handle both array and paginated response
             if (Array.isArray(data)) {
                 return data;
             }
@@ -50,74 +62,98 @@ export function ProductSelector({ value, onChange, typeFilter = null }: ProductS
     });
 
     const products: Product[] = Array.isArray(productsData) ? productsData : [];
+    const selectedProduct = products.find((p) => p.id === value);
 
-    // Handle selection change
-    const handleValueChange = (selectedValue: string) => {
-        console.log('ProductSelector: Value changed to:', selectedValue);
-
-        if (!selectedValue || selectedValue === 'none') {
-            onChange(null);
-            return;
-        }
-
-        const productId = parseInt(selectedValue, 10);
-        const selectedProduct = products.find((p) => p.id === productId);
-
-        if (selectedProduct) {
-            console.log('ProductSelector: Selected product:', selectedProduct);
-            console.log('ProductSelector: Product ID:', selectedProduct.id);
-            onChange(selectedProduct);
-        } else {
-            console.error('ProductSelector: Could not find product with ID:', productId);
-            onChange(null);
-        }
+    const handleSelect = (product: Product) => {
+        console.log('ProductSelector: Selected product:', product);
+        onChange(product);
+        setOpen(false);
     };
 
-    // Debug: Log products when loaded
-    useEffect(() => {
-        if (products.length > 0) {
-            console.log('ProductSelector: Products loaded:', products.length);
-            console.log('ProductSelector: First product:', products[0]);
-        }
-    }, [products]);
-
     return (
-        <Select
-            value={value ? value.toString() : undefined}
-            onValueChange={handleValueChange}
-        >
-            <SelectTrigger className="w-full bg-white dark:bg-slate-950">
-                <SelectValue placeholder={isLoading ? "Laden..." : "Produkt wählen..."} />
-            </SelectTrigger>
-            <SelectContent>
-                {products.map((product) => (
-                    <SelectItem
-                        key={product.id}
-                        value={product.id.toString()}
-                        className="cursor-pointer"
-                    >
-                        <div className="flex items-center gap-2">
-                            <span className="font-medium">{product.name}</span>
-                            {product.article_number && (
-                                <span className="text-xs text-gray-500">
-                                    ({product.article_number})
-                                </span>
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+                <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={open}
+                    className="w-full justify-between bg-white dark:bg-slate-950"
+                >
+                    {selectedProduct ? (
+                        <div className="flex items-center gap-2 truncate">
+                            <span className="truncate">{selectedProduct.name}</span>
+                            {selectedProduct.track_stock && (
+                                <Badge variant="outline" className="text-xs ml-1">
+                                    {selectedProduct.stock_quantity ?? 0} Stk.
+                                </Badge>
                             )}
-                            {product.type === 'service' && (
-                                <Badge variant="outline" className="text-xs ml-1">DL</Badge>
-                            )}
-                            <span className="text-xs text-gray-400 ml-auto">
-                                {(product.price_net / 100).toFixed(2)} €
-                            </span>
                         </div>
-                    </SelectItem>
-                ))}
-                {products.length === 0 && !isLoading && (
-                    <div className="p-2 text-sm text-gray-500 text-center">
-                        Keine Produkte gefunden
-                    </div>
-                )}
-            </SelectContent>
-        </Select>
+                    ) : (
+                        <span className="text-muted-foreground">
+                            {isLoading ? "Laden..." : "Produkt wählen..."}
+                        </span>
+                    )}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-full p-0" align="start">
+                <Command>
+                    <CommandInput placeholder="Produkt suchen..." />
+                    <CommandList>
+                        <CommandEmpty>Kein Produkt gefunden.</CommandEmpty>
+                        <CommandGroup>
+                            {products.map((product) => (
+                                <CommandItem
+                                    key={product.id}
+                                    value={`${product.name} ${product.article_number || ''}`}
+                                    onSelect={() => handleSelect(product)}
+                                    onClick={() => handleSelect(product)}
+                                    className="cursor-pointer"
+                                >
+                                    <Check
+                                        className={cn(
+                                            "mr-2 h-4 w-4",
+                                            value === product.id ? "opacity-100" : "opacity-0"
+                                        )}
+                                    />
+                                    <div className="flex items-center justify-between w-full">
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-medium">{product.name}</span>
+                                            {product.article_number && (
+                                                <span className="text-xs text-gray-500">
+                                                    ({product.article_number})
+                                                </span>
+                                            )}
+                                            {product.type === 'service' && (
+                                                <Badge variant="outline" className="text-xs">DL</Badge>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center gap-2 text-xs">
+                                            {product.track_stock && (
+                                                <Badge
+                                                    variant="outline"
+                                                    className={cn(
+                                                        "text-xs",
+                                                        (product.stock_quantity ?? 0) <= 0
+                                                            ? "text-red-600 border-red-200"
+                                                            : "text-emerald-600 border-emerald-200"
+                                                    )}
+                                                >
+                                                    {product.stock_quantity ?? 0} Stk.
+                                                </Badge>
+                                            )}
+                                            <span className="text-gray-400">
+                                                {(product.price_net / 100).toFixed(2)} €
+                                            </span>
+                                        </div>
+                                    </div>
+                                </CommandItem>
+                            ))}
+                        </CommandGroup>
+                    </CommandList>
+                </Command>
+            </PopoverContent>
+        </Popover>
     );
 }
+
