@@ -31,6 +31,8 @@ interface BankAccount {
     type: 'checking' | 'savings' | 'credit_card';
     is_default: boolean;
     notes: string | null;
+    sachkonto_code?: string;
+    sachkonto_name?: string;
 }
 
 const accountTypeLabels: Record<string, string> = {
@@ -216,10 +218,15 @@ export function BankAccountsList() {
                                     <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">IBAN</p>
                                     <p className="font-mono text-sm">{account.formatted_iban}</p>
                                 </div>
-                                <div>
+                                <div className="flex items-center gap-2 flex-wrap">
                                     <Badge variant="outline" className={accountTypeStyles[account.type]}>
                                         {accountTypeLabels[account.type]}
                                     </Badge>
+                                    {account.sachkonto_code && (
+                                        <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-400 dark:border-indigo-800">
+                                            Konto {account.sachkonto_code}
+                                        </Badge>
+                                    )}
                                 </div>
                                 <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
                                     <div>

@@ -33,7 +33,6 @@ import {
     TrendingDown,
     Activity,
     Filter,
-    Download,
     RefreshCw,
     Calendar,
     Layers,
@@ -559,8 +558,8 @@ export function InventoryReport() {
                                                 </TableCell>
                                                 <TableCell className="text-right">
                                                     <span className={`font-bold text-lg ${tx.quantity > 0
-                                                            ? 'text-emerald-600 dark:text-emerald-400'
-                                                            : 'text-blue-600 dark:text-blue-400'
+                                                        ? 'text-emerald-600 dark:text-emerald-400'
+                                                        : 'text-blue-600 dark:text-blue-400'
                                                         }`}>
                                                         {tx.quantity > 0 ? '+' : ''}
                                                         {parseFloat(tx.quantity.toString()).toLocaleString('de-DE')}

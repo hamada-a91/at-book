@@ -22,12 +22,21 @@ class BankAccount extends Model
         'type',
         'is_default',
         'notes',
+        'account_id',
     ];
 
     protected $casts = [
         'balance' => 'integer',
         'is_default' => 'boolean',
     ];
+
+    /**
+     * Get the accounting account (Sachkonto) for this bank account
+     */
+    public function account()
+    {
+        return $this->belongsTo(\App\Modules\Accounting\Models\Account::class);
+    }
 
     /**
      * Get the balance formatted as currency
@@ -63,3 +72,4 @@ class BankAccount extends Model
         });
     }
 }
+
