@@ -40,6 +40,16 @@ class LoginController extends Controller
         $user->load('tenant');
         $tenant = $user->tenant;
 
+        if ($user->hasRole('admin')) {
+             return response()->json([
+                'message' => 'Login successful',
+                'user' => $user,
+                'tenant' => null, // Admin is global
+                'token' => $token,
+                'redirect' => '/admin/dashboard',
+            ]);
+        }
+
         if (!$tenant) {
             JWTAuth::invalidate($token);
             return response()->json([

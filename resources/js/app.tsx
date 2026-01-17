@@ -31,6 +31,8 @@ import ProductList from './pages/Products/ProductList';
 import ProductCreate from './pages/Products/ProductCreate';
 import InventoryMovements from './pages/Products/InventoryMovements';
 import UsersList from './pages/Users/UsersList';
+import BugReportsList from './pages/BugReports/BugReportsList';
+import AdminDashboard from './pages/Admin/AdminDashboard';
 import { MainLayout } from '@/components/layout/main-layout';
 import { ThemeProvider } from '@/components/theme-provider';
 import { useEffect, useState } from 'react';
@@ -164,6 +166,15 @@ function App() {
                         <Route path="/register" element={<Register />} />
                         <Route path="/login" element={<Login />} />
 
+                        {/* Admin Routes (Global) */}
+                        <Route path="/admin/*" element={
+                            <MainLayout>
+                                <Routes>
+                                    <Route path="dashboard" element={<AdminDashboard />} />
+                                </Routes>
+                            </MainLayout>
+                        } />
+
                         {/* Tenant-Specific Routes */}
                         <Route path="/:tenant/*" element={<TenantRoutes />} />
                     </Routes>
@@ -218,6 +229,7 @@ function TenantRoutes() {
                             <Route path="/bookings/create" element={<BookingCreate />} />
                             <Route path="/bank-accounts" element={<BankAccountsList />} />
                             <Route path="/users" element={<UsersList />} />
+                            <Route path="/bug-reports" element={<BugReportsList />} />
                             <Route path="/settings" element={<Settings />} />
                             <Route path="/" element={<Navigate to={`/${tenant}/dashboard`} replace />} />
                         </Routes>

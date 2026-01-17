@@ -20,6 +20,8 @@ import {
     ChevronRight,
     Layers,
     UserCog,
+    Bug,
+    Shield,
 } from "lucide-react"
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
@@ -56,6 +58,17 @@ export function Sidebar({ className }: SidebarProps) {
             return data;
         },
     });
+
+    const { data: currentUser } = useQuery({
+        queryKey: ['currentUser'],
+        queryFn: async () => {
+            const response = await axios.get('/api/user');
+            return response.data.user;
+        },
+    });
+
+    const isAdmin = currentUser?.roles?.some((role: any) => role.name === 'admin') || false;
+
 
     // Routes grouped by category
     const mainRoutes = [
@@ -101,7 +114,22 @@ export function Sidebar({ className }: SidebarProps) {
             href: tenantUrl("/users"),
             active: isActive("/users"),
         },
+        {
+            label: "Meldungen",
+            icon: Bug,
+            href: tenantUrl("/bug-reports"),
+            active: isActive("/bug-reports"),
+        },
+        // Admin Link - Only visible if user has admin role (need to check role)
+        // For now, we'll verify checking userService or similar, but simplified:
+        {
+            label: "Admin Panel",
+            icon: Shield,
+            href: "/admin/dashboard", // Global route
+            active: location.pathname.startsWith("/admin"),
+        }
     ]
+
 
     // Products section with sub-items
     const productsSection = {
@@ -198,64 +226,79 @@ export function Sidebar({ className }: SidebarProps) {
 
                     {/* Main Routes */}
                     <div className="space-y-1">
-                        {mainRoutes.map((route) => renderRouteButton(route))}
+                        {isAdmin ? (
+                            // Admin only sees Admin Panel
+                            renderRouteButton({
+                                label: "Admin Panel",
+                                icon: Shield,
+                                href: "/admin/dashboard",
+                                active: location.pathname.startsWith("/admin"),
+                            })
+                        ) : (
+                            // Regular users see all tenant routes except Admin Panel
+                            mainRoutes
+                                .filter(route => route.label !== 'Admin Panel')
+                                .map((route) => renderRouteButton(route))
+                        )}
 
                         {/* Products Section with Sub-items */}
-                        <div className="space-y-1">
-                            <button
-                                onClick={() => toggleSection('products')}
-                                className={cn(
-                                    "w-full flex items-center justify-between px-3 py-2 text-base font-medium rounded-md transition-all duration-200",
-                                    productsSection.active
-                                        ? "bg-blue-100 dark:bg-blue-900/50 text-blue-900 dark:text-blue-100"
-                                        : "text-blue-900 dark:text-blue-100 hover:bg-blue-200 dark:hover:bg-blue-900"
+                        {!isAdmin && (
+                            <div className="space-y-1">
+                                <button
+                                    onClick={() => toggleSection('products')}
+                                    className={cn(
+                                        "w-full flex items-center justify-between px-3 py-2 text-base font-medium rounded-md transition-all duration-200",
+                                        productsSection.active
+                                            ? "bg-blue-100 dark:bg-blue-900/50 text-blue-900 dark:text-blue-100"
+                                            : "text-blue-900 dark:text-blue-100 hover:bg-blue-200 dark:hover:bg-blue-900"
+                                    )}
+                                >
+                                    <div className="flex items-center">
+                                        <Package className={cn("mr-3 h-5 w-5", productsSection.active ? "text-blue-600 dark:text-blue-400" : "text-blue-600 dark:text-blue-400")} />
+                                        Produkte
+                                    </div>
+                                    {productsSection.expanded ? (
+                                        <ChevronDown className="h-4 w-4 text-blue-500" />
+                                    ) : (
+                                        <ChevronRight className="h-4 w-4 text-blue-500" />
+                                    )}
+                                </button>
+                                {productsSection.expanded && (
+                                    <div className="space-y-1 ml-2">
+                                        {productsSection.items.map((item) => (
+                                            <Button
+                                                key={item.href}
+                                                variant={item.active ? "secondary" : "ghost"}
+                                                className={cn(
+                                                    "w-full justify-start text-sm font-medium pl-10 transition-all duration-200",
+                                                    item.active
+                                                        ? "bg-blue-600 dark:bg-blue-700 shadow text-white hover:bg-blue-700 dark:hover:bg-blue-800"
+                                                        : "text-blue-800 dark:text-blue-200 hover:bg-blue-200 dark:hover:bg-blue-900"
+                                                )}
+                                                asChild
+                                            >
+                                                <Link to={item.href}>
+                                                    <span className="mr-2">
+                                                        {item.label === "Lagerbestand" ? (
+                                                            <BarChart3 className="h-4 w-4 inline" />
+                                                        ) : (
+                                                            <Package className="h-4 w-4 inline" />
+                                                        )}
+                                                    </span>
+                                                    {item.label}
+                                                </Link>
+                                            </Button>
+                                        ))}
+                                    </div>
                                 )}
-                            >
-                                <div className="flex items-center">
-                                    <Package className={cn("mr-3 h-5 w-5", productsSection.active ? "text-blue-600 dark:text-blue-400" : "text-blue-600 dark:text-blue-400")} />
-                                    Produkte
-                                </div>
-                                {productsSection.expanded ? (
-                                    <ChevronDown className="h-4 w-4 text-blue-500" />
-                                ) : (
-                                    <ChevronRight className="h-4 w-4 text-blue-500" />
-                                )}
-                            </button>
-                            {productsSection.expanded && (
-                                <div className="space-y-1 ml-2">
-                                    {productsSection.items.map((item) => (
-                                        <Button
-                                            key={item.href}
-                                            variant={item.active ? "secondary" : "ghost"}
-                                            className={cn(
-                                                "w-full justify-start text-sm font-medium pl-10 transition-all duration-200",
-                                                item.active
-                                                    ? "bg-blue-600 dark:bg-blue-700 shadow text-white hover:bg-blue-700 dark:hover:bg-blue-800"
-                                                    : "text-blue-800 dark:text-blue-200 hover:bg-blue-200 dark:hover:bg-blue-900"
-                                            )}
-                                            asChild
-                                        >
-                                            <Link to={item.href}>
-                                                <span className="mr-2">
-                                                    {item.label === "Lagerbestand" ? (
-                                                        <BarChart3 className="h-4 w-4 inline" />
-                                                    ) : (
-                                                        <Package className="h-4 w-4 inline" />
-                                                    )}
-                                                </span>
-                                                {item.label}
-                                            </Link>
-                                        </Button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
+                            </div>
+                        )}
 
                         {/* Divider */}
-                        <div className="my-3 border-t border-blue-200 dark:border-blue-800" />
+                        {!isAdmin && <div className="my-3 border-t border-blue-200 dark:border-blue-800" />}
 
                         {/* Sales Routes */}
-                        {salesRoutes.map((route) => renderRouteButton(route))}
+                        {!isAdmin && salesRoutes.map((route) => renderRouteButton(route))}
                     </div>
                 </div>
 
@@ -275,7 +318,7 @@ export function Sidebar({ className }: SidebarProps) {
                     </Button>
                 </div>
             </div>
-        </div>
+        </div >
     )
 }
 

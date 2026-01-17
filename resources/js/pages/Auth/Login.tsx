@@ -32,7 +32,7 @@ export default function Login() {
             }
 
             if (data.redirect) {
-                window.location.href = data.redirect;
+                navigate(data.redirect);
             } else {
                 navigate(`/${data.tenant.slug}/dashboard`);
             }

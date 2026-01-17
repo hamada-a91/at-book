@@ -14,18 +14,35 @@ Route::get('/login', function () {
     return view('app');
 })->name('login');
 
-// Tenant-specific routes (path-based: /{tenant}/...)
-Route::prefix('{tenant}')->group(function () {
-    // Serve React App for all tenant routes (React Router handles routing)
-    Route::get('/{any?}', function () {
-        return view('app');
-    })->where('any', '.*');
+// Admin Routes - MUST BE BEFORE tenant routes
+Route::get('/admin', function () {
+    return view('app');
 });
+
+Route::get('/admin/dashboard', function () {
+    return view('app');
+});
+
+Route::get('/admin/{any}', function () {
+    return view('app');
+})->where('any', '.*');
+
+// Tenant-specific routes (path-based: /{tenant}/...)
+Route::get('/{tenant}/{any?}', function () {
+    return view('app');
+})->where('any', '.*');
 
 // Root route - redirect to login or show welcome page
 Route::get('/', function () {
     if (auth()->check()) {
-        $tenant = auth()->user()->tenant;
+        $user = auth()->user();
+        
+        // Check if user is admin
+        if ($user->hasRole('admin')) {
+            return redirect('/admin/dashboard');
+        }
+        
+        $tenant = $user->tenant;
         if ($tenant) {
             return redirect('/' . $tenant->slug . '/dashboard');
         }

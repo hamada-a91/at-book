@@ -54,6 +54,9 @@ Route::get('/force-schema-fix', function () {
 });
 use App\Http\Controllers\Api\ContactController;
 use App\Http\Controllers\Api\AccountController;
+use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\Api\RoleController;
+use App\Http\Controllers\Api\BugReportController;
 use App\Http\Controllers\Api\AccountBalanceController;
 use App\Http\Controllers\Api\JournalEntryController;
 use App\Http\Controllers\Api\DashboardController;
@@ -178,5 +181,15 @@ Route::middleware(['api', 'auth:api', \App\Http\Middleware\SetTenantFromUser::cl
         // Role & User Management
         Route::get('/roles', [\App\Http\Controllers\Api\RoleController::class, 'index']);
         Route::apiResource('users', \App\Http\Controllers\Api\UserController::class);
+        Route::apiResource('bug-reports', \App\Http\Controllers\Api\BugReportController::class)->only(['index', 'store']);
     });
+});
+
+// Admin Routes - Outside tenant middleware (global access)
+Route::middleware(['auth:api'])->prefix('admin')->group(function () {
+    Route::get('/stats', [\App\Http\Controllers\Api\AdminController::class, 'stats']);
+    Route::get('/tenants', [\App\Http\Controllers\Api\AdminController::class, 'tenants']);
+    Route::get('/users', [\App\Http\Controllers\Api\AdminController::class, 'users']);
+    Route::get('/bug-reports', [\App\Http\Controllers\Api\AdminController::class, 'bugReports']);
+    Route::patch('/bug-reports/{id}', [\App\Http\Controllers\Api\AdminController::class, 'updateBugReport']);
 });
