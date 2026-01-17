@@ -52,6 +52,8 @@ class RegistrationController extends Controller
                     'tenant_id' => $tenant->id,
                 ]);
 
+                $user->assignRole('owner');
+
                 // Create company settings
                 app()->instance('currentTenant', $tenant);
                 \App\Models\CompanySetting::create([

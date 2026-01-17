@@ -30,6 +30,7 @@ import Login from './pages/Auth/Login';
 import ProductList from './pages/Products/ProductList';
 import ProductCreate from './pages/Products/ProductCreate';
 import InventoryMovements from './pages/Products/InventoryMovements';
+import UsersList from './pages/Users/UsersList';
 import { MainLayout } from '@/components/layout/main-layout';
 import { ThemeProvider } from '@/components/theme-provider';
 import { useEffect, useState } from 'react';
@@ -216,6 +217,7 @@ function TenantRoutes() {
                             <Route path="/bookings" element={<JournalList />} />
                             <Route path="/bookings/create" element={<BookingCreate />} />
                             <Route path="/bank-accounts" element={<BankAccountsList />} />
+                            <Route path="/users" element={<UsersList />} />
                             <Route path="/settings" element={<Settings />} />
                             <Route path="/" element={<Navigate to={`/${tenant}/dashboard`} replace />} />
                         </Routes>

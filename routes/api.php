@@ -174,5 +174,9 @@ Route::middleware(['api', 'auth:api', \App\Http\Middleware\SetTenantFromUser::cl
         // Delivery Notes (Lieferscheine)
         Route::apiResource('delivery-notes', \App\Http\Controllers\Api\DeliveryNoteController::class);
         Route::post('/delivery-notes/{deliveryNote}/create-invoice', [\App\Http\Controllers\Api\DeliveryNoteController::class, 'createInvoice']);
+        
+        // Role & User Management
+        Route::get('/roles', [\App\Http\Controllers\Api\RoleController::class, 'index']);
+        Route::apiResource('users', \App\Http\Controllers\Api\UserController::class);
     });
 });

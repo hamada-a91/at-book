@@ -19,6 +19,7 @@ import {
     ChevronDown,
     ChevronRight,
     Layers,
+    UserCog,
 } from "lucide-react"
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
@@ -93,6 +94,12 @@ export function Sidebar({ className }: SidebarProps) {
             icon: Users,
             href: tenantUrl("/contacts"),
             active: isActive("/contacts"),
+        },
+        {
+            label: "Benutzer",
+            icon: UserCog,
+            href: tenantUrl("/users"),
+            active: isActive("/users"),
         },
     ]
 
