@@ -7,6 +7,9 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 class Document extends Model
 {
+    // Note: This model uses morph relationship (documentable) instead of direct tenant_id
+    // Documents are linked to JournalEntry or other tenant-scoped models
+
     protected $guarded = ['id'];
 
     protected $casts = [
@@ -18,3 +21,4 @@ class Document extends Model
         return $this->morphTo();
     }
 }
+

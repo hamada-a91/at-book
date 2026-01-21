@@ -182,8 +182,28 @@ Route::middleware(['api', 'auth:api', \App\Http\Middleware\SetTenantFromUser::cl
         Route::get('/roles', [\App\Http\Controllers\Api\RoleController::class, 'index']);
         Route::apiResource('users', \App\Http\Controllers\Api\UserController::class);
         Route::apiResource('bug-reports', \App\Http\Controllers\Api\BugReportController::class)->only(['index', 'store']);
+
+        // Backup & Restore
+        Route::prefix('backup')->group(function () {
+            // Export
+            Route::post('/export', [\App\Http\Controllers\Api\BackupController::class, 'startExport']);
+            
+            // Jobs
+            Route::get('/jobs', [\App\Http\Controllers\Api\BackupController::class, 'listJobs']);
+            Route::get('/jobs/{id}', [\App\Http\Controllers\Api\BackupController::class, 'getJob']);
+            Route::get('/jobs/{id}/download-url', [\App\Http\Controllers\Api\BackupController::class, 'getDownloadUrl']);
+            Route::delete('/jobs/{id}', [\App\Http\Controllers\Api\BackupController::class, 'deleteBackup']);
+            
+            // Import
+            Route::post('/import/upload', [\App\Http\Controllers\Api\BackupController::class, 'uploadImport']);
+            Route::post('/import/{id}/validate', [\App\Http\Controllers\Api\BackupController::class, 'validateImport']);
+            Route::post('/import/{id}/start', [\App\Http\Controllers\Api\BackupController::class, 'startImport']);
+        });
     });
 });
+
+// Public backup download (uses signed token, no auth required)
+Route::get('/backup/download/{id}', [\App\Http\Controllers\Api\BackupController::class, 'downloadBackupSigned']);
 
 // Admin Routes - Outside tenant middleware (global access)
 Route::middleware(['auth:api'])->prefix('admin')->group(function () {

@@ -5,10 +5,11 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use App\Models\Concerns\BelongsToTenant;
+use App\Models\Concerns\HasPublicId;
 
 class TaxCode extends Model
 {
-    use BelongsToTenant;
+    use BelongsToTenant, HasPublicId;
     
     protected $fillable = [
         'code',

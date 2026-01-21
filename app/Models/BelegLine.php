@@ -3,9 +3,11 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Concerns\HasPublicId;
 
 class BelegLine extends Model
 {
+    use HasPublicId;
     protected $fillable = [
         'beleg_id',
         'product_id',

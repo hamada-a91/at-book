@@ -5,16 +5,13 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Models\Concerns\BelongsToTenant;
+use App\Models\Concerns\HasPublicId;
 
 class ProductCategory extends Model
 {
-    use SoftDeletes, BelongsToTenant;
+    use SoftDeletes, BelongsToTenant, HasPublicId;
 
-    protected $fillable = [
-        'name',
-        'description',
-        'color',
-    ];
+    protected $guarded = ['id'];
 
     public function products()
     {

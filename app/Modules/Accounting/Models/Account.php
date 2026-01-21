@@ -4,10 +4,11 @@ namespace App\Modules\Accounting\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Concerns\BelongsToTenant;
+use App\Models\Concerns\HasPublicId;
 
 class Account extends Model
 {
-    use BelongsToTenant;
+    use BelongsToTenant, HasPublicId;
     
     protected $guarded = ['id'];
     

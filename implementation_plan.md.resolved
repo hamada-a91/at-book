@@ -1,0 +1,961 @@
+# Implementation Plan: Import/Export/Restore System für AT-Book
+
+## Übersicht
+
+Dieses Dokument beschreibt einen umsetzbaren Implementierungsplan für ein **App-eigenes Backup-/Restore-System** für die AT-Book Laravel-Anwendung. Das Ziel ist es, Administratoren/Owners die Möglichkeit zu geben, vollständige System-Backups als ZIP-Archive zu erstellen und wiederherzustellen – inklusive aller Datenbank-Entitäten und zugehöriger Dateien (Rechnungen, PDFs, Bilder).
+
+**Kernprinzipien:**
+- **Kein pg_dump/psql** über die UI – stattdessen ein App-eigenes Format (ZIP mit JSON-Daten)
+- **Multi-Tenant-sicher**: Backups sind strikt pro Tenant isoliert
+- **Streaming-fähig**: Große Datenmengen werden nicht komplett in Memory geladen
+- **Robust**: Validierung, Checksums, optionale Signatur, Pre-Restore-Backup
+- **public_id als stable identifier**: INT-IDs bleiben intern, ULIDs dienen für Export/Import
+
+---
+
+## User Review Required
+
+> [!NOTE]
+> **Entscheidung getroffen: public_id Generierung**
+> Wir verwenden **UUID** (Standard Laravel `Str::uuid()`).
+
+> [!NOTE]
+> **Entscheidung getroffen: Encryption at Rest**
+> Vorerst **ohne Verschlüsselung** im MVP, um Komplexität gering zu halten. Architektur wird so angelegt, dass es später nachrüstbar ist.
+
+> [!NOTE]
+> **Entscheidung getroffen: Storage**
+> Vorerst **lokaler Storage** via Laravel Storage Facade. Keine Presigned URLs. System wird so gebaut, dass ein Wechsel auf S3 (durch Ändern des Disk-Drivers) später nahtlos möglich ist.
+
+> [!NOTE]
+> **Daten-Migration**
+> Bestehende Daten sind **nicht kritisch** (Dev-Mode). Wir können Tabellen leeren oder neu aufsetzen (`migrate:fresh` oder Truncate), falls nötig. Backfill-Skripte sind nicht prioritär.
+
+---
+
+## Proposed Changes
+
+### Phase 0: Discovery & Decisions
+
+**Ziele:**
+- Technische Entscheidungen finalisieren
+- Entity-Liste und Abhängigkeiten vollständig erfassen
+- Backup-Format spezifizieren
+
+#### Arbeitsschritte
+
+1. **Entity-Inventar erstellen**
+   - Alle Models mit [BelongsToTenant](file://wsl.localhost/Ubuntu/home/ahmed/LaravelProjects/at-book/app/Models/Concerns/BelongsToTenant.php#26-45) dokumentieren
+   - Beziehungen (BelongsTo, HasMany, BelongsToMany) kartografieren
+   - Abhängigkeitsreihenfolge für Import definieren
+
+2. **public_id Format entscheiden**
+   - *Empfehlung*: ULID (Str::ulid()) – sortierbar, kompakt
+   - *Alternative*: UUID v7 via Ramsey/uuid
+
+3. **Backup-Optionen finalisieren**
+   - Mit/ohne Dateien
+   - Kompression (ZIP deflate vs. keine)
+   - Encryption (optional, Phase 5)
+
+4. **Rollout-Strategie**
+   - Migration der bestehenden Daten mit generierten public_ids
+   - Feature-Flag für graduelle Aktivierung
+
+---
+
+### Phase 1: Foundations (Datenmodell & Infrastruktur)
+
+**Ziele:**
+- public_id zu allen tenant-scoped Entities hinzufügen
+- Neue Tabellen für Backup-Management und Audit
+- Queue/Job-Infrastruktur vorbereiten
+
+---
+
+#### [NEW] Migration: Add public_id to All Models
+
+**Bestandsdaten**: Da keine Echtdaten vorhanden sind, können wir die Tabellen entweder leeren oder die neuen Spalten einfach hinzufügen und für Testdaten füllen.
+
+**Schema-Änderungen pro Tabelle:**
+```php
+$table->uuid('public_id')->nullable()->unique()->after('id');
+// Index für schnelles Lookup beim Import
+$table->index('public_id');
+```
+
+---
+
+#### [NEW] Migration: Create backup_jobs table
+
+**Datei**: `database/migrations/2026_01_18_000002_create_backup_jobs_table.php`
+
+```php
+Schema::create('backup_jobs', function (Blueprint $table) {
+    $table->id();
+    $table->uuid('public_id')->unique();
+    $table->foreignId('tenant_id')->constrained()->onDelete('cascade');
+    $table->foreignId('user_id')->constrained()->onDelete('cascade');
+    $table->enum('type', ['export', 'import'])->index();
+    $table->enum('status', ['pending', 'processing', 'completed', 'failed', 'cancelled'])->default('pending');
+    $table->unsignedInteger('progress_percent')->default(0);
+    $table->string('current_step')->nullable();
+    $table->string('file_path')->nullable(); // Storage path zum ZIP
+    $table->unsignedBigInteger('file_size')->nullable();
+    $table->string('checksum')->nullable(); // SHA256
+    $table->json('options')->nullable(); // z.B. {include_files: true, import_mode: 'replace'}
+    $table->json('stats')->nullable(); // z.B. {invoices: 150, products: 42}
+    $table->text('error_message')->nullable();
+    $table->json('error_details')->nullable();
+    $table->timestamp('started_at')->nullable();
+    $table->timestamp('completed_at')->nullable();
+    $table->timestamps();
+    
+    $table->index(['tenant_id', 'type', 'status']);
+    $table->index(['status', 'created_at']);
+});
+```
+
+---
+
+#### [NEW] Migration: Create backup_audit_logs table
+
+**Datei**: `database/migrations/2026_01_18_000003_create_backup_audit_logs_table.php`
+
+```php
+Schema::create('backup_audit_logs', function (Blueprint $table) {
+    $table->id();
+    $table->foreignId('tenant_id')->constrained()->onDelete('cascade');
+    $table->foreignId('user_id')->nullable()->constrained()->onDelete('set null');
+    $table->foreignId('backup_job_id')->nullable()->constrained()->onDelete('set null');
+    $table->string('action'); // 'export_started', 'export_completed', 'import_started', etc.
+    $table->ipAddress('ip_address')->nullable();
+    $table->string('user_agent')->nullable();
+    $table->json('metadata')->nullable(); // zusätzliche Infos
+    $table->timestamps();
+    
+    $table->index(['tenant_id', 'action', 'created_at']);
+});
+```
+
+---
+
+#### [NEW] Trait: HasPublicId
+
+**Datei**: `app/Models/Concerns/HasPublicId.php`
+
+```php
+trait HasPublicId
+{
+    protected static function bootHasPublicId(): void
+    {
+        static::creating(function (Model $model) {
+            if (empty($model->public_id)) {
+                $model->public_id = (string) Str::uuid();
+            }
+        });
+    }
+
+    public static function findByPublicId(string $publicId): ?static
+    {
+        return static::where('public_id', $publicId)->first();
+    }
+
+    public static function findByPublicIdOrFail(string $publicId): static
+    {
+        return static::where('public_id', $publicId)->firstOrFail();
+    }
+
+    public function getRouteKeyName(): string
+    {
+        return 'public_id'; // Optional: für Route Model Binding
+    }
+}
+```
+
+---
+
+#### [NEW] Model: BackupJob
+
+**Datei**: `app/Models/BackupJob.php`
+
+**Felder wie oben**, plus:
+- Relationship: `belongsTo(Tenant)`, `belongsTo(User)`
+- Scope: `scopeExports()`, `scopeImports()`, `scopePending()`
+- Methods: `markAsProcessing()`, `markAsCompleted()`, `markAsFailed(string $message)`
+
+---
+
+#### [NEW] Model: BackupAuditLog
+
+**Datei**: `app/Models/BackupAuditLog.php`
+
+---
+
+#### [MODIFY] Trait BelongsToTenant
+
+**Datei**: [app/Models/Concerns/BelongsToTenant.php](file://wsl.localhost/Ubuntu/home/ahmed/LaravelProjects/at-book/app/Models/Concerns/BelongsToTenant.php)
+
+- `HasPublicId` Trait hinzufügen zu allen Models die diesen Trait nutzen
+- Entweder: `HasPublicId` direkt in [BelongsToTenant](file://wsl.localhost/Ubuntu/home/ahmed/LaravelProjects/at-book/app/Models/Concerns/BelongsToTenant.php#26-45) integrieren
+- Oder: Jedes Model muss explizit `use HasPublicId` hinzufügen (empfohlen für Klarheit)
+
+---
+
+### Phase 2: Export-System
+
+**Ziele:**
+- Export-Job implementieren mit Progress-Tracking
+- Streaming-fähiges Schreiben von NDJSON
+- Dateien sammeln und ins ZIP integrieren
+- Manifest und Metadata generieren
+
+---
+
+#### [NEW] Service: BackupExportService
+
+**Datei**: `app/Services/Backup/BackupExportService.php`
+
+**Hauptmethoden:**
+- `createExport(Tenant $tenant, User $user, array $options): BackupJob`
+- `processExport(BackupJob $job): void` (wird vom Job aufgerufen)
+
+**Algorithmus für Export:**
+```
+1. BackupJob erstellen (status=pending)
+2. Audit-Log: export_started
+3. Temporäres Verzeichnis erstellen
+4. metadata.json erstellen:
+   - app_version (config('app.version'))
+   - backup_version: "1.0"
+   - created_at: ISO8601
+   - tenant_public_id
+   - schema_version (Hash der Migration-Liste)
+   - checksum_algo: "sha256"
+5. Für jede Entity (in Abhängigkeitsreihenfolge):
+   a. Cursor-basiertes Iterieren (->cursor())
+   b. Pro Record: transform() → JSON-Zeile → append zu data/{entity}.ndjson (via Storage Disk)
+   c. Progress updaten
+6. Falls include_files=true:
+   a. Alle File-Referenzen sammeln
+   b. Files kopieren (Storage::disk source -> temp dir)
+   c. Deduplizierung via SHA256-Hash
+7. manifest.json erstellen:
+   - Liste aller Entities mit counts und checksums
+   - Liste aller Files mit sizes und checksums
+8. ZIP erstellen (streaming via ZipStream oder ZipArchive)
+9. SHA256 des gesamten ZIP berechnen
+10. BackupJob updaten (completed, file_path, checksum)
+11. Audit-Log: export_completed
+```
+
+---
+
+#### [NEW] Job: ProcessBackupExportJob
+
+**Datei**: `app/Jobs/ProcessBackupExportJob.php`
+
+- Queue: `backups` (eigene Queue für Isolation)
+- Timeout: 3600 (1 Stunde für große Exports)
+- Tries: 1 (kein automatischer Retry bei fehlgeschlagenem Export)
+- Middleware: `WithoutOverlapping` (nur ein Export pro Tenant gleichzeitig)
+
+---
+
+#### [NEW] Transformers für Export
+
+**Datei**: `app/Services/Backup/Transformers/`
+
+Pro Entity-Typ ein Transformer, z.B.:
+- `InvoiceExportTransformer.php`
+- `ContactExportTransformer.php`
+- etc.
+
+**Aufgabe:**
+- Interne IDs durch public_ids ersetzen
+- Sensible Daten maskieren falls gewünscht
+- Relationships auflösen zu public_id-Referenzen
+
+**Beispiel InvoiceExportTransformer:**
+```php
+public function transform(Invoice $invoice): array
+{
+    return [
+        'public_id' => $invoice->public_id,
+        'invoice_number' => $invoice->invoice_number,
+        'contact_public_id' => $invoice->contact?->public_id,
+        'order_public_id' => $invoice->order?->public_id,
+        'invoice_date' => $invoice->invoice_date?->toIso8601String(),
+        'due_date' => $invoice->due_date?->toIso8601String(),
+        'status' => $invoice->status,
+        'subtotal' => $invoice->subtotal,
+        'tax_total' => $invoice->tax_total,
+        'total' => $invoice->total,
+        'notes' => $invoice->notes,
+        // ... weitere Felder
+        'lines' => $invoice->lines->map(fn($line) => [
+            'public_id' => $line->public_id,
+            'product_public_id' => $line->product?->public_id,
+            'description' => $line->description,
+            'quantity' => $line->quantity,
+            'unit_price' => $line->unit_price,
+            // ...
+        ])->toArray(),
+    ];
+}
+```
+
+---
+
+#### [NEW] API Endpoint: Start Export
+
+**Route**: `POST /api/v1/backup/export`
+
+**Controller**: `app/Http/Controllers/Api/BackupController.php`
+
+```php
+public function startExport(BackupExportRequest $request): JsonResponse
+{
+    $this->authorize('backup-restore'); // Policy Check
+    
+    $options = $request->validated();
+    $job = $this->exportService->createExport(
+        tenant(),
+        auth()->user(),
+        $options
+    );
+    
+    ProcessBackupExportJob::dispatch($job);
+    
+    return response()->json([
+        'message' => 'Export gestartet',
+        'job_id' => $job->public_id,
+    ], 202);
+}
+```
+
+---
+
+#### [NEW] API Endpoint: Export Status
+
+**Route**: `GET /api/v1/backup/jobs/{jobId}`
+
+---
+
+#### [NEW] API Endpoint: Download Export
+
+**Route**: `GET /api/v1/backup/jobs/{jobId}/download`
+
+- Prüft: Job gehört zum Tenant, ist completed
+- Streamt das ZIP via `Storage::download()` (abstrahiert vom Disk-Typ)
+
+---
+
+### Phase 3: Import/Restore-System
+
+**Ziele:**
+- Sicherer Upload des Backups
+- Validierung des ZIP-Formats
+- Restore-Algorithmus mit Rollback-Fähigkeit
+- Pre-Restore Auto-Backup
+
+---
+
+#### [NEW] Service: BackupImportService
+
+**Datei**: `app/Services/Backup/BackupImportService.php`
+
+**Import-Algorithmus:**
+```
+1. ZIP validieren:
+   - Größenlimit prüfen (z.B. max 5GB)
+   - Content-Type prüfen
+   - Path Traversal Check (keine ../ in Pfaden)
+   - metadata.json vorhanden und valide
+   - manifest.json vorhanden
+   - Schema-Version kompatibel
+   - Tenant-public_id stimmt überein (oder Override-Flag)
+
+2. Pre-Restore Safety Backup erstellen (wenn import_mode='replace'):
+   - Automatischer Export des aktuellen Zustands
+   - Speichern als pre_restore_backup_{timestamp}.zip
+
+3. Import-Modus bestimmen:
+   A) REPLACE: Alle Tenant-Daten löschen, dann importieren
+   B) MERGE: Upsert basierend auf public_id (Phase 2)
+
+4. Maintenance-Modus aktivieren für Tenant (optional Flag in tenant)
+
+5. Datenbank-Transaction starten (für kleinere Tenants)
+   ODER Batch-basiertes Vorgehen mit manuellem Rollback-Tracking
+
+6. Für jede Entity (in Abhängigkeitsreihenfolge):
+   a. NDJSON Datei streamen
+   b. Pro Zeile: JSON parsen
+   c. public_id_map aufbauen: public_id → new_internal_id
+   d. Foreign Keys via Mapping auflösen
+   e. Model erstellen (ohne Events, ohne Observers)
+   
+7. Files wiederherstellen:
+   a. Checksums verifizieren
+   b. In Storage schreiben
+   c. Deduplizierung beachten
+
+8. Post-Import Validierung:
+   - Referentielle Integrität prüfen
+   - Counts vergleichen
+
+9. Maintenance-Modus deaktivieren
+10. Cache invalidieren
+11. BackupJob als completed markieren
+12. Audit-Log: import_completed
+```
+
+---
+
+#### [NEW] DTO: ImportIdMapping
+
+**Datei**: `app/Services/Backup/DTO/ImportIdMapping.php`
+
+```php
+class ImportIdMapping
+{
+    private array $map = [];
+    
+    public function set(string $entityType, string $publicId, int $internalId): void
+    {
+        $this->map[$entityType][$publicId] = $internalId;
+    }
+    
+    public function get(string $entityType, string $publicId): ?int
+    {
+        return $this->map[$entityType][$publicId] ?? null;
+    }
+    
+    public function getOrFail(string $entityType, string $publicId): int
+    {
+        return $this->map[$entityType][$publicId] 
+            ?? throw new ImportIdMappingException("No mapping for {$entityType}:{$publicId}");
+    }
+}
+```
+
+---
+
+#### Entity Import-Reihenfolge (Abhängigkeitsgraph)
+
+```
+1. tenant (falls Tenant-übergreifend, normalerweise übersprungen)
+2. users
+3. accounts (Kontenplan)
+4. tax_codes
+5. product_categories
+6. products
+7. contacts
+8. bank_accounts
+9. company_settings
+10. quotes → quote_lines
+11. orders → order_lines
+12. delivery_notes → delivery_note_lines
+13. invoices → invoice_lines
+14. belege → beleg_lines
+15. journal_entries
+16. inventory_transactions
+17. documents
+```
+
+---
+
+#### [NEW] Job: ProcessBackupImportJob
+
+**Datei**: `app/Jobs/ProcessBackupImportJob.php`
+
+- Queue: `backups`
+- Timeout: 7200 (2 Stunden)
+- Tries: 1
+
+---
+
+#### [NEW] API Endpoints
+
+| Route | Method | Beschreibung |
+|-------|--------|--------------|
+| `/api/v1/backup/import/upload` | POST | Multipart-Upload des ZIP |
+| `/api/v1/backup/import/validate` | POST | Nur validieren, nicht importieren |
+| `/api/v1/backup/import/start` | POST | Import starten (nach Upload) |
+
+---
+
+#### Sicherheits-Maßnahmen beim Import
+
+1. **Re-Authentication**: Vor dem Start des Imports muss der User sein Passwort erneut eingeben
+2. **Rate Limiting**: Max 1 Import pro Tenant pro Stunde
+3. **Size Limit**: Max 5GB (konfigurierbar)
+4. **Path Traversal Prevention**: Alle Pfade im ZIP normalisieren und prüfen
+5. **Content Validation**: Nur erlaubte Dateitypen in /files/
+
+---
+
+### Phase 4: UI/UX
+
+**Ziele:**
+- Settings-Seite für Backup-Management
+- Progress-Anzeige mit Live-Updates
+- Warnungen und Bestätigungsdialoge
+
+---
+
+#### UI States und Flows
+
+**Export:**
+1. User öffnet Settings → Backup
+2. "Export erstellen" Button
+3. Modal mit Optionen:
+   - [ ] Dateien einschließen
+   - Info: Geschätzte Größe, letzte Backups
+4. Button "Export starten" → API Call
+5. Progress-Anzeige (Polling/WebSocket):
+   - Fortschrittsbalken
+   - Aktueller Schritt
+   - Geschätzte Restzeit
+6. Nach Abschluss: Download-Button
+
+**Import/Restore:**
+1. "Backup wiederherstellen" Button (prominent mit Warning-Style)
+2. Datei-Upload Zone
+3. Validierungs-Phase (automatisch nach Upload):
+   - ✓ Format korrekt
+   - ✓ Version kompatibel
+   - ✓ Tenant stimmt überein
+   - Statistiken: X Rechnungen, Y Kontakte, etc.
+4. Warnungs-Modal:
+   ```
+   ⚠️ WARNUNG: Alle bestehenden Daten werden überschrieben!
+   
+   Vor dem Restore wird automatisch ein Backup erstellt.
+   
+   Bitte geben Sie zur Bestätigung Ihr Passwort ein:
+   [____________]
+   
+   [Abbrechen] [Restore starten]
+   ```
+5. Progress-Anzeige analog zu Export
+6. Bestätigung: "Restore erfolgreich"
+
+---
+
+#### [NEW] UI Components
+
+- `BackupSettingsPage.tsx` / `backup-settings.blade.php`
+- `BackupProgressModal.tsx`
+- `BackupHistoryList.tsx`
+- `RestoreConfirmationModal.tsx`
+
+---
+
+### Phase 5: Hardening & Tests
+
+**Ziele:**
+- Comprehensive Testsuite
+- Security Hardening
+- Performance-Optimierung
+
+---
+
+#### Test-Strategie
+
+**Unit Tests:**
+- `ExportTransformer` Tests (Relation-Mapping, Datentransformation)
+- `ImportIdMapping` Tests
+- `ZipValidator` Tests (Path Traversal, Invalid ZIP)
+
+**Feature Tests:**
+- Export durchführen → Download → Validieren
+- Import mit verschiedenen Modi
+- Error Handling (korruptes ZIP, fehlende Felder)
+- Authorization Tests (nur Admin/Owner)
+- Rate Limiting Tests
+
+**Integration Tests:**
+- Full Export → Full Import → Daten identisch
+- Large Dataset (10.000+ Records) mit Memory-Monitoring
+- Files Round-Trip
+
+**Security Tests:**
+- Path Traversal Attempt → 400 Error
+- Invalid JWT → 401
+- Non-Owner → 403
+- Oversized ZIP → 413
+- Malformed JSON → Graceful Error
+
+**Manuelle Test-Cases:**
+- [ ] Export mit 0 Daten
+- [ ] Export mit 1000+ Rechnungen
+- [ ] Import in leeren Tenant
+- [ ] Import überschreibt existierende Daten
+- [ ] Import-Abbruch und Wiederaufnahme
+- [ ] Browser-Tab während Import schließen → Status nach Wiederkehr
+
+---
+
+#### Security Hardening
+
+1. **HMAC Signing** (optional):
+   - Signatur in metadata.json
+   - Prüfung beim Import
+   - Secret aus ENV
+
+2. **Encryption** (Optional / Future):
+   - Aktuell nicht implementiert (MVP).
+   - Architektur erlaubt späteren Einbau von Encrypted Streams.
+
+3. **Audit Trail Completeness**:
+   - Alle Actions geloggt
+   - IP + User Agent
+   - Retention Policy (z.B. 90 Tage)
+
+---
+
+### Phase 6: Release & Ops
+
+**Ziele:**
+- Deployment-Strategie
+- Monitoring und Alerting
+- Dokumentation
+
+---
+
+#### Deployment Schritte
+
+1. **Migrations ausführen**
+   - `public_id` zu allen Models hinzufügen
+   - Bestehende Daten: public_ids generieren via Seeder/Command
+
+2. **Feature Flag aktivieren**
+   - `FEATURE_BACKUP_ENABLED=true`
+
+3. **Queue Worker konfigurieren**
+   ```
+   php artisan queue:work --queue=backups --timeout=7200
+   ```
+
+4. **Storage konfigurieren**
+   - S3 Bucket für Backups (separater Bucket empfohlen)
+   - Lifecycle Rule: Alte Backups nach 30 Tagen löschen
+
+---
+
+#### Observability
+
+**Logging:**
+- Strukturierte Logs (JSON)
+- Log Level: INFO für normale Ops, ERROR für Fehler
+- Searchable: tenant_id, job_id, action
+
+**Metrics:**
+- `backup_exports_total` (Counter)
+- `backup_imports_total` (Counter)
+- `backup_duration_seconds` (Histogram)
+- `backup_size_bytes` (Histogram)
+- `backup_errors_total` (Counter by error_type)
+
+**Alerts:**
+- Export/Import dauert > 30 Min → Warning
+- Export/Import failed → Error
+- Disk Space < 10% → Critical
+
+---
+
+## Risiken & Mitigations
+
+| Risiko | Wahrscheinlichkeit | Impact | Mitigation |
+|--------|-------------------|--------|------------|
+| Schema-Inkompatibilität bei App-Updates | Mittel | Hoch | Schema-Version in Metadata, Migrations-Liste, Kompatibilitäts-Matrix |
+| Import überschreibt versehentlich Daten | Niedrig | Kritisch | Re-Auth, Pre-Restore-Backup, Confirmation Modal |
+| Memory Exhaustion bei großen Exports | Mittel | Mittel | Streaming, Cursor-basiert, Batching |
+| Lange Laufzeit blockiert User | Mittel | Niedrig | Background Job, Progress-Anzeige, Abbruch-Option |
+| Korrupte ZIP-Dateien | Niedrig | Mittel | Checksum-Validierung, Manifest-Prüfung |
+| Path Traversal im ZIP | Niedrig | Kritisch | ZipArchive mit Pfad-Normalisierung, Whitelist |
+| Tenant-übergreifendes Datenleck | Sehr Niedrig | Kritisch | Striktes Scoping, tenant_public_id Match |
+| S3 Timeouts bei großen Files | Mittel | Mittel | Presigned URLs, Retry-Logic, Chunked Upload |
+
+---
+
+## Definition of Done Checklist
+
+### Phase 1: Foundations
+- [ ] Migration: `public_id` zu allen Tenant-Models
+- [ ] Seeder/Command: bestehende Daten mit public_ids versehen
+- [ ] `HasPublicId` Trait implementiert und getestet
+- [ ] `BackupJob` Model mit CRUD
+- [ ] `BackupAuditLog` Model
+- [ ] Queue `backups` konfiguriert
+
+### Phase 2: Export
+- [ ] `BackupExportService` implementiert
+- [ ] `ProcessBackupExportJob` läuft asynchron
+- [ ] Alle Entity-Transformers implementiert
+- [ ] ZIP-Erstellung streamingfähig
+- [ ] API: `/backup/export` (POST, GET status, GET download)
+- [ ] Unit Tests für Transformers
+- [ ] Feature Tests für Export-Flow
+
+### Phase 3: Import
+- [ ] `BackupImportService` implementiert
+- [ ] ZIP-Validierung vollständig
+- [ ] Pre-Restore Backup automatisch
+- [ ] Import-Modus "Replace" funktional
+- [ ] Import-Modus "Merge" (optional, später)
+- [ ] API: `/backup/import/*`
+- [ ] Re-Auth vor Import
+- [ ] Feature Tests für Import-Flow
+
+### Phase 4: UI
+- [ ] Export-Button in Settings
+- [ ] Progress-Modal mit Live-Updates
+- [ ] Import-Flow mit Validation + Confirmation
+- [ ] History-Liste vergangener Backups
+- [ ] Mobile-responsive
+
+### Phase 5: Hardening
+- [ ] Rate Limiting aktiviert
+- [ ] Audit Logs vollständig
+- [ ] Security Tests bestanden
+- [ ] Integration Tests bestanden
+- [ ] Performance Test mit 10k+ Records
+
+### Phase 6: Release
+- [ ] Dokumentation für Admins
+- [ ] Monitoring-Dashboard
+- [ ] Alerting konfiguriert
+- [ ] Feature Flag bereit
+- [ ] Runbook für Ops
+
+---
+
+## API Contract (Draft)
+
+### Endpoints
+
+| Method | Path | Beschreibung | Auth |
+|--------|------|--------------|------|
+| POST | `/api/v1/backup/export` | Export starten | Admin/Owner |
+| GET | `/api/v1/backup/jobs` | Liste aller Jobs | Admin/Owner |
+| GET | `/api/v1/backup/jobs/{id}` | Job-Status | Admin/Owner |
+| GET | `/api/v1/backup/jobs/{id}/download` | ZIP herunterladen | Admin/Owner |
+| POST | `/api/v1/backup/import/upload` | ZIP hochladen | Admin/Owner |
+| POST | `/api/v1/backup/import/{id}/validate` | Backup validieren | Admin/Owner |
+| POST | `/api/v1/backup/import/{id}/start` | Import starten | Admin/Owner + Re-Auth |
+| DELETE | `/api/v1/backup/jobs/{id}` | Job/Backup löschen | Admin/Owner |
+
+---
+
+### Request/Response Beispiele
+
+#### POST /api/v1/backup/export
+
+**Request:**
+```json
+{
+  "include_files": true,
+  "compression_level": 6
+}
+```
+
+**Response (202):**
+```json
+{
+  "message": "Export wird erstellt",
+  "job": {
+    "id": "01HQGX5K3BVYTFNM8WR2DCE4PA",
+    "type": "export",
+    "status": "pending",
+    "progress_percent": 0,
+    "created_at": "2026-01-18T10:00:00Z"
+  }
+}
+```
+
+---
+
+#### GET /api/v1/backup/jobs/{id}
+
+**Response (200):**
+```json
+{
+  "job": {
+    "id": "01HQGX5K3BVYTFNM8WR2DCE4PA",
+    "type": "export",
+    "status": "processing",
+    "progress_percent": 45,
+    "current_step": "Exportiere Rechnungen...",
+    "started_at": "2026-01-18T10:00:05Z",
+    "stats": {
+      "invoices": 150,
+      "contacts": 42,
+      "products": 89
+    }
+  }
+}
+```
+
+---
+
+#### POST /api/v1/backup/import/{id}/start
+
+**Request:**
+```json
+{
+  "confirm_password": "userpassword123",
+  "import_mode": "replace"
+}
+```
+
+**Response (202):**
+```json
+{
+  "message": "Import wird gestartet. Ein Pre-Restore-Backup wurde erstellt.",
+  "pre_restore_backup_id": "01HQGX8N7MWYZPQ3KR4SDFG6HJ",
+  "job": {
+    "id": "01HQGX7AZBCTMVNW9XP5QEH2FL",
+    "type": "import",
+    "status": "pending"
+  }
+}
+```
+
+---
+
+## Backup Format v1 Spec
+
+### Dateistruktur im ZIP
+
+```
+backup_tenant-abc123_2026-01-18.zip
+├── metadata.json
+├── manifest.json
+├── data/
+│   ├── tenants.ndjson
+│   ├── users.ndjson
+│   ├── accounts.ndjson
+│   ├── tax_codes.ndjson
+│   ├── product_categories.ndjson
+│   ├── products.ndjson
+│   ├── contacts.ndjson
+│   ├── bank_accounts.ndjson
+│   ├── company_settings.ndjson
+│   ├── quotes.ndjson
+│   ├── quote_lines.ndjson
+│   ├── orders.ndjson
+│   ├── order_lines.ndjson
+│   ├── delivery_notes.ndjson
+│   ├── delivery_note_lines.ndjson
+│   ├── invoices.ndjson
+│   ├── invoice_lines.ndjson
+│   ├── belege.ndjson
+│   ├── beleg_lines.ndjson
+│   ├── journal_entries.ndjson
+│   ├── inventory_transactions.ndjson
+│   └── documents.ndjson
+└── files/
+    ├── invoices/
+    │   ├── invoice_2024_001.pdf
+    │   └── invoice_2024_002.pdf
+    └── documents/
+        └── beleg_scan_001.jpg
+```
+
+---
+
+### metadata.json
+
+```json
+{
+  "backup_version": "1.0",
+  "app_name": "AT-Book",
+  "app_version": "2.5.0",
+  "created_at": "2026-01-18T10:15:30+01:00",
+  "tenant_public_id": "01HQABCD1234567890EFGHIJ",
+  "tenant_name": "Meine Firma GmbH",
+  "schema_version": "a7b4c3d2e1f0",
+  "checksum_algo": "sha256",
+  "signature": null,
+  "options": {
+    "include_files": true,
+    "compression_level": 6
+  },
+  "counts": {
+    "users": 3,
+    "invoices": 150,
+    "contacts": 42,
+    "products": 89,
+    "files": 23
+  },
+  "created_by": {
+    "public_id": "01HQUSER123456789ABCDEFGH",
+    "email": "admin@meinefirma.de"
+  }
+}
+```
+
+---
+
+### manifest.json
+
+```json
+{
+  "entities": [
+    {
+      "type": "invoices",
+      "file": "data/invoices.ndjson",
+      "count": 150,
+      "checksum": "sha256:a1b2c3d4e5f6..."
+    },
+    {
+      "type": "invoice_lines",
+      "file": "data/invoice_lines.ndjson",
+      "count": 487,
+      "checksum": "sha256:f6e5d4c3b2a1..."
+    }
+  ],
+  "files": [
+    {
+      "path": "files/invoices/invoice_2024_001.pdf",
+      "original_path": "invoices/2024/invoice_2024_001.pdf",
+      "size": 125430,
+      "checksum": "sha256:abc123...",
+      "mime_type": "application/pdf"
+    }
+  ],
+  "total_entities": 1250,
+  "total_files": 23,
+  "total_size_bytes": 15728640
+}
+```
+
+---
+
+### Beispiel NDJSON Zeile (invoices.ndjson)
+
+Eine Zeile, JSON ohne Zeilenumbrüche:
+
+```json
+{"public_id":"01HQINV001ABCDEF123456789","invoice_number":"RE-2024-0001","contact_public_id":"01HQCONT01ABCDEF987654321","order_public_id":null,"invoice_date":"2024-03-15","due_date":"2024-04-15","status":"paid","subtotal":"1500.00","tax_total":"285.00","total":"1785.00","journal_entry_public_id":"01HQJE001ABCDEF111222333","notes":"Danke für Ihren Auftrag!","intro_text":"Sehr geehrte Damen und Herren,","payment_terms":"Zahlbar innerhalb 30 Tagen","footer_note":"MwSt. ausweisbar","created_at":"2024-03-15T08:30:00+01:00","updated_at":"2024-03-16T14:22:00+01:00"}
+```
+
+---
+
+## Assumptions
+
+Die folgenden Annahmen wurden für diesen Plan getroffen:
+
+1. **Assumption**: Die App verwendet Laravel 10+ mit PHP 8.2+
+2. **Assumption**: PostgreSQL 14+ ist die Datenbank
+3. **Assumption**: Redis ist für Queues verfügbar
+4. **Assumption**: S3-kompatibles Storage ist für Produktion geplant
+5. **Assumption**: Es gibt keine bestehenden `public_id` Felder in den Models
+6. **Assumption**: Die Multi-Tenancy ist bereits über `tenant_id` implementiert
+7. **Assumption**: Spatie Permissions wird für Rollen/Berechtigungen verwendet
+8. **Assumption**: Die App hat bereits eine Settings-Seite im Admin-Bereich
+9. **Assumption**: WebSocket/Pusher ist für Echtzeit-Updates nicht verfügbar (Polling wird verwendet)
+10. **Assumption**: Das Frontend ist React-basiert (anhand der .tsx Dateien)

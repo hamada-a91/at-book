@@ -13,6 +13,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { AccountPlanManagement } from '@/components/AccountPlanManagement';
+import { BackupManagement } from '@/components/BackupManagement';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface CompanySetting {
@@ -660,6 +661,13 @@ export function Settings() {
             {!fromOnboarding && (
                 <div className="mt-12">
                     <AccountPlanManagement />
+                </div>
+            )}
+
+            {/* Backup Management - Only show when not in onboarding */}
+            {!fromOnboarding && (
+                <div className="mt-8">
+                    <BackupManagement />
                 </div>
             )}
         </div>

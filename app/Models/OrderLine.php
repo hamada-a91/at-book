@@ -3,9 +3,11 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Concerns\HasPublicId;
 
 class OrderLine extends Model
 {
+    use HasPublicId;
     protected $fillable = [
         'order_id',
         'product_id',

@@ -6,10 +6,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use App\Models\Concerns\BelongsToTenant;
+use App\Models\Concerns\HasPublicId;
 
 class JournalEntry extends Model
 {
-    use SoftDeletes, BelongsToTenant;
+    use SoftDeletes, BelongsToTenant, HasPublicId;
 
     protected $guarded = ['id'];
 

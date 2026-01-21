@@ -3,9 +3,11 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Concerns\HasPublicId;
 
 class InvoiceLine extends Model
 {
+    use HasPublicId;
     protected $fillable = [
         'invoice_id',
         'product_id',

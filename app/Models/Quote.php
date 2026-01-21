@@ -4,11 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Concerns\BelongsToTenant;
+use App\Models\Concerns\HasPublicId;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Quote extends Model
 {
-    use BelongsToTenant, SoftDeletes;
+    use BelongsToTenant, SoftDeletes, HasPublicId;
     
     protected $fillable = [
         'contact_id',
