@@ -491,12 +491,24 @@ class BackupImportService
             // Set public_id in the data array BEFORE creating model
             // For SAME-TENANT imports: preserve the original public_id
             // For CROSS-TENANT imports: let the model generate a new UUID (avoids unique constraint violations)
-            if ($publicId && !$isCrossTenant) {
-                $data['public_id'] = $publicId;
-            } elseif ($isCrossTenant) {
-                // For cross-tenant, generate a new UUID
-                $data['public_id'] = (string) \Illuminate\Support\Str::uuid();
-                \Log::debug("Import: Cross-tenant - generating new public_id for {$entityType}");
+            // But ONLY if the table actually has a public_id column!
+            $tableHasPublicId = true;
+            try {
+                $instance = new $modelClass;
+                $table = $instance->getTable();
+                $tableHasPublicId = \Schema::hasColumn($table, 'public_id');
+            } catch (\Exception $e) {
+                // Assume it has public_id if we can't check
+            }
+            
+            if ($tableHasPublicId) {
+                if ($publicId && !$isCrossTenant) {
+                    $data['public_id'] = $publicId;
+                } elseif ($isCrossTenant) {
+                    // For cross-tenant, generate a new UUID
+                    $data['public_id'] = (string) \Illuminate\Support\Str::uuid();
+                    \Log::debug("Import: Cross-tenant - generating new public_id for {$entityType}");
+                }
             }
 
             // Special handling for users - preserve the importing user completely and handle existing users

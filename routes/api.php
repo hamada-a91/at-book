@@ -193,6 +193,7 @@ Route::middleware(['api', 'auth:api', \App\Http\Middleware\SetTenantFromUser::cl
             Route::get('/jobs/{id}', [\App\Http\Controllers\Api\BackupController::class, 'getJob']);
             Route::get('/jobs/{id}/download-url', [\App\Http\Controllers\Api\BackupController::class, 'getDownloadUrl']);
             Route::delete('/jobs/{id}', [\App\Http\Controllers\Api\BackupController::class, 'deleteBackup']);
+            Route::post('/jobs/{id}/cancel', [\App\Http\Controllers\Api\BackupController::class, 'cancelJob']);
             
             // Import
             Route::post('/import/upload', [\App\Http\Controllers\Api\BackupController::class, 'uploadImport']);

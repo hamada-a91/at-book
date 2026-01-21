@@ -15,6 +15,7 @@ import {
     Shield,
     Loader2,
     PlayCircle,
+    StopCircle,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -107,6 +108,17 @@ export function BackupManagement() {
     const deleteBackupMutation = useMutation({
         mutationFn: async (jobId: string) => {
             await axios.delete(`/api/backup/jobs/${jobId}`);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['backup-jobs'] });
+        },
+    });
+
+    // Cancel job mutation (for stuck/pending jobs)
+    const cancelJobMutation = useMutation({
+        mutationFn: async (jobId: string) => {
+            const { data } = await axios.post(`/api/backup/jobs/${jobId}/cancel`);
+            return data;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['backup-jobs'] });
@@ -385,6 +397,22 @@ export function BackupManagement() {
                                             className="hover:bg-green-50 hover:border-green-600 hover:text-green-600"
                                         >
                                             <Download className="w-4 h-4" />
+                                        </Button>
+                                    )}
+                                    {(job.status === 'pending' || job.status === 'processing') && (
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => cancelJobMutation.mutate(job.id)}
+                                            disabled={cancelJobMutation.isPending}
+                                            className="hover:bg-orange-50 hover:border-orange-600 hover:text-orange-600"
+                                            title="Job abbrechen"
+                                        >
+                                            {cancelJobMutation.isPending ? (
+                                                <Loader2 className="w-4 h-4 animate-spin" />
+                                            ) : (
+                                                <StopCircle className="w-4 h-4" />
+                                            )}
                                         </Button>
                                     )}
                                     {job.status !== 'pending' && job.status !== 'processing' && (

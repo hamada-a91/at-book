@@ -92,7 +92,12 @@ class BackupController extends Controller
 
         $tenant = $this->getTenant();
 
-         $jobs = BackupJob::where('tenant_id', $tenant->id)
+        $jobs = BackupJob::where('tenant_id', $tenant->id)
+            // Exclude pre-restore backups (automatically created during imports)
+            ->where(function($query) {
+                $query->whereNull('options->is_pre_restore')
+                      ->orWhere('options->is_pre_restore', false);
+            })
             ->orderBy('created_at', 'desc')
             ->limit(50)
             ->get()
@@ -238,6 +243,41 @@ class BackupController extends Controller
 
         return response()->json([
             'message' => 'Backup gelöscht',
+        ]);
+    }
+
+    /**
+     * Cancel a running or stuck backup job.
+     */
+    public function cancelJob(string $id): JsonResponse
+    {
+        $this->authorize('backup-manage');
+
+        $tenant = $this->getTenant();
+
+        $job = BackupJob::where('public_id', $id)
+            ->where('tenant_id', $tenant->id)
+            ->firstOrFail();
+
+        // Can only cancel pending or processing jobs
+        if (!in_array($job->status, [BackupJob::STATUS_PENDING, BackupJob::STATUS_PROCESSING])) {
+            return response()->json([
+                'message' => 'Nur laufende oder wartende Jobs können abgebrochen werden',
+            ], 400);
+        }
+
+        $job->markAsFailed('Manuell abgebrochen vom Benutzer', [
+            'cancelled_at' => now()->toIso8601String(),
+            'cancelled_by' => auth()->id(),
+        ]);
+
+        BackupAuditLog::log(BackupAuditLog::ACTION_IMPORT_FAILED, $job, [
+            'reason' => 'Manuell abgebrochen',
+        ]);
+
+        return response()->json([
+            'message' => 'Job wurde abgebrochen',
+            'job' => $this->formatJob($job),
         ]);
     }
 
