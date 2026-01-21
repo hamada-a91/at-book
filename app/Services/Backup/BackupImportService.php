@@ -785,7 +785,8 @@ class BackupImportService
             'invoice_lines' => ['unit_price', 'line_total'],
             'delivery_notes' => ['subtotal', 'tax_total', 'total'],
             'delivery_note_lines' => ['unit_price', 'line_total'],
-            'belege' => ['amount'],
+            'belege' => ['amount', 'tax_amount'],
+            'journal_entry_lines' => ['amount', 'tax_amount'],
             'products' => ['purchase_price', 'selling_price'],
         ];
         

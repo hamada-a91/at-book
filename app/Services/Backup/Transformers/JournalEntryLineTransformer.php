@@ -29,8 +29,10 @@ class JournalEntryLineTransformer extends BaseTransformer
             'public_id' => $model->public_id ?? null,
             'journal_entry_public_id' => $this->getRelatedPublicId($model->journalEntry),
             'account_public_id' => $this->getRelatedPublicId($model->account),
-            'debit' => $this->formatDecimal($model->debit),
-            'credit' => $this->formatDecimal($model->credit),
+            'type' => $model->type, // enum: 'debit' or 'credit'
+            'amount' => $this->formatDecimal($model->amount), // stored in cents
+            'tax_key' => $model->tax_key,
+            'tax_amount' => $this->formatDecimal($model->tax_amount), // stored in cents
             'description' => $model->description,
             'created_at' => $this->formatDate($model->created_at),
             'updated_at' => $this->formatDate($model->updated_at),
