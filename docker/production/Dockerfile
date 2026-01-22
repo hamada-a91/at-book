@@ -62,6 +62,10 @@ COPY php.ini /etc/php/8.4/fpm/conf.d/99-sail.ini
 COPY nginx.conf /etc/nginx/sites-available/default
 RUN chmod +x /usr/local/bin/start-container
 
+# Configure PHP-FPM to use our user
+RUN sed -i 's/user = www-data/user = ahmed/g' /etc/php/8.4/fpm/pool.d/www.conf \
+    && sed -i 's/group = www-data/group = ahmed/g' /etc/php/8.4/fpm/pool.d/www.conf
+
 RUN mkdir -p /var/run/php \
     && chown -R ahmed:ahmed /var/run/php \
     && ln -sf /dev/stdout /var/log/nginx/access.log \
