@@ -29,6 +29,22 @@ class RegistrationController extends Controller
             'password' => ['required', 'confirmed', Password::defaults()],
         ]);
 
+        if (env('ENABLE_SERIAL_NUMBER_ACTIVATION', false)) {
+            $validator->addRules([
+                'serial_number' => [
+                    'required',
+                    'string',
+                    'exists:serial_numbers,serial_number',
+                    function ($attribute, $value, $fail) {
+                        $serial = \App\Models\SerialNumber::where('serial_number', $value)->first();
+                        if ($serial && $serial->is_used) {
+                            $fail('This serial number has already been used.');
+                        }
+                    },
+                ],
+            ]);
+        }
+
         if ($validator->fails()) {
             return response()->json([
                 'message' => 'Validation failed',
@@ -38,6 +54,14 @@ class RegistrationController extends Controller
 
         try {
             $result = DB::transaction(function () use ($request) {
+                // Check serial number usage again within transaction to prevent race conditions
+                if (env('ENABLE_SERIAL_NUMBER_ACTIVATION', false)) {
+                     $serial = \App\Models\SerialNumber::where('serial_number', $request->serial_number)->lockForUpdate()->first();
+                     if (!$serial || $serial->is_used) {
+                         throw new \Exception('Serial number invalid or already used.');
+                     }
+                }
+
                 // Create tenant
                 $tenant = Tenant::create([
                     'name' => $request->company_name,
@@ -53,6 +77,14 @@ class RegistrationController extends Controller
                 ]);
 
                 $user->assignRole('owner');
+
+                // Mark serial number as used
+                if (isset($serial)) {
+                    $serial->update([
+                        'is_used' => true,
+                        'used_by_user_id' => $user->id,
+                    ]);
+                }
 
                 // Create company settings
                 app()->instance('currentTenant', $tenant);

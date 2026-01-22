@@ -31,7 +31,9 @@ import ProductList from './pages/Products/ProductList';
 import ProductCreate from './pages/Products/ProductCreate';
 import InventoryMovements from './pages/Products/InventoryMovements';
 import UsersList from './pages/Users/UsersList';
+import NotFound from './pages/NotFound';
 import BugReportsList from './pages/BugReports/BugReportsList';
+import Profile from './pages/Profile';
 import AdminDashboard from './pages/Admin/AdminDashboard';
 import { MainLayout } from '@/components/layout/main-layout';
 import { ThemeProvider } from '@/components/theme-provider';
@@ -230,8 +232,10 @@ function TenantRoutes() {
                             <Route path="/bank-accounts" element={<BankAccountsList />} />
                             <Route path="/users" element={<UsersList />} />
                             <Route path="/bug-reports" element={<BugReportsList />} />
+                            <Route path="/profile" element={<Profile />} />
                             <Route path="/settings" element={<Settings />} />
                             <Route path="/" element={<Navigate to={`/${tenant}/dashboard`} replace />} />
+                            <Route path="*" element={<NotFound />} />
                         </Routes>
                     </MainLayout>
                 </OnboardingCheck>

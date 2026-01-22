@@ -1,11 +1,12 @@
-import { useState } from 'react';
+/// <reference types="vite/client" />
+import { useState, useEffect } from 'react';
 import axios from '@/lib/axios';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, ArrowLeft, Building2, User, Mail, Lock, Link as LinkIcon, AlertCircle } from 'lucide-react';
+import { Loader2, ArrowLeft, Building2, User, Mail, Lock, Link as LinkIcon, AlertCircle, Key } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function Register() {
@@ -13,6 +14,7 @@ export default function Register() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [validationErrors, setValidationErrors] = useState<Record<string, string[]>>({});
+    const [isSerialNumberEnabled, setIsSerialNumberEnabled] = useState(false);
     const [formData, setFormData] = useState({
         company_name: '',
         slug: '',
@@ -20,7 +22,18 @@ export default function Register() {
         email: '',
         password: '',
         password_confirmation: '',
+        serial_number: '',
     });
+
+    useEffect(() => {
+        axios.get('/api/config')
+            .then(response => {
+                setIsSerialNumberEnabled(response.data.serial_number_enabled);
+            })
+            .catch(error => {
+                console.error('Failed to fetch config:', error);
+            });
+    }, []);
 
     const generateSlug = (name: string) => {
         return name
@@ -187,11 +200,34 @@ export default function Register() {
                                 </div>
                             </div>
 
+
+                            {isSerialNumberEnabled && (
+                                <div className="space-y-2">
+                                    <Label htmlFor="serial_number" className="text-gray-900 dark:text-gray-100">Serial Number</Label>
+                                    <div className="relative">
+                                        <Key className="absolute left-3 top-2.5 h-5 w-5 text-gray-400 dark:text-gray-500" />
+                                        <Input
+                                            id="serial_number"
+                                            value={formData.serial_number}
+                                            onChange={(e) => setFormData({ ...formData, serial_number: e.target.value })}
+                                            required={isSerialNumberEnabled}
+                                            placeholder="Enter your activation key"
+                                            disabled={loading}
+                                            className={`pl-10 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-indigo-500 focus:ring-indigo-500 h-11 ${validationErrors.serial_number ? 'border-red-500' : ''}`}
+                                        />
+                                    </div>
+                                    {validationErrors.serial_number && (
+                                        <p className="text-xs text-red-600 dark:text-red-400 mt-1">{validationErrors.serial_number[0]}</p>
+                                    )}
+                                </div>
+                            )}
+
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div className="space-y-2">
                                     <Label htmlFor="password" className="text-gray-900 dark:text-gray-100">Password</Label>
                                     <div className="relative">
                                         <Lock className="absolute left-3 top-2.5 h-5 w-5 text-gray-400 dark:text-gray-500" />
+
                                         <Input
                                             id="password"
                                             type="password"
@@ -255,6 +291,6 @@ export default function Register() {
                     </CardFooter>
                 </Card>
             </div>
-        </div>
+        </div >
     );
 }

@@ -103,6 +103,9 @@ export function Header() {
 
                     {/* Right side actions */}
                     <div className="flex items-center gap-2">
+                        {/* Logo for Header */}
+                        <img src="/atbook-logo.png" alt="AT-Book Logo" className="h-12 w-auto rounded-lg" />
+
                         {/* Notifications */}
                         <Notifications />
 

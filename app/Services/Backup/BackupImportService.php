@@ -577,7 +577,13 @@ class BackupImportService
                     if ($model) {
                         // Update existing record (restore if soft-deleted)
                         $model->fill($data);
-                        $model->deleted_at = $data['deleted_at'] ?? null; // Restore or keep deleted
+                        
+                        // Only set deleted_at if the table supports soft deletes
+                        $table = $model->getTable();
+                        if (\Schema::hasColumn($table, 'deleted_at') && array_key_exists('deleted_at', $data)) {
+                            $model->deleted_at = $data['deleted_at'];
+                        }
+                        
                         $model->save();
                         \Log::debug("Import: Updated existing {$entityType} with public_id {$publicId}");
                     } else {
@@ -595,6 +601,7 @@ class BackupImportService
                 // Store mapping
                 if ($publicId && $model->id) {
                     $idMapping->set($entityType, $publicId, $model->id);
+                    \Log::debug("Import: Stored ID mapping for {$entityType}: public_id={$publicId} => id={$model->id}");
                 }
 
                 $count++;
@@ -735,7 +742,13 @@ class BackupImportService
                 unset($data[$publicIdField]);
                 
                 if ($refPublicId) {
-                    $data[$idField] = $idMapping->get($refEntityType, $refPublicId);
+                    $mappedId = $idMapping->get($refEntityType, $refPublicId);
+                    $data[$idField] = $mappedId;
+                    
+                    // Debug logging for foreign key mapping issues
+                    if ($mappedId === null) {
+                        \Log::warning("Import: FK mapping failed for {$entityType}.{$idField} - could not find {$refEntityType} with public_id {$refPublicId}");
+                    }
                 } else {
                     // Set to null if no reference
                     $data[$idField] = null;

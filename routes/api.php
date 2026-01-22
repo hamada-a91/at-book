@@ -72,6 +72,7 @@ Route::post('/register', [RegistrationController::class, 'register'])->name('api
 Route::post('/login', [LoginController::class, 'login'])->name('api.login');
 Route::post('/logout', [LoginController::class, 'logout'])->middleware('auth:api')->name('api.logout');
 Route::get('/user', [LoginController::class, 'user'])->middleware('auth:api')->name('api.user');
+Route::get('/config', [\App\Http\Controllers\PublicConfigController::class, 'index']);
 
 Route::middleware(['api', 'auth:api', \App\Http\Middleware\SetTenantFromUser::class])->group(function () {
     // ===== UNPROTECTED ROUTES (accessible during onboarding) =====
@@ -213,4 +214,13 @@ Route::middleware(['auth:api'])->prefix('admin')->group(function () {
     Route::get('/users', [\App\Http\Controllers\Api\AdminController::class, 'users']);
     Route::get('/bug-reports', [\App\Http\Controllers\Api\AdminController::class, 'bugReports']);
     Route::patch('/bug-reports/{id}', [\App\Http\Controllers\Api\AdminController::class, 'updateBugReport']);
+    
+    // Serial Numbers
+    Route::get('/serial-numbers', [\App\Http\Controllers\Api\Admin\SerialNumberController::class, 'index']);
+    Route::post('/serial-numbers', [\App\Http\Controllers\Api\Admin\SerialNumberController::class, 'store']);
+    Route::delete('/serial-numbers/{id}', [\App\Http\Controllers\Api\Admin\SerialNumberController::class, 'destroy']);
+    
+    // User Blocking
+    Route::post('/users/{id}/block', [\App\Http\Controllers\Api\AdminController::class, 'blockUser']);
+    Route::post('/users/{id}/unblock', [\App\Http\Controllers\Api\AdminController::class, 'unblockUser']);
 });

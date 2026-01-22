@@ -50,4 +50,23 @@ class AdminController extends Controller
         
         return response()->json($report);
     }
+    public function blockUser($id)
+    {
+        $user = User::findOrFail($id);
+        
+        // Prevent blocking self
+        if ($user->id === auth()->id()) {
+            return response()->json(['message' => 'You cannot block yourself'], 403);
+        }
+        
+        $user->update(['blocked_at' => now()]);
+        return response()->json(['message' => 'User blocked successfully', 'user' => $user]);
+    }
+
+    public function unblockUser($id)
+    {
+        $user = User::findOrFail($id);
+        $user->update(['blocked_at' => null]);
+        return response()->json(['message' => 'User unblocked successfully', 'user' => $user]);
+    }
 }

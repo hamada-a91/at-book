@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Tymon\JWTAuth\Facades\JWTAuth;
+use Illuminate\Support\Str;
 
 /**
  * LoginController - JWT Authentication
@@ -26,17 +27,42 @@ class LoginController extends Controller
             ], 422);
         }
 
+        // Rate Limiting
+        $throttleKey = Str::lower($request->input('email')) . '|' . $request->ip();
+
+        if (\Illuminate\Support\Facades\RateLimiter::tooManyAttempts($throttleKey, 5)) {
+            $seconds = \Illuminate\Support\Facades\RateLimiter::availableIn($throttleKey);
+            return response()->json([
+                'message' => 'Too many login attempts. Please try again in ' . ceil($seconds / 60) . ' minutes.',
+            ], 429);
+        }
+
         // Attempt JWT login
         $credentials = $request->only('email', 'password');
         
         if (!$token = auth('api')->attempt($credentials)) {
+            // Increment failure count, clear after 30 minutes (1800 seconds)
+            \Illuminate\Support\Facades\RateLimiter::hit($throttleKey, 1800);
+            
             return response()->json([
                 'message' => 'The provided credentials do not match our records.'
             ], 401);
         }
 
+        // Clear rate limiter on successful login
+        \Illuminate\Support\Facades\RateLimiter::clear($throttleKey);
+
         // Get user and tenant
         $user = auth('api')->user();
+        
+        // Check if user is manually blocked
+        if ($user->blocked_at) {
+            auth('api')->logout();
+            return response()->json([
+                'message' => 'Your account has been blocked. Please contact support.'
+            ], 403);
+        }
+
         $user->load('tenant');
         $tenant = $user->tenant;
 

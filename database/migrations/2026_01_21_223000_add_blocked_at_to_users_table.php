@@ -11,8 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('company_settings', function (Blueprint $table) {
-            $table->boolean('module_inventory_enabled')->default(true)->after('tax_type');
+        Schema::table('users', function (Blueprint $table) {
+            $table->timestamp('blocked_at')->nullable()->after('password');
         });
     }
 
@@ -21,8 +21,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('company_settings', function (Blueprint $table) {
-            $table->dropColumn('module_inventory_enabled');
+        Schema::table('users', function (Blueprint $table) {
+            $table->dropColumn('blocked_at');
         });
     }
 };

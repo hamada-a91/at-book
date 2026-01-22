@@ -3,9 +3,12 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from '@/lib/axios';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter as UiDialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { ArrowLeft, Edit, Trash2, FileText, Euro, Calendar, User, Download, Eye, Send, Printer, CreditCard, Receipt } from 'lucide-react';
 import { SendEmailModal, EmailData } from '@/components/SendEmailModal';
 
@@ -44,6 +47,9 @@ export function InvoicePreview() {
     const queryClient = useQueryClient();
     const [pdfUrl, setPdfUrl] = useState<string | null>(null);
     const [emailModalOpen, setEmailModalOpen] = useState(false);
+    const [paymentDialog, setPaymentDialog] = useState(false);
+    const [paymentAccount, setPaymentAccount] = useState('');
+    const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
 
     const { data: invoice, isLoading } = useQuery<Invoice>({
         queryKey: ['invoice', id],
@@ -83,6 +89,17 @@ export function InvoicePreview() {
         },
     });
 
+    // Get accounts for payment (Kasse/Bank)
+    const { data: accounts } = useQuery({
+        queryKey: ['accounts'],
+        queryFn: async () => {
+            const { data } = await axios.get('/api/accounts');
+            return data;
+        },
+    });
+
+    const cashAndBankAccounts = accounts?.filter((a: any) => a.type === 'asset' && (a.code.startsWith('10') || a.code.startsWith('12'))) || [];
+
     const bookMutation = useMutation({
         mutationFn: async () => {
             const { data } = await axios.post(`/api/invoices/${id}/book`);
@@ -93,15 +110,26 @@ export function InvoicePreview() {
         },
     });
 
-    const markPaidMutation = useMutation({
-        mutationFn: async () => {
-            const { data } = await axios.post(`/api/invoices/${id}/mark-paid`);
-            return data;
+    const paymentMutation = useMutation({
+        mutationFn: async (data: any) => {
+            const { data: resData } = await axios.post(`/api/invoices/${id}/payment`, data);
+            return resData;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['invoice', id] });
+            setPaymentDialog(false);
+            setPaymentAccount('');
         },
     });
+
+    const handlePayment = () => {
+        if (!paymentAccount) return;
+
+        paymentMutation.mutate({
+            payment_account_id: parseInt(paymentAccount),
+            payment_date: paymentDate,
+        });
+    };
 
     const handleDelete = () => {
         if (confirm('Rechnung wirklich löschen?')) {
@@ -157,6 +185,7 @@ export function InvoicePreview() {
 
     const statusStyles: Record<string, string> = {
         draft: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400 border-slate-200 dark:border-slate-700',
+        booked: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 border-purple-200 dark:border-purple-800',
         sent: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-800',
         paid: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800',
         overdue: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 border-rose-200 dark:border-rose-800',
@@ -165,6 +194,7 @@ export function InvoicePreview() {
 
     const statusLabels: Record<string, string> = {
         draft: 'Entwurf',
+        booked: 'Gebucht',
         sent: 'Versendet',
         paid: 'Bezahlt',
         overdue: 'Überfällig',
@@ -253,10 +283,9 @@ export function InvoicePreview() {
                             Versenden
                         </Button>
                     )}
-                    {invoice.status === 'sent' && (
+                    {(invoice.status === 'sent' || invoice.status === 'booked') && (
                         <Button
-                            onClick={() => markPaidMutation.mutate()}
-                            disabled={markPaidMutation.isPending}
+                            onClick={() => setPaymentDialog(true)}
                             className="gap-2 bg-gradient-to-r from-emerald-600 to-emerald-500"
                         >
                             <CreditCard className="w-4 h-4" />
@@ -449,8 +478,7 @@ export function InvoicePreview() {
                             {(invoice.status === 'booked' || invoice.status === 'sent') && (
                                 <Button
                                     className="w-full gap-2 bg-gradient-to-r from-emerald-600 to-emerald-500"
-                                    onClick={() => markPaidMutation.mutate()}
-                                    disabled={markPaidMutation.isPending}
+                                    onClick={() => setPaymentDialog(true)}
                                 >
                                     <CreditCard className="w-4 h-4" />
                                     Als bezahlt markieren
@@ -539,6 +567,68 @@ export function InvoicePreview() {
                     isPending={sendMutation.isPending}
                 />
             )}
+            {/* Payment Dialog */}
+            <Dialog open={paymentDialog} onOpenChange={setPaymentDialog}>
+                <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                        <DialogTitle>Zahlung erfassen</DialogTitle>
+                        <DialogDescription>
+                            Verbuchen Sie einen Zahlungseingang für diese Rechnung.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-lg space-y-2">
+                            <div className="flex justify-between text-sm">
+                                <span className="text-slate-500">Rechnung:</span>
+                                <span className="font-mono font-medium">{invoice?.invoice_number}</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                                <span className="text-slate-500">Offener Betrag:</span>
+                                <span className="font-bold text-slate-900 dark:text-slate-100">{invoice && formatCurrency(invoice.total)}</span>
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                Zahlungseingang auf Konto *
+                            </label>
+                            <Select value={paymentAccount} onValueChange={setPaymentAccount}>
+                                <SelectTrigger className="bg-white dark:bg-slate-950">
+                                    <SelectValue placeholder="Konto auswählen..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {cashAndBankAccounts.map((account: any) => (
+                                        <SelectItem key={account.id} value={account.id.toString()}>
+                                            <span className="font-mono text-slate-500 mr-2">{account.code}</span>
+                                            {account.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                Zahlungsdatum *
+                            </label>
+                            <Input
+                                type="date"
+                                value={paymentDate}
+                                onChange={(e) => setPaymentDate(e.target.value)}
+                                className="bg-white dark:bg-slate-950"
+                            />
+                        </div>
+                    </div>
+                    <UiDialogFooter>
+                        <Button variant="outline" onClick={() => setPaymentDialog(false)}>
+                            Abbrechen
+                        </Button>
+                        <Button onClick={handlePayment} disabled={!paymentAccount || paymentMutation.isPending}>
+                            {paymentMutation.isPending ? 'Erfasse...' : 'Zahlung buchen'}
+                        </Button>
+                    </UiDialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

@@ -12,12 +12,7 @@ export default function Welcome() {
             <nav className="fixed top-0 w-full z-50 bg-white/80 dark:bg-gray-900/80 backdrop-blur-lg border-b border-gray-200 dark:border-gray-700">
                 <div className="container mx-auto px-6 h-16 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-600 to-cyan-600 flex items-center justify-center font-bold text-white shadow-lg">
-                            AT
-                        </div>
-                        <span className="text-xl font-bold text-gray-900 dark:text-white">
-                            AT-Book
-                        </span>
+                        <img src="/atbook-logo.png" alt="AT-Book Logo" className="h-12 w-auto rounded-lg" />
                     </div>
                     <div className="flex items-center gap-4">
                         <Button
@@ -163,12 +158,44 @@ export default function Welcome() {
 
             {/* Footer */}
             <footer className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 py-12">
-                <div className="container mx-auto px-4 text-center md:flex md:justify-between md:items-center text-gray-600 dark:text-gray-400">
-                    <p>© 2025 AT-Book. Made in Germany.</p>
-                    <div className="flex gap-6 justify-center mt-4 md:mt-0">
-                        <a href="#" className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">Privacy</a>
-                        <a href="#" className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">Terms</a>
-                        <a href="#" className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">Contact</a>
+                <div className="container mx-auto px-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
+                        <div>
+                            <h3 className="font-bold text-gray-900 dark:text-white mb-4">Entwicklung & Kontakt</h3>
+                            <div className="text-gray-600 dark:text-gray-400 space-y-2 text-sm">
+                                <p>Vorpoint</p>
+                                <p className="font-medium">Developer: Ahmed Tahhan</p>
+                                <p>Gorkistraße 84</p>
+                                <p>04347 Leipzig</p>
+                                <p className="pt-2"> <a href="mailto:info@vorpoint.de" className="hover:text-indigo-600 dark:hover:text-indigo-400">info@vorpoint.de</a></p>
+                            </div>
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-gray-900 dark:text-white mb-4">Rechtliches</h3>
+                            <div className="text-gray-600 dark:text-gray-400 space-y-2 text-sm">
+                                <p>Angaben gemäß § 5 TMG</p>
+                                <p>
+                                    Verantwortlich für den Inhalt nach § 55 Abs. 2 RStV: Ahmed Tahhan
+                                </p>
+                            </div>
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-gray-900 dark:text-white mb-4">Support</h3>
+                            <div className="text-gray-600 dark:text-gray-400 space-y-2 text-sm">
+                                <p>Telefon: +491778663796</p>
+                            </div>
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-gray-900 dark:text-white mb-4">Links</h3>
+                            <div className="flex flex-col gap-2 text-sm text-gray-600 dark:text-gray-400">
+                                <a href="#" className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">Privacy Privacy</a>
+                                <a href="#" className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">Terms</a>
+                                <a href="#" className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">Contact</a>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="border-t border-gray-200 dark:border-gray-700 pt-8 text-center text-gray-600 dark:text-gray-400 text-sm">
+                        <p>© 2025 AT-Book. Made by Ahmed Tahhan.</p>
                     </div>
                 </div>
             </footer>

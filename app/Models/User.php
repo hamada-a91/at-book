@@ -26,6 +26,7 @@ class User extends Authenticatable implements JWTSubject
         'email',
         'password',
         'tenant_id',
+        'blocked_at',
     ];
 
     /**
@@ -55,6 +56,7 @@ class User extends Authenticatable implements JWTSubject
     {
         return [
             'email_verified_at' => 'datetime',
+            'blocked_at' => 'datetime',
             'password' => 'hashed',
         ];
     }

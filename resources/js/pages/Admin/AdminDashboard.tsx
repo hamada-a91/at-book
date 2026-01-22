@@ -20,18 +20,24 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import axios from '@/lib/axios';
 import { format } from 'date-fns';
-import { Users, Building, Bug } from 'lucide-react';
+import { Users, Building, Bug, Ticket, Lock, Unlock, Trash2, Plus } from 'lucide-react';
 
 export default function AdminDashboard() {
     const [stats, setStats] = useState({ tenants_count: 0, users_count: 0, bugs_count: 0 });
     const [tenants, setTenants] = useState<any[]>([]);
     const [users, setUsers] = useState<any[]>([]);
     const [bugs, setBugs] = useState<any[]>([]);
+    const [serials, setSerials] = useState<any[]>([]);
     const [selectedBug, setSelectedBug] = useState<any | null>(null);
-    // removed unused loading state
+    const [serialDialogOpen, setSerialDialogOpen] = useState(false);
+    const [generateParams, setGenerateParams] = useState({ count: 1, prefix: '' });
+    const [isGenerating, setIsGenerating] = useState(false);
 
     useEffect(() => {
         loadData();
@@ -39,17 +45,19 @@ export default function AdminDashboard() {
 
     const loadData = async () => {
         try {
-            const [statsRes, tenantsRes, usersRes, bugsRes] = await Promise.all([
+            const [statsRes, tenantsRes, usersRes, bugsRes, serialsRes] = await Promise.all([
                 axios.get('/api/admin/stats'),
                 axios.get('/api/admin/tenants'),
                 axios.get('/api/admin/users'),
                 axios.get('/api/admin/bug-reports'),
+                axios.get('/api/admin/serial-numbers'),
             ]);
 
             setStats(statsRes.data);
             setTenants(Array.isArray(tenantsRes.data) ? tenantsRes.data : []);
             setUsers(Array.isArray(usersRes.data?.data) ? usersRes.data.data : Array.isArray(usersRes.data) ? usersRes.data : []);
             setBugs(Array.isArray(bugsRes.data) ? bugsRes.data : []);
+            setSerials(Array.isArray(serialsRes.data) ? serialsRes.data : []);
         } catch (error) {
             console.error('Failed to load admin data', error);
         }
@@ -58,11 +66,8 @@ export default function AdminDashboard() {
     const updateBugStatus = async (bugId: number, newStatus: string) => {
         try {
             await axios.patch(`/api/admin/bug-reports/${bugId}`, { status: newStatus });
-            // Reload bug reports to reflect the change
             const bugsRes = await axios.get('/api/admin/bug-reports');
             setBugs(Array.isArray(bugsRes.data) ? bugsRes.data : []);
-
-            // Also update stats if status changed to/from open
             const statsRes = await axios.get('/api/admin/stats');
             setStats(statsRes.data);
         } catch (error) {
@@ -70,6 +75,54 @@ export default function AdminDashboard() {
         }
     };
 
+    const handleBlockUser = async (userId: number) => {
+        if (!confirm('Are you sure you want to block this user?')) return;
+        try {
+            await axios.post(`/api/admin/users/${userId}/block`);
+            loadData(); // Reload to update status
+        } catch (error) {
+            console.error('Failed to block user', error);
+            alert('Failed to block user');
+        }
+    };
+
+    const handleUnblockUser = async (userId: number) => {
+        if (!confirm('Are you sure you want to unblock this user?')) return;
+        try {
+            await axios.post(`/api/admin/users/${userId}/unblock`);
+            loadData(); // Reload to update status
+        } catch (error) {
+            console.error('Failed to unblock user', error);
+            alert('Failed to unblock user');
+        }
+    };
+
+    const handleGenerateSerials = async () => {
+        setIsGenerating(true);
+        try {
+            await axios.post('/api/admin/serial-numbers', generateParams);
+            setSerialDialogOpen(false);
+            setGenerateParams({ count: 1, prefix: '' });
+            const serialsRes = await axios.get('/api/admin/serial-numbers');
+            setSerials(Array.isArray(serialsRes.data) ? serialsRes.data : []);
+        } catch (error) {
+            console.error('Failed to generate serials', error);
+            alert('Failed to generate serials');
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
+    const handleDeleteSerial = async (id: number) => {
+        if (!confirm('Are you sure you want to delete this serial number?')) return;
+        try {
+            await axios.delete(`/api/admin/serial-numbers/${id}`);
+            const serialsRes = await axios.get('/api/admin/serial-numbers');
+            setSerials(Array.isArray(serialsRes.data) ? serialsRes.data : []);
+        } catch (error) {
+            console.error('Failed to delete serial', error);
+        }
+    };
 
     return (
         <div className="space-y-6">
@@ -115,6 +168,7 @@ export default function AdminDashboard() {
                     <TabsTrigger value="tenants">Tenants</TabsTrigger>
                     <TabsTrigger value="users">Users</TabsTrigger>
                     <TabsTrigger value="bugs">Bug Reports</TabsTrigger>
+                    <TabsTrigger value="serials">Serial Numbers</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="tenants" className="space-y-4">
@@ -148,19 +202,33 @@ export default function AdminDashboard() {
                                     <TableHead>Name</TableHead>
                                     <TableHead>Email</TableHead>
                                     <TableHead>Tenant</TableHead>
-                                    <TableHead>Role</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead>Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {users.map((user) => (
                                     <TableRow key={user.id}>
-                                        <TableCell>{user.name}</TableCell>
+                                        <TableCell className="font-medium">{user.name}</TableCell>
                                         <TableCell>{user.email}</TableCell>
                                         <TableCell>{user.tenant ? user.tenant.id : <Badge variant="secondary">Global Admin</Badge>}</TableCell>
                                         <TableCell>
-                                            {user.roles.map((r: any) => (
-                                                <Badge key={r.id} variant="outline" className="mr-1">{r.name}</Badge>
-                                            ))}
+                                            {user.blocked_at ? (
+                                                <Badge variant="destructive">Blocked</Badge>
+                                            ) : (
+                                                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Active</Badge>
+                                            )}
+                                        </TableCell>
+                                        <TableCell>
+                                            {user.blocked_at ? (
+                                                <Button size="sm" variant="outline" onClick={() => handleUnblockUser(user.id)}>
+                                                    <Unlock className="w-4 h-4 mr-1" /> Unblock
+                                                </Button>
+                                            ) : (
+                                                <Button size="sm" variant="destructive" onClick={() => handleBlockUser(user.id)}>
+                                                    <Lock className="w-4 h-4 mr-1" /> Block
+                                                </Button>
+                                            )}
                                         </TableCell>
                                     </TableRow>
                                 ))}
@@ -192,7 +260,7 @@ export default function AdminDashboard() {
                                             <select
                                                 value={bug.status}
                                                 onChange={(e) => updateBugStatus(bug.id, e.target.value)}
-                                                className="border rounded px-2 py-1 text-sm"
+                                                className="border rounded px-2 py-1 text-sm bg-background"
                                             >
                                                 <option value="open">Open</option>
                                                 <option value="in_progress">In Progress</option>
@@ -209,6 +277,71 @@ export default function AdminDashboard() {
                                         <TableCell>{bug.user?.name}</TableCell>
                                     </TableRow>
                                 ))}
+                            </TableBody>
+                        </Table>
+                    </div>
+                </TabsContent>
+
+                <TabsContent value="serials" className="space-y-4">
+                    <div className="flex justify-between items-center">
+                        <h3 className="text-lg font-medium">Serial Numbers</h3>
+                        <Button onClick={() => setSerialDialogOpen(true)}>
+                            <Plus className="w-4 h-4 mr-2" />
+                            Generate New
+                        </Button>
+                    </div>
+                    <div className="rounded-md border">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Serial Number</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead>Used By</TableHead>
+                                    <TableHead>Created At</TableHead>
+                                    <TableHead className="text-right">Actions</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {serials.map((serial) => (
+                                    <TableRow key={serial.id}>
+                                        <TableCell className="font-mono">{serial.serial_number}</TableCell>
+                                        <TableCell>
+                                            {serial.is_used ? (
+                                                <Badge variant="secondary" className="bg-blue-100 text-blue-700 hover:bg-blue-100">Used</Badge>
+                                            ) : (
+                                                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Available</Badge>
+                                            )}
+                                        </TableCell>
+                                        <TableCell>
+                                            {serial.used_by ? (
+                                                <div className="flex flex-col">
+                                                    <span className="font-medium text-sm">{serial.used_by.name}</span>
+                                                    <span className="text-xs text-muted-foreground">{serial.used_by.email}</span>
+                                                </div>
+                                            ) : (
+                                                <span className="text-muted-foreground">-</span>
+                                            )}
+                                        </TableCell>
+                                        <TableCell>{format(new Date(serial.created_at), 'MMM d, yyyy HH:mm')}</TableCell>
+                                        <TableCell className="text-right">
+                                            <Button
+                                                size="icon"
+                                                variant="ghost"
+                                                className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                                onClick={() => handleDeleteSerial(serial.id)}
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                                {serials.length === 0 && (
+                                    <TableRow>
+                                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                                            No serial numbers found. Generate some to get started.
+                                        </TableCell>
+                                    </TableRow>
+                                )}
                             </TableBody>
                         </Table>
                     </div>
@@ -247,6 +380,49 @@ export default function AdminDashboard() {
                             </div>
                         </div>
                     </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Generate Serial Dialog */}
+            <Dialog open={serialDialogOpen} onOpenChange={setSerialDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Generate Serial Numbers</DialogTitle>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="count" className="text-right">
+                                Count
+                            </Label>
+                            <Input
+                                id="count"
+                                type="number"
+                                min={1}
+                                max={50}
+                                value={generateParams.count}
+                                onChange={(e) => setGenerateParams({ ...generateParams, count: parseInt(e.target.value) })}
+                                className="col-span-3"
+                            />
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="prefix" className="text-right">
+                                Prefix
+                            </Label>
+                            <Input
+                                id="prefix"
+                                placeholder="Optional (e.g. SUMMER)"
+                                value={generateParams.prefix}
+                                onChange={(e) => setGenerateParams({ ...generateParams, prefix: e.target.value })}
+                                className="col-span-3"
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setSerialDialogOpen(false)}>Cancel</Button>
+                        <Button onClick={handleGenerateSerials} disabled={isGenerating}>
+                            {isGenerating ? 'Generating...' : 'Generate'}
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </div>
