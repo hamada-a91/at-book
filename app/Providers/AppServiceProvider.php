@@ -38,6 +38,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        if (app()->environment('production')) {
+            \Illuminate\Support\Facades\URL::forceScheme('https');
+        }
+
         // Gate for backup management - only owners/admins
         Gate::define('backup-manage', function ($user) {
             // Check if user has owner or admin role
@@ -50,4 +54,3 @@ class AppServiceProvider extends ServiceProvider
         });
     }
 }
-
