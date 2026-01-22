@@ -221,7 +221,43 @@ export function InvoicesList() {
                     </CardContent>
                 ) : (
                     <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left">
+                        {/* Mobile List View */}
+                        <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
+                            {filteredInvoices?.map((invoice) => (
+                                <div
+                                    key={invoice.id}
+                                    className="p-4 active:bg-slate-50 dark:active:bg-slate-800/50 transition-colors cursor-pointer"
+                                    onClick={() => navigate(`/${tenant}/invoices/${invoice.id}/preview`)}
+                                >
+                                    <div className="flex justify-between items-start mb-1">
+                                        <span className="font-mono font-bold text-slate-900 dark:text-slate-100">
+                                            {invoice.invoice_number}
+                                        </span>
+                                        <span className="font-bold text-slate-900 dark:text-slate-100">
+                                            {formatCurrency(invoice.total)}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between items-end">
+                                        <div className="space-y-1">
+                                            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                                {invoice.contact.name}
+                                            </p>
+                                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                                                {new Date(invoice.invoice_date).toLocaleDateString('de-DE')}
+                                            </p>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <Badge variant="outline" className={`text-[10px] h-5 px-1.5 font-normal ${statusStyles[invoice.status] || 'bg-slate-100 text-slate-700'}`}>
+                                                {statusLabels[invoice.status] || invoice.status}
+                                            </Badge>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Desktop Table View */}
+                        <table className="hidden md:table w-full text-sm text-left">
                             <thead className="bg-slate-50/50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
                                 <tr>
                                     <th className="px-6 py-4 font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider text-xs">

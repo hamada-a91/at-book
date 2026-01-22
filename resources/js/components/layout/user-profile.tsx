@@ -12,21 +12,44 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 
 export function UserProfile() {
     const navigate = useNavigate();
     const { tenant } = useParams();
+    const [user, setUser] = useState<any>(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        loadUser();
+    }, []);
+
+    const loadUser = async () => {
+        try {
+            setLoading(true);
+            const { data } = await axios.get('/api/user');
+
+            // data typically contains the user object directly or under a 'user' key
+            const userData = data.user || data;
+
+            const user = {
+                ...userData,
+                avatar: userData.avatar ?? null,
+                initials: userData.name ? userData.name.split(' ').map((n: string) => n[0]).join('').toUpperCase() : 'AH',
+            };
+
+            setUser(user);
+        } catch (error) {
+            console.error('Failed to load user', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
 
     // Helper for tenant-aware URLs
     const tenantUrl = (path: string) => tenant ? `/${tenant}${path}` : path;
 
-    // Mock user data - replace with actual user data from context/API
-    const user = {
-        name: 'Ahmed',
-        email: 'ahmed@example.com',
-        avatar: null, // Set to image URL if available
-        initials: 'AH',
-    };
 
     const handleLogout = async () => {
         try {
@@ -37,6 +60,14 @@ export function UserProfile() {
         // Redirect to login page
         window.location.href = '/login';
     };
+
+    if (loading) {
+        return (
+            <div className="h-10 w-10 rounded-full bg-slate-200 dark:bg-slate-800 animate-pulse" />
+        );
+    }
+
+    if (!user) return null;
 
     return (
         <DropdownMenu>

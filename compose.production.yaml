@@ -1,0 +1,101 @@
+services:
+  at-book:
+    build:
+      context: ./docker/production
+      dockerfile: Dockerfile
+      args:
+        WWWGROUP: '${WWWGROUP:-1000}'
+    image: at-book-app
+    restart: unless-stopped
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    ports:
+      - '127.0.0.1:${APP_PORT:-8081}:80'
+      - '127.0.0.1:${VITE_PORT:-5173}:${VITE_PORT:-5173}'
+    environment:
+      WWWUSER: '${WWWUSER:-1000}'
+      LARAVEL_SAIL: 1
+      XDEBUG_MODE: '${SAIL_XDEBUG_MODE:-off}'
+      XDEBUG_CONFIG: '${SAIL_XDEBUG_CONFIG:-client_host=host.docker.internal}'
+      IGNITION_LOCAL_SITES_PATH: '${PWD}'
+      # Production Settings
+      APP_NAME: 'Laravel'
+      APP_ENV: 'production'
+      APP_KEY: 'base64:9KVD+I4etlRv3C/QBAPQWv6shR6xeqx9MSBWHrItd8w='
+      APP_DEBUG: 'true'
+      APP_URL: 'https://at-book.vorpoint.de'
+      SESSION_SECURE_COOKIE: 'true'
+      # Database Connection (Overrides .env for Docker networking)
+      DB_CONNECTION: 'pgsql'
+      DB_HOST: 'pgsql'
+      DB_PORT: '5432'
+      DB_DATABASE: '${DB_DATABASE}'
+      DB_USERNAME: '${DB_USERNAME}'
+      DB_PASSWORD: '${DB_PASSWORD}'
+    volumes:
+      - '.:/var/www/html'
+    networks:
+      - app-network
+    depends_on:
+      - pgsql
+
+  queue:
+    build:
+      context: ./docker/production
+      dockerfile: Dockerfile
+      args:
+        WWWGROUP: '${WWWGROUP:-1000}'
+    image: at-book-app
+    restart: unless-stopped
+    command: php artisan queue:work --queue=backups,default --tries=3 --timeout=90
+    environment:
+      WWWUSER: '${WWWUSER:-1000}'
+      APP_ENV: 'production'
+      APP_KEY: 'base64:9KVD+I4etlRv3C/QBAPQWv6shR6xeqx9MSBWHrItd8w='
+      DB_CONNECTION: 'pgsql'
+      DB_HOST: 'pgsql'
+      DB_PORT: '5432'
+      DB_DATABASE: '${DB_DATABASE}'
+      DB_USERNAME: '${DB_USERNAME}'
+      DB_PASSWORD: '${DB_PASSWORD}'
+    volumes:
+      - '.:/var/www/html'
+    networks:
+      - app-network
+    depends_on:
+      - pgsql
+
+  pgsql:
+    image: 'postgres:18-alpine'
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:${FORWARD_DB_PORT:-5432}:5432'
+    environment:
+      PGPASSWORD: '${DB_PASSWORD:-secret}'
+      POSTGRES_DB: '${DB_DATABASE}'
+      POSTGRES_USER: '${DB_USERNAME}'
+      POSTGRES_PASSWORD: '${DB_PASSWORD:-secret}'
+    volumes:
+      - 'db-data:/var/lib/postgresql/data'
+      - './vendor/laravel/sail/database/pgsql/create-testing-database.sql:/docker-entrypoint-initdb.d/10-create-testing-database.sql'
+    networks:
+      - app-network
+    healthcheck:
+      test:
+        - CMD
+        - pg_isready
+        - '-q'
+        - '-d'
+        - '${DB_DATABASE}'
+        - '-U'
+        - '${DB_USERNAME}'
+      retries: 3
+      timeout: 5s
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  db-data:
+    driver: local

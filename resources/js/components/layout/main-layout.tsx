@@ -1,5 +1,6 @@
 import { Sidebar } from "./sidebar"
 import { Header } from "./header"
+import { BottomNav } from "./bottom-nav"
 
 interface MainLayoutProps {
     children: React.ReactNode
@@ -16,11 +17,12 @@ export function MainLayout({ children }: MainLayoutProps) {
                     <div className="print:hidden">
                         <Header />
                     </div>
-                    <main className="flex-1 p-4 md:p-8 pt-6">
+                    <main className="flex-1 p-4 md:p-8 pt-6 pb-20 md:pb-8">
                         {children}
                     </main>
                 </div>
             </div>
+            <BottomNav />
         </div>
     )
 }

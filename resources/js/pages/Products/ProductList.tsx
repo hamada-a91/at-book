@@ -121,11 +121,11 @@ export default function ProductList() {
                         Verwalten Sie Ihre Artikel und Dienstleistungen
                     </p>
                 </div>
-                <div className="flex gap-3">
+                <div className="flex flex-wrap gap-3 w-full md:w-auto">
                     <Link to={`/${tenant}/products/movements`}>
                         <Button
                             variant="outline"
-                            className="bg-white dark:bg-slate-800"
+                            className="bg-white dark:bg-slate-800 w-full sm:w-auto"
                         >
                             <HistoryIcon className="w-4 h-4 mr-2" />
                             Lagerbewegungen
@@ -134,13 +134,13 @@ export default function ProductList() {
                     <Button
                         variant="outline"
                         onClick={() => setCategoryManagerOpen(true)}
-                        className="bg-white dark:bg-slate-800"
+                        className="bg-white dark:bg-slate-800 w-full sm:w-auto"
                     >
                         <List className="w-4 h-4 mr-2" />
                         Kategorien
                     </Button>
                     <Link to={`/${tenant}/products/create`}>
-                        <Button className="bg-indigo-600 hover:bg-indigo-700 text-white">
+                        <Button className="bg-indigo-600 hover:bg-indigo-700 text-white w-full sm:w-auto">
                             <Plus className="w-4 h-4 mr-2" />
                             Neuer Artikel
                         </Button>
@@ -149,15 +149,15 @@ export default function ProductList() {
             </div>
 
             {/* Search and Filters */}
-            <div className="flex gap-4 bg-white dark:bg-slate-900 p-4 rounded-lg shadow">
+            <div className="flex flex-col md:flex-row gap-4 bg-white dark:bg-slate-900 p-4 rounded-lg shadow">
                 <Input
                     placeholder="Suche nach Name, Artikelnummer oder EAN..."
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    className="max-w-md"
+                    className="w-full md:max-w-md"
                 />
                 <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                    <SelectTrigger className="w-64">
+                    <SelectTrigger className="w-full md:w-64">
                         <SelectValue placeholder="Alle Kategorien" />
                     </SelectTrigger>
                     <SelectContent>
@@ -180,56 +180,44 @@ export default function ProductList() {
                         Keine Produkte gefunden. Legen Sie Ihren ersten Artikel an!
                     </div>
                 ) : (
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Name</TableHead>
-                                <TableHead>Kategorie</TableHead>
-                                <TableHead>Artikelnummer</TableHead>
-                                <TableHead>Typ</TableHead>
-                                <TableHead className="text-right">Preis (Netto)</TableHead>
-                                <TableHead className="text-right">Bestand</TableHead>
-                                <TableHead className="text-right">Aktionen</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
+                    <>
+                        {/* Mobile List View */}
+                        <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
                             {products.map((product) => (
-                                <TableRow key={product.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                                    <TableCell className="font-medium">{product.name}</TableCell>
-                                    <TableCell>
-                                        {product.category ? (
-                                            <Badge variant="secondary" className="font-normal" style={product.category.color ? { backgroundColor: product.category.color + '20', color: product.category.color, borderColor: product.category.color + '40' } : {}}>
-                                                {product.category.name}
+                                <div key={product.id} className="p-4 active:bg-slate-50 dark:active:bg-slate-800/50 transition-colors">
+                                    <div className="flex justify-between items-start mb-2">
+                                        <div>
+                                            <div className="font-bold text-slate-900 dark:text-slate-100">{product.name}</div>
+                                            <div className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">
+                                                {product.article_number || 'Keine Art-Nr.'}
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="font-bold text-slate-900 dark:text-slate-100">
+                                                {(product.price_net / 100).toFixed(2)} €
+                                            </div>
+                                            {product.track_stock && (
+                                                <div className={`text-xs ${product.stock_quantity <= 0 ? 'text-red-500 font-medium' : 'text-slate-500'}`}>
+                                                    {product.stock_quantity} Stk.
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center justify-between mt-3">
+                                        <div className="flex gap-2">
+                                            {product.category && (
+                                                <Badge variant="secondary" className="font-normal text-[10px] h-5 px-1.5" style={product.category.color ? { backgroundColor: product.category.color + '20', color: product.category.color, borderColor: product.category.color + '40' } : {}}>
+                                                    {product.category.name}
+                                                </Badge>
+                                            )}
+                                            <Badge variant={product.type === 'goods' ? 'default' : 'outline'} className="text-[10px] h-5 px-1.5 font-normal">
+                                                {product.type === 'goods' ? 'Ware' : 'DST'}
                                             </Badge>
-                                        ) : (
-                                            <span className="text-gray-400 text-xs">-</span>
-                                        )}
-                                    </TableCell>
-                                    <TableCell className="text-gray-600 dark:text-gray-400">
-                                        {product.article_number || '-'}
-                                    </TableCell>
-                                    <TableCell>
-                                        <Badge variant={product.type === 'goods' ? 'default' : 'outline'}>
-                                            {product.type === 'goods' ? 'Ware' : 'Dienstleistung'}
-                                        </Badge>
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        {(product.price_net / 100).toFixed(2)} €
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        {product.track_stock ? (
-                                            <span className={product.stock_quantity <= 0 ? "text-red-600 font-semibold" : ""}>
-                                                {product.stock_quantity}
-                                            </span>
-                                        ) : (
-                                            <span className="text-gray-400">-</span>
-                                        )}
-                                    </TableCell>
-                                    <TableCell className="text-right">
+                                        </div>
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild>
-                                                <Button variant="ghost" size="icon">
-                                                    <MoreVertical className="w-4 h-4" />
+                                                <Button variant="ghost" size="sm" className="h-6 w-8 p-0">
+                                                    <MoreVertical className="w-4 h-4 text-slate-400" />
                                                 </Button>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end">
@@ -241,7 +229,7 @@ export default function ProductList() {
                                                 </DropdownMenuItem>
                                                 <DropdownMenuItem onClick={() => handleShowHistory(product)}>
                                                     <HistoryIcon className="w-4 h-4 mr-2" />
-                                                    Historie anzeigen
+                                                    Historie
                                                 </DropdownMenuItem>
                                                 <DropdownMenuItem onClick={() => handlePurchase(product.id)}>
                                                     <ShoppingCart className="w-4 h-4 mr-2" />
@@ -256,11 +244,96 @@ export default function ProductList() {
                                                 </DropdownMenuItem>
                                             </DropdownMenuContent>
                                         </DropdownMenu>
-                                    </TableCell>
-                                </TableRow>
+                                    </div>
+                                </div>
                             ))}
-                        </TableBody>
-                    </Table>
+                        </div>
+
+                        {/* Desktop View */}
+                        <div className="hidden md:block">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Name</TableHead>
+                                        <TableHead>Kategorie</TableHead>
+                                        <TableHead>Artikelnummer</TableHead>
+                                        <TableHead>Typ</TableHead>
+                                        <TableHead className="text-right">Preis (Netto)</TableHead>
+                                        <TableHead className="text-right">Bestand</TableHead>
+                                        <TableHead className="text-right">Aktionen</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {products.map((product) => (
+                                        <TableRow key={product.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                                            <TableCell className="font-medium">{product.name}</TableCell>
+                                            <TableCell>
+                                                {product.category ? (
+                                                    <Badge variant="secondary" className="font-normal" style={product.category.color ? { backgroundColor: product.category.color + '20', color: product.category.color, borderColor: product.category.color + '40' } : {}}>
+                                                        {product.category.name}
+                                                    </Badge>
+                                                ) : (
+                                                    <span className="text-gray-400 text-xs">-</span>
+                                                )}
+                                            </TableCell>
+                                            <TableCell className="text-gray-600 dark:text-gray-400">
+                                                {product.article_number || '-'}
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge variant={product.type === 'goods' ? 'default' : 'outline'}>
+                                                    {product.type === 'goods' ? 'Ware' : 'Dienstleistung'}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                {(product.price_net / 100).toFixed(2)} €
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                {product.track_stock ? (
+                                                    <span className={product.stock_quantity <= 0 ? "text-red-600 font-semibold" : ""}>
+                                                        {product.stock_quantity}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-gray-400">-</span>
+                                                )}
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger asChild>
+                                                        <Button variant="ghost" size="icon">
+                                                            <MoreVertical className="w-4 h-4" />
+                                                        </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent align="end">
+                                                        <DropdownMenuItem asChild>
+                                                            <Link to={`/${tenant}/products/${product.id}/edit`}>
+                                                                <Edit className="w-4 h-4 mr-2" />
+                                                                Bearbeiten
+                                                            </Link>
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem onClick={() => handleShowHistory(product)}>
+                                                            <HistoryIcon className="w-4 h-4 mr-2" />
+                                                            Historie anzeigen
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem onClick={() => handlePurchase(product.id)}>
+                                                            <ShoppingCart className="w-4 h-4 mr-2" />
+                                                            Einkaufen
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem
+                                                            className="text-red-600"
+                                                            onClick={() => handleDelete(product.id, product.name)}
+                                                        >
+                                                            <Trash className="w-4 h-4 mr-2" />
+                                                            Löschen
+                                                        </DropdownMenuItem>
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </>
                 )}
             </div>
 

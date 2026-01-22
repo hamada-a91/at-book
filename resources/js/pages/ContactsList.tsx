@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from '@/lib/axios';
+import { cn } from '@/lib/utils';
 import { Plus, Search, Pencil, Trash2, Eye, User } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -171,7 +172,55 @@ export function ContactsList() {
                     </CardContent>
                 ) : (
                     <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left">
+                        {/* Mobile List View */}
+                        <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
+                            {filteredContacts?.map((contact) => (
+                                <div
+                                    key={contact.id}
+                                    className="p-4 active:bg-slate-50 dark:active:bg-slate-800/50 transition-colors cursor-pointer"
+                                    onClick={() => setViewContact(contact)}
+                                >
+                                    <div className="flex justify-between items-start mb-1">
+                                        <span className="font-bold text-slate-900 dark:text-slate-100">
+                                            {contact.name}
+                                        </span>
+                                        <div className={cn(
+                                            "font-mono text-sm",
+                                            contact.balance > 0 ? 'text-emerald-600' : contact.balance < 0 ? 'text-rose-600' : 'text-slate-500'
+                                        )}>
+                                            {contact.balance_formatted}
+                                        </div>
+                                    </div>
+                                    <div className="flex justify-between items-end">
+                                        <div className="space-y-1">
+                                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                                                {contact.email || contact.phone || '-'}
+                                            </p>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            {contact.type === 'customer' && (
+                                                <Badge className="text-[10px] h-5 px-1.5 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400 border-none font-normal">
+                                                    Kunde
+                                                </Badge>
+                                            )}
+                                            {contact.type === 'vendor' && (
+                                                <Badge className="text-[10px] h-5 px-1.5 bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 border-none font-normal">
+                                                    Lieferant
+                                                </Badge>
+                                            )}
+                                            {contact.type === 'both' && (
+                                                <Badge className="text-[10px] h-5 px-1.5 bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400 border-none font-normal">
+                                                    Beide
+                                                </Badge>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Desktop Table View */}
+                        <table className="hidden md:table w-full text-sm text-left">
                             <thead className="bg-slate-50/50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
                                 <tr>
                                     <th className="px-6 py-4 font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider text-xs">Name</th>

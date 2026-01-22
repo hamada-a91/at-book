@@ -157,6 +157,12 @@ export function JournalList() {
         return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(amount / 100);
     };
 
+    const calculateAmount = (lines: JournalEntryLine[] = []) => {
+        return lines
+            .filter(l => l.type === 'debit')
+            .reduce((sum, l) => sum + l.amount, 0);
+    };
+
     const bookingsList = bookings?.data || [];
 
     // Calculate stats from filtered bookingsList (reactive to search and filters)
@@ -166,81 +172,87 @@ export function JournalList() {
 
     return (
         <div className="space-y-8 p-1">
-            <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+            {/* Header */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-slate-900 to-slate-600 dark:from-slate-100 dark:to-slate-400 bg-clip-text text-transparent">
-                        Journal
-                    </h1>
-                    <p className="text-slate-500 dark:text-slate-400 mt-1">
-                        Alle Buchungen verwalten (GoBD-konform)
-                    </p>
+                    <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Journal</h1>
+                    <p className="text-slate-500 dark:text-slate-400">Alle Buchungen verwalten (GoBD-konform)</p>
                 </div>
-                <div className="flex flex-col items-end gap-4">
-                    <div className="flex gap-2">
-                        <Link to={`/${tenant}/bookings/create`}>
-                            <Button className="shadow-lg shadow-blue-100/20 hover:shadow-blue-200/30 transition-all duration-300 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
-                                <Plus className="w-4 h-4 mr-2" />
-                                Neue Buchung
-                            </Button>
-                        </Link>
-                    </div>
-                    <DateRangeSelector onRangeChange={(from, to) => setDateRange({ from, to })} className="w-full md:w-auto" />
+                <Link to={`/${tenant}/bookings/create`}>
+                    <Button className="shadow-lg shadow-blue-600/20 hover:shadow-blue-600/30 transition-all duration-300 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
+                        <Plus className="w-4 h-4 mr-2" />
+                        Neue Buchung
+                    </Button>
+                </Link>
+            </div>
+
+            {/* Filters Row */}
+            <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-center bg-white dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                <DateRangeSelector onRangeChange={(from, to) => setDateRange({ from, to })} className="w-full lg:w-auto" />
+                <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <Input
+                        placeholder="Suchen nach TEXT, ID, BETRAG..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="pl-9 bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800"
+                    />
                 </div>
             </div>
 
             {/* Stats - Clickable Filter Cards */}
-            <div className="grid gap-6 md:grid-cols-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-6">
                 <Card
-                    className={`relative overflow-hidden border-none shadow-xl backdrop-blur-xl group hover:scale-[1.02] transition-all duration-300 cursor-pointer ${statusFilter === 'all'
+                    className={`relative overflow-hidden border-none shadow-lg md:shadow-xl backdrop-blur-xl group hover:scale-[1.02] transition-all duration-300 cursor-pointer ${statusFilter === 'all'
                         ? 'bg-blue-50/90 dark:bg-blue-950/50 ring-2 ring-blue-500'
                         : 'bg-white/80 dark:bg-slate-950/80 hover:bg-blue-50/50 dark:hover:bg-blue-950/30'
                         }`}
                     onClick={() => setStatusFilter('all')}
                 >
                     <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                    <CardContent className="p-6 flex items-center justify-between relative z-10">
+                    <CardContent className="p-4 md:p-6 flex items-center justify-between relative z-10">
                         <div>
-                            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Gesamt Buchungen</p>
-                            <div className="text-3xl font-bold text-slate-900 dark:text-slate-100 mt-2">{filteredCount}</div>
+                            <p className="text-xs md:text-sm font-medium text-slate-500 dark:text-slate-400">Gesamt</p>
+                            <div className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-slate-100 mt-1 md:mt-2">{filteredCount}</div>
                         </div>
-                        <div className="h-12 w-12 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shadow-inner">
-                            <FileText className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                        <div className="h-10 w-10 md:h-12 md:w-12 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shadow-inner">
+                            <FileText className="w-5 h-5 md:w-6 md:h-6 text-blue-600 dark:text-blue-400" />
                         </div>
                     </CardContent>
                 </Card>
                 <Card
-                    className={`relative overflow-hidden border-none shadow-xl backdrop-blur-xl group hover:scale-[1.02] transition-all duration-300 cursor-pointer ${statusFilter === 'draft'
+                    className={`relative overflow-hidden border-none shadow-lg md:shadow-xl backdrop-blur-xl group hover:scale-[1.02] transition-all duration-300 cursor-pointer ${statusFilter === 'draft'
                         ? 'bg-amber-50/90 dark:bg-amber-950/50 ring-2 ring-amber-500'
                         : 'bg-white/80 dark:bg-slate-900/80 hover:bg-amber-50/50 dark:hover:bg-amber-950/30'
                         }`}
                     onClick={() => setStatusFilter('draft')}
                 >
                     <div className="absolute inset-0 bg-gradient-to-br from-amber-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                    <CardContent className="p-6 flex items-center justify-between relative z-10">
+                    <CardContent className="p-4 md:p-6 flex items-center justify-between relative z-10">
                         <div>
-                            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Entwürfe</p>
-                            <div className="text-3xl font-bold text-amber-600 dark:text-amber-500 mt-2">{draftCount}</div>
+                            <p className="text-xs md:text-sm font-medium text-slate-500 dark:text-slate-400">Entwürfe</p>
+                            <div className="text-2xl md:text-3xl font-bold text-amber-600 dark:text-amber-500 mt-1 md:mt-2">{draftCount}</div>
                         </div>
-                        <div className="h-12 w-12 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shadow-inner">
-                            <AlertCircle className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+                        <div className="h-10 w-10 md:h-12 md:w-12 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shadow-inner">
+                            <AlertCircle className="w-5 h-5 md:w-6 md:h-6 text-amber-600 dark:text-amber-400" />
                         </div>
                     </CardContent>
                 </Card>
                 <Card
-                    className={`relative overflow-hidden border-none shadow-xl backdrop-blur-xl group hover:scale-[1.02] transition-all duration-300 cursor-pointer ${statusFilter === 'posted'
+                    className={`relative overflow-hidden border-none shadow-lg md:shadow-xl backdrop-blur-xl group hover:scale-[1.02] transition-all duration-300 cursor-pointer ${statusFilter === 'posted'
                         ? 'bg-emerald-50/90 dark:bg-emerald-950/50 ring-2 ring-emerald-500'
                         : 'bg-white/80 dark:bg-slate-900/80 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/30'
                         }`}
                     onClick={() => setStatusFilter('posted')}
                 >
                     <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                    <CardContent className="p-6 flex items-center justify-between relative z-10">
+                    <CardContent className="p-4 md:p-6 flex items-center justify-between relative z-10">
                         <div>
-                            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Gebucht</p>
-                            <div className="text-3xl font-bold text-emerald-600 dark:text-emerald-500 mt-2">{postedCount}</div>
+                            <p className="text-xs md:text-sm font-medium text-slate-500 dark:text-slate-400">Gebucht</p>
+                            <div className="text-2xl md:text-3xl font-bold text-emerald-600 dark:text-emerald-500 mt-1 md:mt-2">{postedCount}</div>
                         </div>
-                        <div className="h-12 w-12 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center shadow-inner">
-                            <CheckCircle2 className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
+                        <div className="h-10 w-10 md:h-12 md:w-12 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center shadow-inner">
+                            <CheckCircle2 className="w-5 h-5 md:w-6 md:h-6 text-emerald-600 dark:text-emerald-400" />
                         </div>
                     </CardContent>
                 </Card>
@@ -248,43 +260,32 @@ export function JournalList() {
 
             {/* Filters & Table */}
             <Card className="border-none shadow-xl bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl overflow-hidden">
-                <CardHeader className="border-b border-slate-100 dark:border-slate-800/50 p-6">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-900/50 p-1 rounded-lg">
-                            <Button
-                                variant={statusFilter === 'all' ? 'secondary' : 'ghost'}
-                                onClick={() => setStatusFilter('all')}
-                                size="sm"
-                                className={`rounded-md transition-all ${statusFilter === 'all' ? 'shadow-sm bg-white dark:bg-slate-800' : ''}`}
-                            >
-                                Alle
-                            </Button>
-                            <Button
-                                variant={statusFilter === 'draft' ? 'secondary' : 'ghost'}
-                                onClick={() => setStatusFilter('draft')}
-                                size="sm"
-                                className={`rounded-md transition-all ${statusFilter === 'draft' ? 'shadow-sm bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400' : ''}`}
-                            >
-                                Entwürfe
-                            </Button>
-                            <Button
-                                variant={statusFilter === 'posted' ? 'secondary' : 'ghost'}
-                                onClick={() => setStatusFilter('posted')}
-                                size="sm"
-                                className={`rounded-md transition-all ${statusFilter === 'posted' ? 'shadow-sm bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400' : ''}`}
-                            >
-                                Gebucht
-                            </Button>
-                        </div>
-                        <div className="relative w-full sm:w-64">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                            <Input
-                                placeholder="Suchen..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="pl-9 bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 focus:ring-blue-500"
-                            />
-                        </div>
+                <CardHeader className="border-b border-slate-100 dark:border-slate-800/50 p-4 md:p-6">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                            variant={statusFilter === 'all' ? 'secondary' : 'ghost'}
+                            onClick={() => setStatusFilter('all')}
+                            size="sm"
+                            className={`h-8 px-3 rounded-md transition-all ${statusFilter === 'all' ? 'shadow-sm bg-white dark:bg-slate-800' : ''}`}
+                        >
+                            Alle
+                        </Button>
+                        <Button
+                            variant={statusFilter === 'draft' ? 'secondary' : 'ghost'}
+                            onClick={() => setStatusFilter('draft')}
+                            size="sm"
+                            className={`h-8 px-3 rounded-md transition-all ${statusFilter === 'draft' ? 'shadow-sm bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400' : ''}`}
+                        >
+                            Entwürfe
+                        </Button>
+                        <Button
+                            variant={statusFilter === 'posted' ? 'secondary' : 'ghost'}
+                            onClick={() => setStatusFilter('posted')}
+                            size="sm"
+                            className={`h-8 px-3 rounded-md transition-all ${statusFilter === 'posted' ? 'shadow-sm bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400' : ''}`}
+                        >
+                            Gebucht
+                        </Button>
                     </div>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -313,7 +314,48 @@ export function JournalList() {
                         </div>
                     ) : (
                         <div className="overflow-x-auto">
-                            <Table className="w-full">
+                            {/* Mobile List View */}
+                            <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
+                                {bookingsList.map((booking) => (
+                                    <div
+                                        key={booking.id}
+                                        className="p-4 active:bg-slate-50 dark:active:bg-slate-800/50 transition-colors cursor-pointer group"
+                                        onClick={() => viewDetails(booking.id)}
+                                    >
+                                        <div className="flex justify-between items-start mb-1">
+                                            <span className="font-mono font-bold text-slate-900 dark:text-slate-100">
+                                                #{booking.id}
+                                            </span>
+                                            <span className="font-bold text-slate-900 dark:text-slate-100">
+                                                {formatCurrency(calculateAmount(booking.lines))}
+                                            </span>
+                                        </div>
+
+                                        <div className="flex justify-between items-end mb-2">
+                                            <div className="font-medium text-slate-900 dark:text-slate-100 line-clamp-2 pr-4">
+                                                {booking.description}
+                                            </div>
+                                            <Badge variant={statusVariants[booking.status]} className="text-[10px] h-5 px-1.5 shadow-none shrink-0">
+                                                {statusLabels[booking.status]}
+                                            </Badge>
+                                        </div>
+
+                                        <div className="flex items-center justify-between mt-2 text-xs text-slate-500 dark:text-slate-400">
+                                            <div className="flex items-center gap-2">
+                                                <Calendar className="w-3.5 h-3.5" />
+                                                {formatDate(booking.booking_date)}
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                                <div className="w-1.5 h-1.5 rounded-full bg-slate-300 dark:bg-slate-600" />
+                                                {booking.lines?.length || 0} Pos.
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Desktop Table View */}
+                            <Table className="hidden md:table w-full">
                                 <TableHeader className="bg-slate-50/80 dark:bg-slate-900/50 backdrop-blur-sm">
                                     <TableRow className="hover:bg-transparent border-slate-100 dark:border-slate-800">
                                         <TableHead className="w-[80px] font-semibold text-slate-600 dark:text-slate-300">ID</TableHead>

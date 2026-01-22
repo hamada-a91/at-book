@@ -256,28 +256,28 @@ export default function InventoryMovements() {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-cyan-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 p-6">
+        <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-cyan-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 p-4 md:p-6 pb-20 md:pb-6">
             <div className="max-w-7xl mx-auto space-y-6">
                 {/* Header */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-4 w-full md:w-auto">
                         <Link to={`/${tenant}/products`}>
-                            <Button variant="ghost" size="icon" className="h-10 w-10 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
+                            <Button variant="ghost" size="icon" className="h-10 w-10 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white shrink-0">
                                 <ArrowLeft className="w-5 h-5" />
                             </Button>
                         </Link>
-                        <div>
-                            <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
-                                <Activity className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
-                                Lagerbewegungen & Bestand
+                        <div className="min-w-0">
+                            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2 md:gap-3 truncate">
+                                <Activity className="w-6 h-6 md:w-8 md:h-8 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                                <span className="truncate">Lagerbewegungen</span>
                             </h1>
-                            <p className="text-gray-500 dark:text-gray-400 mt-1">
-                                Alle Ein- und Ausgänge Ihrer Produkte mit Filteroptionen
+                            <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 mt-1 truncate">
+                                Ein- und Ausgänge Ihrer Produkte
                             </p>
                         </div>
                     </div>
-                    <div className="flex gap-2">
-                        <Button variant="outline" onClick={() => refetch()} className="gap-2">
+                    <div className="flex gap-2 w-full md:w-auto">
+                        <Button variant="outline" onClick={() => refetch()} className="flex-1 md:flex-none gap-2">
                             <RefreshCw className="w-4 h-4" />
                             Aktualisieren
                         </Button>
@@ -285,7 +285,7 @@ export default function InventoryMovements() {
                             variant="outline"
                             onClick={handleExport}
                             disabled={filteredTransactions.length === 0}
-                            className="gap-2 bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800"
+                            className="flex-1 md:flex-none gap-2 bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800"
                         >
                             <FileSpreadsheet className="w-4 h-4" />
                             CSV Export
@@ -293,171 +293,191 @@ export default function InventoryMovements() {
                     </div>
                 </div>
 
-                {/* Stats Cards - 6 cards grid */}
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                {/* Stats Cards - Optimized for mobile (2 columns) */}
+                <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 md:gap-4">
                     <Card className="border-none shadow-lg bg-white dark:bg-slate-900">
-                        <CardContent className="p-4">
+                        <CardContent className="p-3 md:p-4">
                             <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-xs text-gray-500 uppercase tracking-wide">Gesamtbestand</p>
-                                    <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                                <div className="min-w-0">
+                                    <p className="text-[10px] md:text-xs text-gray-500 uppercase tracking-wide truncate">Gesamtbestand</p>
+                                    <p className="text-lg md:text-2xl font-bold text-gray-900 dark:text-white mt-1">
                                         {stats.totalStock.toLocaleString('de-DE')}
                                     </p>
                                 </div>
-                                <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg flex items-center justify-center">
-                                    <Package className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                                <div className="w-8 h-8 md:w-10 md:h-10 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg flex items-center justify-center shrink-0">
+                                    <Package className="w-4 h-4 md:w-5 md:h-5 text-indigo-600 dark:text-indigo-400" />
                                 </div>
                             </div>
                         </CardContent>
                     </Card>
 
                     <Card className="border-none shadow-lg bg-white dark:bg-slate-900">
-                        <CardContent className="p-4">
+                        <CardContent className="p-3 md:p-4">
                             <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-xs text-gray-500 uppercase tracking-wide">Produkte mit Bestand</p>
-                                    <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                                <div className="min-w-0">
+                                    <p className="text-[10px] md:text-xs text-gray-500 uppercase tracking-wide truncate">Mit Bestand</p>
+                                    <p className="text-lg md:text-2xl font-bold text-gray-900 dark:text-white mt-1">
                                         {stats.productsWithStock}
                                     </p>
                                 </div>
-                                <div className="w-10 h-10 bg-cyan-100 dark:bg-cyan-900/30 rounded-lg flex items-center justify-center">
-                                    <PackageSearch className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
+                                <div className="w-8 h-8 md:w-10 md:h-10 bg-cyan-100 dark:bg-cyan-900/30 rounded-lg flex items-center justify-center shrink-0">
+                                    <PackageSearch className="w-4 h-4 md:w-5 md:h-5 text-cyan-600 dark:text-cyan-400" />
                                 </div>
                             </div>
                         </CardContent>
                     </Card>
 
                     <Card className="border-none shadow-lg bg-white dark:bg-slate-900">
-                        <CardContent className="p-4">
+                        <CardContent className="p-3 md:p-4">
                             <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-xs text-gray-500 uppercase tracking-wide">Niedriger Bestand</p>
-                                    <p className="text-2xl font-bold text-orange-600 mt-1">
+                                <div className="min-w-0">
+                                    <p className="text-[10px] md:text-xs text-gray-500 uppercase tracking-wide truncate">Niedrig</p>
+                                    <p className="text-lg md:text-2xl font-bold text-orange-600 mt-1">
                                         {stats.lowStockWarnings}
                                     </p>
                                 </div>
-                                <div className="w-10 h-10 bg-orange-100 dark:bg-orange-900/30 rounded-lg flex items-center justify-center">
-                                    <AlertCircle className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+                                <div className="w-8 h-8 md:w-10 md:h-10 bg-orange-100 dark:bg-orange-900/30 rounded-lg flex items-center justify-center shrink-0">
+                                    <AlertCircle className="w-4 h-4 md:w-5 md:h-5 text-orange-600 dark:text-orange-400" />
                                 </div>
                             </div>
                         </CardContent>
                     </Card>
 
                     <Card className="border-none shadow-lg bg-white dark:bg-slate-900">
-                        <CardContent className="p-4">
+                        <CardContent className="p-3 md:p-4">
                             <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-xs text-emerald-600 uppercase tracking-wide font-medium">Eingänge</p>
-                                    <p className="text-2xl font-bold text-emerald-600 mt-1">
+                                <div className="min-w-0">
+                                    <p className="text-[10px] md:text-xs text-emerald-600 uppercase tracking-wide font-medium truncate">Eingänge</p>
+                                    <p className="text-lg md:text-2xl font-bold text-emerald-600 mt-1">
                                         +{stats.totalIn.toLocaleString('de-DE')}
                                     </p>
                                 </div>
-                                <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg flex items-center justify-center">
-                                    <TrendingUp className="w-5 h-5 text-emerald-600" />
+                                <div className="w-8 h-8 md:w-10 md:h-10 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg flex items-center justify-center shrink-0">
+                                    <TrendingUp className="w-4 h-4 md:w-5 md:h-5 text-emerald-600" />
                                 </div>
                             </div>
-                            <p className="text-xs text-gray-400 mt-2">{stats.purchaseCount} Einkäufe, {stats.returnCount} Retouren</p>
                         </CardContent>
                     </Card>
 
                     <Card className="border-none shadow-lg bg-white dark:bg-slate-900">
-                        <CardContent className="p-4">
+                        <CardContent className="p-3 md:p-4">
                             <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-xs text-blue-600 uppercase tracking-wide font-medium">Ausgänge</p>
-                                    <p className="text-2xl font-bold text-blue-600 mt-1">
+                                <div className="min-w-0">
+                                    <p className="text-[10px] md:text-xs text-blue-600 uppercase tracking-wide font-medium truncate">Ausgänge</p>
+                                    <p className="text-lg md:text-2xl font-bold text-blue-600 mt-1">
                                         -{stats.totalOut.toLocaleString('de-DE')}
                                     </p>
                                 </div>
-                                <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
-                                    <TrendingDown className="w-5 h-5 text-blue-600" />
+                                <div className="w-8 h-8 md:w-10 md:h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center shrink-0">
+                                    <TrendingDown className="w-4 h-4 md:w-5 md:h-5 text-blue-600" />
                                 </div>
                             </div>
-                            <p className="text-xs text-gray-400 mt-2">{stats.saleCount} Verkäufe</p>
                         </CardContent>
                     </Card>
 
                     <Card className="border-none shadow-lg bg-white dark:bg-slate-900">
-                        <CardContent className="p-4">
+                        <CardContent className="p-3 md:p-4">
                             <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-xs text-gray-500 uppercase tracking-wide">Bewegungen</p>
-                                    <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                                <div className="min-w-0">
+                                    <p className="text-[10px] md:text-xs text-gray-500 uppercase tracking-wide truncate">Bewegungen</p>
+                                    <p className="text-lg md:text-2xl font-bold text-gray-900 dark:text-white mt-1">
                                         {stats.totalMovements.toLocaleString('de-DE')}
                                     </p>
                                 </div>
-                                <div className="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-lg flex items-center justify-center">
-                                    <Activity className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                                <div className="w-8 h-8 md:w-10 md:h-10 bg-gray-100 dark:bg-gray-800 rounded-lg flex items-center justify-center shrink-0">
+                                    <Activity className="w-4 h-4 md:w-5 md:h-5 text-gray-600 dark:text-gray-400" />
                                 </div>
                             </div>
-                            <p className="text-xs text-gray-400 mt-2">{stats.correctionCount} Korrekturen</p>
                         </CardContent>
                     </Card>
                 </div>
 
                 {/* Filters */}
                 <Card className="border-none shadow-lg bg-white/90 dark:bg-slate-900/90 backdrop-blur">
-                    <CardHeader className="pb-4">
+                    <CardHeader className="pb-4 p-4 md:p-6">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <Filter className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                                <CardTitle>Filter</CardTitle>
+                                <CardTitle className="text-lg md:text-xl">Filter</CardTitle>
                             </div>
-                            <Button variant="ghost" size="sm" onClick={resetFilters} className="text-gray-500 hover:text-gray-700">
-                                Filter zurücksetzen
+                            <Button variant="ghost" size="sm" onClick={resetFilters} className="text-gray-500 hover:text-gray-700 h-8 px-2">
+                                <RotateCcw className="w-3.5 h-3.5 mr-1" />
+                                Zurücksetzen
                             </Button>
                         </div>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="p-4 md:p-6 pt-0">
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
                             {/* Search */}
                             <div className="lg:col-span-2">
-                                <Label className="text-xs text-gray-500 uppercase tracking-wide">Suche</Label>
+                                <Label className="text-[10px] md:text-xs text-gray-500 uppercase tracking-wide">Suche</Label>
                                 <Input
                                     placeholder="Produkt, Beschreibung..."
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="mt-1 bg-white dark:bg-slate-950"
+                                    className="mt-1 bg-white dark:bg-slate-950 h-9 md:h-10"
                                 />
                             </div>
 
                             {/* Category */}
-                            <div>
-                                <Label className="text-xs text-gray-500 uppercase tracking-wide flex items-center gap-1">
-                                    <Layers className="w-3 h-3" />
-                                    Kategorie
-                                </Label>
-                                <Select value={categoryId} onValueChange={(v) => { setCategoryId(v); setProductId('all'); }}>
-                                    <SelectTrigger className="mt-1 bg-white dark:bg-slate-950">
-                                        <SelectValue placeholder="Alle" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">Alle Kategorien</SelectItem>
-                                        {categories.map((cat) => (
-                                            <SelectItem key={cat.id} value={cat.id.toString()}>
-                                                <div className="flex items-center gap-2">
-                                                    {cat.color && (
-                                                        <div
-                                                            className="w-3 h-3 rounded-full"
-                                                            style={{ backgroundColor: cat.color }}
-                                                        />
-                                                    )}
-                                                    {cat.name}
-                                                </div>
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                            <div className="grid grid-cols-2 lg:grid-cols-1 gap-4 lg:col-span-1">
+                                <div>
+                                    <Label className="text-[10px] md:text-xs text-gray-500 uppercase tracking-wide flex items-center gap-1">
+                                        <Layers className="w-3 h-3" />
+                                        Kategorie
+                                    </Label>
+                                    <Select value={categoryId} onValueChange={(v) => { setCategoryId(v); setProductId('all'); }}>
+                                        <SelectTrigger className="mt-1 bg-white dark:bg-slate-950 h-9 md:h-10">
+                                            <SelectValue placeholder="Alle" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">Alle Kategorien</SelectItem>
+                                            {categories.map((cat) => (
+                                                <SelectItem key={cat.id} value={cat.id.toString()}>
+                                                    <div className="flex items-center gap-2">
+                                                        {cat.color && (
+                                                            <div
+                                                                className="w-3 h-3 rounded-full"
+                                                                style={{ backgroundColor: cat.color }}
+                                                            />
+                                                        )}
+                                                        {cat.name}
+                                                    </div>
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                <div className="lg:hidden">
+                                    <Label className="text-[10px] md:text-xs text-gray-500 uppercase tracking-wide flex items-center gap-1">
+                                        <Package className="w-3 h-3" />
+                                        Produkt
+                                    </Label>
+                                    <Select value={productId} onValueChange={setProductId}>
+                                        <SelectTrigger className="mt-1 bg-white dark:bg-slate-950 h-9 md:h-10">
+                                            <SelectValue placeholder="Alle" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">Alle Produkte</SelectItem>
+                                            {filteredProducts.map((product) => (
+                                                <SelectItem key={product.id} value={product.id.toString()}>
+                                                    {product.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
                             </div>
 
-                            {/* Product */}
-                            <div>
-                                <Label className="text-xs text-gray-500 uppercase tracking-wide flex items-center gap-1">
+                            {/* Product - Desktop and Large view */}
+                            <div className="hidden lg:block lg:col-span-1">
+                                <Label className="text-[10px] md:text-xs text-gray-500 uppercase tracking-wide flex items-center gap-1">
                                     <Package className="w-3 h-3" />
                                     Produkt
                                 </Label>
                                 <Select value={productId} onValueChange={setProductId}>
-                                    <SelectTrigger className="mt-1 bg-white dark:bg-slate-950">
+                                    <SelectTrigger className="mt-1 bg-white dark:bg-slate-950 h-9 md:h-10">
                                         <SelectValue placeholder="Alle" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -473,9 +493,9 @@ export default function InventoryMovements() {
 
                             {/* Type */}
                             <div>
-                                <Label className="text-xs text-gray-500 uppercase tracking-wide">Typ</Label>
+                                <Label className="text-[10px] md:text-xs text-gray-500 uppercase tracking-wide">Typ</Label>
                                 <Select value={typeFilter} onValueChange={setTypeFilter}>
-                                    <SelectTrigger className="mt-1 bg-white dark:bg-slate-950">
+                                    <SelectTrigger className="mt-1 bg-white dark:bg-slate-950 h-9 md:h-10">
                                         <SelectValue placeholder="Alle" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -509,44 +529,42 @@ export default function InventoryMovements() {
                             </div>
                         </div>
 
-                        {/* Date Range */}
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
-                            <div className="md:col-span-2 flex gap-4">
-                                <div className="flex-1">
-                                    <Label className="text-xs text-gray-500 uppercase tracking-wide flex items-center gap-1">
-                                        <Calendar className="w-3 h-3" />
-                                        Von
-                                    </Label>
-                                    <Input
-                                        type="date"
-                                        value={dateFrom}
-                                        onChange={(e) => setDateFrom(e.target.value)}
-                                        className="mt-1 bg-white dark:bg-slate-950"
-                                    />
-                                </div>
-                                <div className="flex-1">
-                                    <Label className="text-xs text-gray-500 uppercase tracking-wide flex items-center gap-1">
-                                        <Calendar className="w-3 h-3" />
-                                        Bis
-                                    </Label>
-                                    <Input
-                                        type="date"
-                                        value={dateTo}
-                                        onChange={(e) => setDateTo(e.target.value)}
-                                        className="mt-1 bg-white dark:bg-slate-950"
-                                    />
-                                </div>
+                        {/* Date Range - Responsive */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+                            <div className="col-span-1">
+                                <Label className="text-[10px] md:text-xs text-gray-500 uppercase tracking-wide flex items-center gap-1">
+                                    <Calendar className="w-3 h-3" />
+                                    Von
+                                </Label>
+                                <Input
+                                    type="date"
+                                    value={dateFrom}
+                                    onChange={(e) => setDateFrom(e.target.value)}
+                                    className="mt-1 bg-white dark:bg-slate-950 h-9 md:h-10 text-xs md:text-sm"
+                                />
+                            </div>
+                            <div className="col-span-1">
+                                <Label className="text-[10px] md:text-xs text-gray-500 uppercase tracking-wide flex items-center gap-1">
+                                    <Calendar className="w-3 h-3" />
+                                    Bis
+                                </Label>
+                                <Input
+                                    type="date"
+                                    value={dateTo}
+                                    onChange={(e) => setDateTo(e.target.value)}
+                                    className="mt-1 bg-white dark:bg-slate-950 h-9 md:h-10 text-xs md:text-sm"
+                                />
                             </div>
                         </div>
                     </CardContent>
                 </Card>
 
-                {/* Results Table */}
+                {/* Results Table & Mobile View */}
                 <Card className="border-none shadow-lg bg-white/90 dark:bg-slate-900/90 backdrop-blur overflow-hidden">
-                    <CardHeader className="border-b border-gray-100 dark:border-gray-800">
+                    <CardHeader className="border-b border-gray-100 dark:border-gray-800 p-4 md:p-6">
                         <div className="flex items-center justify-between">
                             <div>
-                                <CardTitle>Bewegungen</CardTitle>
+                                <CardTitle className="text-lg md:text-xl">Bewegungen</CardTitle>
                                 <CardDescription>
                                     {filteredTransactions.length} Einträge gefunden
                                 </CardDescription>
@@ -564,98 +582,151 @@ export default function InventoryMovements() {
                                 <p className="text-gray-500 dark:text-gray-400">
                                     Keine Bewegungen gefunden.
                                 </p>
-                                <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">
-                                    Passen Sie die Filter an oder erstellen Sie Belege/Rechnungen.
+                                <p className="text-xs md:text-sm text-gray-400 dark:text-gray-500 mt-1">
+                                    Passen Sie die Filter an oder erstellen Sie Belege.
                                 </p>
                             </div>
                         ) : (
-                            <div className="overflow-x-auto">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow className="bg-gray-50 dark:bg-gray-800/50">
-                                            <TableHead className="font-semibold">Datum</TableHead>
-                                            <TableHead className="font-semibold">Produkt</TableHead>
-                                            <TableHead className="font-semibold">Kategorie</TableHead>
-                                            <TableHead className="font-semibold">Typ</TableHead>
-                                            <TableHead className="font-semibold">Beschreibung</TableHead>
-                                            <TableHead className="text-right font-semibold">Menge</TableHead>
-                                            <TableHead className="text-right font-semibold">Bestand</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {filteredTransactions.map((tx) => (
-                                            <TableRow
-                                                key={tx.id}
-                                                className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
-                                            >
-                                                <TableCell className="font-medium text-sm">
-                                                    <div className="flex flex-col">
-                                                        <span>{format(new Date(tx.created_at), "dd.MM.yyyy", { locale: de })}</span>
-                                                        <span className="text-xs text-gray-400">
-                                                            {format(new Date(tx.created_at), "HH:mm", { locale: de })}
-                                                        </span>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex flex-col">
-                                                        <span className="font-medium text-gray-900 dark:text-gray-100">
-                                                            {tx.product?.name || `Produkt #${tx.product_id}`}
-                                                        </span>
-                                                        {tx.product?.article_number && (
+                            <>
+                                {/* Desktop Table */}
+                                <div className="hidden md:block overflow-x-auto">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow className="bg-gray-50 dark:bg-gray-800/50">
+                                                <TableHead className="font-semibold">Datum</TableHead>
+                                                <TableHead className="font-semibold">Produkt</TableHead>
+                                                <TableHead className="font-semibold">Kategorie</TableHead>
+                                                <TableHead className="font-semibold">Typ</TableHead>
+                                                <TableHead className="font-semibold">Beschreibung</TableHead>
+                                                <TableHead className="text-right font-semibold">Menge</TableHead>
+                                                <TableHead className="text-right font-semibold">Bestand</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {filteredTransactions.map((tx) => (
+                                                <TableRow
+                                                    key={tx.id}
+                                                    className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                                                >
+                                                    <TableCell className="font-medium text-sm">
+                                                        <div className="flex flex-col">
+                                                            <span>{format(new Date(tx.created_at), "dd.MM.yyyy", { locale: de })}</span>
                                                             <span className="text-xs text-gray-400">
-                                                                {tx.product.article_number}
+                                                                {format(new Date(tx.created_at), "HH:mm", { locale: de })}
                                                             </span>
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <div className="flex flex-col">
+                                                            <span className="font-medium text-gray-900 dark:text-gray-100">
+                                                                {tx.product?.name || `Produkt #${tx.product_id}`}
+                                                            </span>
+                                                            {tx.product?.article_number && (
+                                                                <span className="text-xs text-gray-400">
+                                                                    {tx.product.article_number}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {tx.product?.category ? (
+                                                            <Badge
+                                                                variant="secondary"
+                                                                className="font-normal"
+                                                                style={tx.product.category.color ? {
+                                                                    backgroundColor: tx.product.category.color + '20',
+                                                                    color: tx.product.category.color,
+                                                                    borderColor: tx.product.category.color + '40'
+                                                                } : {}}
+                                                            >
+                                                                {tx.product.category.name}
+                                                            </Badge>
+                                                        ) : (
+                                                            <span className="text-gray-400 text-xs">-</span>
                                                         )}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    {tx.product?.category ? (
+                                                    </TableCell>
+                                                    <TableCell>
                                                         <Badge
-                                                            variant="secondary"
-                                                            className="font-normal"
-                                                            style={tx.product.category.color ? {
-                                                                backgroundColor: tx.product.category.color + '20',
-                                                                color: tx.product.category.color,
-                                                                borderColor: tx.product.category.color + '40'
-                                                            } : {}}
+                                                            variant="outline"
+                                                            className={`gap-1 ${getTypeStyles(tx.type)}`}
                                                         >
-                                                            {tx.product.category.name}
+                                                            {getTypeIcon(tx.type)}
+                                                            {getTypeLabel(tx.type)}
                                                         </Badge>
-                                                    ) : (
-                                                        <span className="text-gray-400 text-xs">-</span>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Badge
-                                                        variant="outline"
-                                                        className={`gap-1 ${getTypeStyles(tx.type)}`}
-                                                    >
-                                                        {getTypeIcon(tx.type)}
-                                                        {getTypeLabel(tx.type)}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell className="max-w-[200px] truncate text-gray-600 dark:text-gray-400">
-                                                    {tx.description}
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    <span className={`font-bold text-lg ${parseFloat(tx.quantity?.toString() || '0') > 0
-                                                        ? 'text-emerald-600 dark:text-emerald-400'
-                                                        : 'text-blue-600 dark:text-blue-400'
-                                                        }`}>
-                                                        {parseFloat(tx.quantity?.toString() || '0') > 0 ? '+' : ''}
-                                                        {parseFloat(tx.quantity?.toString() || '0').toLocaleString('de-DE')}
+                                                    </TableCell>
+                                                    <TableCell className="max-w-[200px] truncate text-gray-600 dark:text-gray-400">
+                                                        {tx.description}
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        <span className={`font-bold text-lg ${parseFloat(tx.quantity?.toString() || '0') > 0
+                                                            ? 'text-emerald-600 dark:text-emerald-400'
+                                                            : 'text-blue-600 dark:text-blue-400'
+                                                            }`}>
+                                                            {parseFloat(tx.quantity?.toString() || '0') > 0 ? '+' : ''}
+                                                            {parseFloat(tx.quantity?.toString() || '0').toLocaleString('de-DE')}
+                                                        </span>
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        <span className="font-medium text-gray-900 dark:text-gray-100">
+                                                            {parseFloat(tx.balance_after?.toString() || '0').toLocaleString('de-DE')}
+                                                        </span>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+
+                                {/* Mobile List View */}
+                                <div className="md:hidden divide-y divide-gray-100 dark:divide-gray-800">
+                                    {filteredTransactions.map((tx) => (
+                                        <div key={tx.id} className="p-4 active:bg-gray-50 dark:active:bg-gray-800/50 transition-colors">
+                                            <div className="flex justify-between items-start mb-2">
+                                                <div className="flex flex-col">
+                                                    <span className="text-xs text-gray-500 mb-1">
+                                                        {format(new Date(tx.created_at), "dd.MM.yyyy, HH:mm", { locale: de })}
                                                     </span>
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    <span className="font-medium text-gray-900 dark:text-gray-100">
+                                                    <span className="font-bold text-gray-900 dark:text-white line-clamp-1">
+                                                        {tx.product?.name || `Produkt #${tx.product_id}`}
+                                                    </span>
+                                                    {tx.product?.article_number && (
+                                                        <span className="text-[10px] text-gray-400">
+                                                            Art.Nr: {tx.product.article_number}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <Badge
+                                                    variant="outline"
+                                                    className={`gap-1 scale-90 origin-right ${getTypeStyles(tx.type)}`}
+                                                >
+                                                    {getTypeIcon(tx.type)}
+                                                    {getTypeLabel(tx.type)}
+                                                </Badge>
+                                            </div>
+
+                                            <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2 mb-3">
+                                                {tx.description}
+                                            </p>
+
+                                            <div className="flex justify-between items-center pt-2 border-t border-gray-50 dark:border-gray-800/50">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-[10px] text-gray-500 uppercase">Danach:</span>
+                                                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
                                                         {parseFloat(tx.balance_after?.toString() || '0').toLocaleString('de-DE')}
                                                     </span>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </div>
+                                                </div>
+                                                <div className={`text-lg font-bold ${parseFloat(tx.quantity?.toString() || '0') > 0
+                                                    ? 'text-emerald-600 dark:text-emerald-400'
+                                                    : 'text-blue-600 dark:text-blue-400'
+                                                    }`}>
+                                                    {parseFloat(tx.quantity?.toString() || '0') > 0 ? '+' : ''}
+                                                    {parseFloat(tx.quantity?.toString() || '0').toLocaleString('de-DE')}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
                         )}
                     </CardContent>
                 </Card>

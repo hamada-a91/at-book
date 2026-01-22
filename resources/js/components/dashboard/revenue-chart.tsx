@@ -41,8 +41,8 @@ export function RevenueChart({ data = [], isLoading = false }: RevenueChartProps
             <CardHeader>
                 <CardTitle className="text-lg font-medium">Einnahmen & Ausgaben</CardTitle>
             </CardHeader>
-            <CardContent className="pl-2">
-                <div className="h-[350px] w-full">
+            <CardContent className="pl-0 md:pl-2">
+                <div className="h-[250px] md:h-[350px] w-full">
                     {isLoading ? (
                         <div className="flex items-center justify-center h-full text-slate-500 dark:text-slate-400">
                             Lade Diagramm...

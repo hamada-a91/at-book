@@ -69,7 +69,7 @@ export function DateRangeSelector({ onRangeChange, className }: DateRangeSelecto
     return (
         <div className={cn("flex flex-col gap-4", className)}>
             {/* Preset Buttons */}
-            <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-900/50 p-1 rounded-lg w-fit">
+            <div className="flex flex-wrap items-center gap-2 bg-slate-100 dark:bg-slate-900/50 p-1 rounded-lg w-full sm:w-fit">
                 {presets.map((preset) => (
                     <Button
                         key={preset.label}
@@ -77,7 +77,7 @@ export function DateRangeSelector({ onRangeChange, className }: DateRangeSelecto
                         size="sm"
                         onClick={() => handlePresetClick(preset)}
                         className={cn(
-                            "rounded-md transition-all",
+                            "rounded-md transition-all flex-1 sm:flex-none whitespace-nowrap",
                             activePreset === preset.value
                                 ? "bg-white dark:bg-slate-800 shadow-sm"
                                 : "hover:bg-white dark:hover:bg-slate-800 hover:shadow-sm"

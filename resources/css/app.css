@@ -260,5 +260,46 @@
     }
   body {
     @apply bg-background text-foreground;
+    /* Prevent text selection where not needed for a more app-like feel */
+    -webkit-tap-highlight-color: transparent;
     }
+}
+
+/* Mobile App-like Utilities */
+@layer utilities {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
+  }
+  .pl-safe {
+    padding-left: env(safe-area-inset-left);
+  }
+  .pr-safe {
+    padding-right: env(safe-area-inset-right);
+  }
+
+  .min-h-screen-safe {
+    min-height: 100vh;
+    min-height: -webkit-fill-available;
+  }
+
+  /* Hide scrollbars but keep functionality */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+@media (max-width: 768px) {
+  /* Increase touch targets for mobile */
+  button, a {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
 }

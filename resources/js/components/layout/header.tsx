@@ -84,17 +84,17 @@ export function Header() {
                     </div>
 
                     {/* Search - Center */}
-                    <div className="flex-1 flex justify-center max-w-2xl mx-auto">
+                    <div className="flex-1 flex justify-center max-w-2xl mx-auto px-2">
                         <div className="relative group w-full max-w-md">
                             <Button
                                 variant="outline"
-                                className="relative h-10 w-full px-3 justify-start gap-2 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 hover:border-blue-300 dark:hover:border-blue-700 transition-all"
+                                className="relative h-10 w-full md:px-3 px-0 justify-center md:justify-start gap-2 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 hover:border-blue-300 dark:hover:border-blue-700 transition-all rounded-full md:rounded-lg"
                             >
-                                <Search className="h-4 w-4 text-slate-500 dark:text-slate-400" />
-                                <span className="text-sm text-slate-500 dark:text-slate-400">
+                                <Search className="h-5 w-5 md:h-4 md:w-4 text-slate-500 dark:text-slate-400" />
+                                <span className="hidden md:inline text-sm text-slate-500 dark:text-slate-400">
                                     Suchen...
                                 </span>
-                                <kbd className="pointer-events-none ml-auto inline-flex h-5 select-none items-center gap-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-1.5 font-mono text-[10px] font-medium text-slate-600 dark:text-slate-400 shadow-sm">
+                                <kbd className="hidden md:inline-flex pointer-events-none ml-auto h-5 select-none items-center gap-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-1.5 font-mono text-[10px] font-medium text-slate-600 dark:text-slate-400 shadow-sm">
                                     <span className="text-xs">Strg</span>K
                                 </kbd>
                             </Button>
@@ -102,15 +102,17 @@ export function Header() {
                     </div>
 
                     {/* Right side actions */}
-                    <div className="flex items-center gap-2">
-                        {/* Logo for Header */}
-                        <img src="/atbook-logo.png" alt="AT-Book Logo" className="h-12 w-auto rounded-lg" />
+                    <div className="flex items-center gap-1 md:gap-2">
+                        {/* Logo for Header - Hidden on very small screens if needed, or kept small */}
+                        <img src="/atbook-logo.png" alt="AT-Book Logo" className="h-8 md:h-12 w-auto rounded-lg hidden sm:block" />
 
                         {/* Notifications */}
                         <Notifications />
 
                         {/* Theme Toggle */}
-                        <ThemeToggle />
+                        <div className="hidden sm:block">
+                            <ThemeToggle />
+                        </div>
 
                         {/* User Profile */}
                         <UserProfile />

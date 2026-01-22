@@ -298,37 +298,37 @@ export function BackupManagement() {
     return (
         <Card className="shadow-lg border-slate-200 dark:border-slate-800 hover:shadow-xl transition-all duration-300">
             <CardHeader>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-teal-100 dark:bg-teal-900/20 rounded-lg flex items-center justify-center">
+                        <div className="w-10 h-10 bg-teal-100 dark:bg-teal-900/20 rounded-lg flex items-center justify-center shrink-0">
                             <Archive className="w-5 h-5 text-teal-600 dark:text-teal-400" />
                         </div>
                         <div>
                             <CardTitle className="text-xl">Datensicherung</CardTitle>
-                            <CardDescription>Erstellen und verwalten Sie Backups Ihrer Daten</CardDescription>
+                            <CardDescription className="text-xs md:text-sm">Erstellen und verwalten Sie Backups Ihrer Daten</CardDescription>
                         </div>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                         <Button
                             variant="outline"
                             onClick={() => setUploadDialogOpen(true)}
                             disabled={hasRunningJob}
-                            className="hover:bg-cyan-50 dark:hover:bg-cyan-950 hover:border-cyan-600 hover:text-cyan-600"
+                            className="flex-1 sm:flex-none hover:bg-cyan-50 dark:hover:bg-cyan-950 hover:border-cyan-600 hover:text-cyan-600 text-sm h-9"
                         >
                             <Upload className="w-4 h-4 mr-2" />
-                            Wiederherstellen
+                            Import
                         </Button>
                         <Button
                             onClick={() => startExportMutation.mutate()}
                             disabled={hasRunningJob || startExportMutation.isPending}
-                            className="bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white shadow-lg shadow-teal-600/30"
+                            className="flex-1 sm:flex-none bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white shadow-lg shadow-teal-600/30 text-sm h-9"
                         >
                             {startExportMutation.isPending ? (
                                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                             ) : (
                                 <FileArchive className="w-4 h-4 mr-2" />
                             )}
-                            Backup erstellen
+                            Backup
                         </Button>
                     </div>
                 </div>
@@ -337,9 +337,9 @@ export function BackupManagement() {
                 {/* Info Alert */}
                 <Alert className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
                     <Shield className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                    <AlertDescription className="text-blue-800 dark:text-blue-200">
+                    <AlertDescription className="text-xs md:text-sm text-blue-800 dark:text-blue-200">
                         Backups enthalten alle Ihre Firmendaten, Kontakte, Rechnungen und Belege als ZIP-Archiv.
-                        Dateien (z.B. Belegfotos) werden ebenfalls gesichert.
+                        Dateien werden ebenfalls gesichert.
                     </AlertDescription>
                 </Alert>
 
@@ -359,44 +359,48 @@ export function BackupManagement() {
                         {jobs.slice(0, 10).map((job) => (
                             <div
                                 key={job.id}
-                                className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700"
+                                className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 gap-4"
                             >
                                 <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2 mb-1">
+                                    <div className="flex flex-wrap items-center gap-2 mb-2">
                                         {getTypeBadge(job.type)}
                                         {getStatusBadge(job.status)}
                                     </div>
-                                    <div className="text-sm text-slate-600 dark:text-slate-400">
+                                    <div className="text-[11px] md:text-sm text-slate-600 dark:text-slate-400 flex flex-col sm:flex-row gap-1 sm:gap-4 mt-2 mb-2">
                                         <span>Erstellt: {formatDate(job.created_at)}</span>
                                         {job.file_size && (
-                                            <span className="ml-3">• Größe: {formatFileSize(job.file_size)}</span>
+                                            <span className="flex items-center">
+                                                <div className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600 mr-2 shrink-0 hidden sm:block" />
+                                                Größe: {formatFileSize(job.file_size)}
+                                            </span>
                                         )}
                                     </div>
                                     {job.status === 'processing' && (
-                                        <div className="mt-2">
+                                        <div className="mt-3">
                                             <Progress value={job.progress_percent} className="h-2" />
-                                            <div className="flex justify-between text-xs text-slate-500 mt-1">
-                                                <span>{job.current_step || 'Verarbeite...'}</span>
-                                                <span>{job.progress_percent}%</span>
+                                            <div className="flex justify-between text-[10px] text-slate-500 mt-1.5 font-mono">
+                                                <span className="truncate mr-2">{job.current_step || 'Verarbeite...'}</span>
+                                                <span className="shrink-0">{job.progress_percent}%</span>
                                             </div>
                                         </div>
                                     )}
                                     {job.status === 'failed' && job.error_message && (
-                                        <Alert variant="destructive" className="mt-2 py-2">
+                                        <Alert variant="destructive" className="mt-3 py-2 px-3">
                                             <AlertCircle className="h-3 w-3" />
-                                            <AlertDescription className="text-xs">{job.error_message}</AlertDescription>
+                                            <AlertDescription className="text-[10px] sm:text-xs leading-tight">{job.error_message}</AlertDescription>
                                         </Alert>
                                     )}
                                 </div>
-                                <div className="flex items-center gap-2 ml-4">
+                                <div className="flex items-center gap-2 sm:ml-4 shrink-0 sm:mt-0 pt-3 sm:pt-0 border-t sm:border-t-0 border-slate-200 dark:border-slate-800">
                                     {job.can_download && (
                                         <Button
                                             variant="outline"
                                             size="sm"
                                             onClick={() => handleDownload(job.id)}
-                                            className="hover:bg-green-50 hover:border-green-600 hover:text-green-600"
+                                            className="flex-1 sm:flex-none hover:bg-green-50 hover:border-green-600 hover:text-green-600 h-8"
                                         >
-                                            <Download className="w-4 h-4" />
+                                            <Download className="w-3.5 h-3.5 mr-1.5 sm:mr-0" />
+                                            <span className="sm:hidden text-xs">Laden</span>
                                         </Button>
                                     )}
                                     {(job.status === 'pending' || job.status === 'processing') && (
@@ -405,13 +409,16 @@ export function BackupManagement() {
                                             size="sm"
                                             onClick={() => cancelJobMutation.mutate(job.id)}
                                             disabled={cancelJobMutation.isPending}
-                                            className="hover:bg-orange-50 hover:border-orange-600 hover:text-orange-600"
-                                            title="Job abbrechen"
+                                            className="flex-1 sm:flex-none hover:bg-orange-50 hover:border-orange-600 hover:text-orange-600 h-8"
+                                            title="Abbrechen"
                                         >
                                             {cancelJobMutation.isPending ? (
-                                                <Loader2 className="w-4 h-4 animate-spin" />
+                                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
                                             ) : (
-                                                <StopCircle className="w-4 h-4" />
+                                                <>
+                                                    <StopCircle className="w-3.5 h-3.5 mr-1.5 sm:mr-0" />
+                                                    <span className="sm:hidden text-xs">Stopp</span>
+                                                </>
                                             )}
                                         </Button>
                                     )}
@@ -420,9 +427,11 @@ export function BackupManagement() {
                                             variant="outline"
                                             size="sm"
                                             onClick={() => deleteBackupMutation.mutate(job.id)}
-                                            className="hover:bg-red-50 hover:border-red-600 hover:text-red-600"
+                                            className="flex-1 sm:flex-none hover:bg-red-50 hover:border-red-600 hover:text-red-600 h-8"
+                                            title="Löschen"
                                         >
-                                            <Trash2 className="w-4 h-4" />
+                                            <Trash2 className="w-3.5 h-3.5 mr-1.5 sm:mr-0" />
+                                            <span className="sm:hidden text-xs">Löschen</span>
                                         </Button>
                                     )}
                                 </div>

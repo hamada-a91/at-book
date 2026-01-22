@@ -12,19 +12,15 @@ import {
     Calendar,
     Loader2,
     RefreshCw,
-    Plus,
     FileText,
     Receipt,
     Users,
     Package,
-    PieChart,
-    BarChart3,
     Wallet
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
 import axios from '@/lib/axios';
 
 interface DashboardSummary {
@@ -182,9 +178,9 @@ export function Dashboard() {
                         Finanzübersicht und Kennzahlen
                     </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 w-full md:w-auto">
                     <Select value={filter} onValueChange={setFilter}>
-                        <SelectTrigger className="w-[180px] bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800">
+                        <SelectTrigger className="flex-1 md:w-[180px] bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800">
                             <Calendar className="w-4 h-4 mr-2" />
                             <SelectValue placeholder="Zeitraum wählen" />
                         </SelectTrigger>
@@ -199,7 +195,7 @@ export function Dashboard() {
                         variant="outline"
                         size="icon"
                         onClick={handleRefresh}
-                        className="bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800"
+                        className="bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 shrink-0"
                         disabled={isRefreshing}
                     >
                         <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
@@ -208,67 +204,63 @@ export function Dashboard() {
             </div>
 
             {/* Quick Actions - Modern Cards */}
-            <div className="grid gap-4 md:grid-cols-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
                 <Link to={`/${tenant}/bookings/create`} className="group">
                     <Card className="border-none shadow-lg bg-gradient-to-br from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 transition-all duration-300 cursor-pointer transform hover:scale-[1.02]">
-                        <CardContent className="p-5 flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center group-hover:scale-110 transition-transform">
-                                <Receipt className="w-6 h-6 text-white" />
+                        <CardContent className="p-3 md:p-5 flex items-center gap-3 md:gap-4">
+                            <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center group-hover:scale-110 transition-transform flex-shrink-0">
+                                <Receipt className="w-5 h-5 md:w-6 md:h-6 text-white" />
                             </div>
-                            <div>
-                                <p className="text-white/80 text-sm font-medium">Neu</p>
-                                <p className="text-white font-bold text-lg">Buchung</p>
+                            <div className="min-w-0">
+                                <p className="text-white/80 text-[10px] md:text-sm font-medium">Neu</p>
+                                <p className="text-white font-bold text-sm md:text-lg truncate">Buchung</p>
                             </div>
-                            <Plus className="w-5 h-5 text-white/60 ml-auto group-hover:rotate-90 transition-transform duration-300" />
                         </CardContent>
                     </Card>
                 </Link>
                 <Link to={`/${tenant}/invoices/create`} className="group">
                     <Card className="border-none shadow-lg bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 transition-all duration-300 cursor-pointer transform hover:scale-[1.02]">
-                        <CardContent className="p-5 flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center group-hover:scale-110 transition-transform">
-                                <FileText className="w-6 h-6 text-white" />
+                        <CardContent className="p-3 md:p-5 flex items-center gap-3 md:gap-4">
+                            <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center group-hover:scale-110 transition-transform flex-shrink-0">
+                                <FileText className="w-5 h-5 md:w-6 md:h-6 text-white" />
                             </div>
-                            <div>
-                                <p className="text-white/80 text-sm font-medium">Neu</p>
-                                <p className="text-white font-bold text-lg">Rechnung</p>
+                            <div className="min-w-0">
+                                <p className="text-white/80 text-[10px] md:text-sm font-medium">Neu</p>
+                                <p className="text-white font-bold text-sm md:text-lg truncate">Rechnung</p>
                             </div>
-                            <Plus className="w-5 h-5 text-white/60 ml-auto group-hover:rotate-90 transition-transform duration-300" />
                         </CardContent>
                     </Card>
                 </Link>
                 <Link to={`/${tenant}/belege/create`} className="group">
                     <Card className="border-none shadow-lg bg-gradient-to-br from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 transition-all duration-300 cursor-pointer transform hover:scale-[1.02]">
-                        <CardContent className="p-5 flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center group-hover:scale-110 transition-transform">
-                                <Receipt className="w-6 h-6 text-white" />
+                        <CardContent className="p-3 md:p-5 flex items-center gap-3 md:gap-4">
+                            <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center group-hover:scale-110 transition-transform flex-shrink-0">
+                                <Receipt className="w-5 h-5 md:w-6 md:h-6 text-white" />
                             </div>
-                            <div>
-                                <p className="text-white/80 text-sm font-medium">Neu</p>
-                                <p className="text-white font-bold text-lg">Beleg</p>
+                            <div className="min-w-0">
+                                <p className="text-white/80 text-[10px] md:text-sm font-medium">Neu</p>
+                                <p className="text-white font-bold text-sm md:text-lg truncate">Beleg</p>
                             </div>
-                            <Plus className="w-5 h-5 text-white/60 ml-auto group-hover:rotate-90 transition-transform duration-300" />
                         </CardContent>
                     </Card>
                 </Link>
                 <Link to={`/${tenant}/contacts`} className="group">
                     <Card className="border-none shadow-lg bg-gradient-to-br from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 transition-all duration-300 cursor-pointer transform hover:scale-[1.02]">
-                        <CardContent className="p-5 flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center group-hover:scale-110 transition-transform">
-                                <Users className="w-6 h-6 text-white" />
+                        <CardContent className="p-3 md:p-5 flex items-center gap-3 md:gap-4">
+                            <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center group-hover:scale-110 transition-transform flex-shrink-0">
+                                <Users className="w-5 h-5 md:w-6 md:h-6 text-white" />
                             </div>
-                            <div>
-                                <p className="text-white/80 text-sm font-medium">Neu</p>
-                                <p className="text-white font-bold text-lg">Kontakt</p>
+                            <div className="min-w-0">
+                                <p className="text-white/80 text-[10px] md:text-sm font-medium">Neu</p>
+                                <p className="text-white font-bold text-sm md:text-lg truncate">Kontakt</p>
                             </div>
-                            <Plus className="w-5 h-5 text-white/60 ml-auto group-hover:rotate-90 transition-transform duration-300" />
                         </CardContent>
                     </Card>
                 </Link>
             </div>
 
             {/* KPI Cards */}
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
                 {isSummaryLoading ? (
                     <>
                         <Card className="h-32 flex items-center justify-center bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm"><Loader2 className="animate-spin text-slate-400" /></Card>
@@ -294,11 +286,11 @@ export function Dashboard() {
                             className="text-rose-600"
                         />
                         <KPICard
-                            title="Gewinn / Verlust"
+                            title="Gewinn"
                             value={summary?.profit_formatted || '0,00 €'}
                             icon={Euro}
                             trend={0}
-                            trendDescription="Differenz (Einnahmen - Ausgaben)"
+                            trendDescription="Differenz"
                             className={summary?.profit && summary.profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}
                         />
                     </>
@@ -306,7 +298,7 @@ export function Dashboard() {
             </div>
 
             {/* Quick Stats Row */}
-            <div className="grid gap-4 md:grid-cols-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
                 <Card className="border-none shadow-sm bg-white/80 dark:bg-slate-900/80 backdrop-blur">
                     <CardContent className="p-4 flex items-center gap-4">
                         <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">

@@ -26,9 +26,11 @@ import {
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 
-interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> { }
+interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {
+    onItemClick?: () => void;
+}
 
-export function Sidebar({ className }: SidebarProps) {
+export function Sidebar({ className, onItemClick }: SidebarProps) {
     const location = useLocation()
     const { tenant } = useParams()
     const pathname = location.pathname
@@ -191,6 +193,7 @@ export function Sidebar({ className }: SidebarProps) {
                     : "text-blue-900 dark:text-blue-100 hover:bg-blue-200 dark:hover:bg-blue-900 hover:text-blue-950 dark:hover:text-white"
             )}
             asChild
+            onClick={onItemClick}
         >
             <Link to={route.href}>
                 {!isSubItem && route.icon && <route.icon className={cn("mr-3 h-5 w-5", route.active ? "text-white" : "text-blue-600 dark:text-blue-400")} />}
@@ -201,7 +204,7 @@ export function Sidebar({ className }: SidebarProps) {
     )
 
     return (
-        <div className={cn("pb-12 h-screen overflow-y-auto bg-gradient-to-b from-blue-50 to-blue-100 dark:from-blue-950 dark:to-slate-950 border-r border-blue-200 dark:border-blue-900", className)}>
+        <div className={cn("pb-24 md:pb-12 h-screen overflow-y-auto bg-gradient-to-b from-blue-50 to-blue-100 dark:from-blue-950 dark:to-slate-950 border-r border-blue-200 dark:border-blue-900", className)}>
             <div className="space-y-4 py-4 flex flex-col h-full">
                 <div className="px-3 py-2">
                     <div className="flex items-center mb-6 px-2">
@@ -276,6 +279,7 @@ export function Sidebar({ className }: SidebarProps) {
                                                         : "text-blue-800 dark:text-blue-200 hover:bg-blue-200 dark:hover:bg-blue-900"
                                                 )}
                                                 asChild
+                                                onClick={onItemClick}
                                             >
                                                 <Link to={item.href}>
                                                     <span className="mr-2">
@@ -310,6 +314,7 @@ export function Sidebar({ className }: SidebarProps) {
                             isActive("/settings") && "bg-blue-600 dark:bg-blue-700 shadow-lg text-white hover:bg-blue-700 dark:hover:bg-blue-800"
                         )}
                         asChild
+                        onClick={onItemClick}
                     >
                         <Link to={tenantUrl("/settings")}>
                             <Settings className={cn("mr-3 h-5 w-5", isActive("/settings") ? "text-white" : "text-blue-600 dark:text-blue-400")} />
@@ -334,7 +339,7 @@ export function MobileSidebar() {
                 </Button>
             </SheetTrigger>
             <SheetContent side="left" className="p-0 w-72 bg-gradient-to-b from-blue-50 to-blue-100 dark:from-blue-950 dark:to-slate-950">
-                <Sidebar className="w-full border-none" />
+                <Sidebar className="w-full border-none" onItemClick={() => setOpen(false)} />
             </SheetContent>
         </Sheet>
     )

@@ -7,7 +7,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Plus, FileText, Trash2, Eye, Edit, Search, Download, Upload, Send, Receipt } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Beleg, BelegType, BelegStatus } from '@/types/beleg';
@@ -243,7 +242,43 @@ export function BelegeList() {
                     </CardContent>
                 ) : (
                     <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left">
+                        {/* Mobile List View */}
+                        <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
+                            {filteredBelege?.map((beleg) => (
+                                <div
+                                    key={beleg.id}
+                                    className="p-4 active:bg-slate-50 dark:active:bg-slate-800/50 transition-colors cursor-pointer"
+                                    onClick={() => navigate(`/${tenant}/belege/${beleg.id}`)}
+                                >
+                                    <div className="flex justify-between items-start mb-1">
+                                        <span className="font-mono font-bold text-slate-900 dark:text-slate-100">
+                                            {beleg.document_number}
+                                        </span>
+                                        <span className="font-bold text-slate-900 dark:text-slate-100">
+                                            {formatCurrency(beleg.amount)}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between items-end">
+                                        <div className="space-y-1">
+                                            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                                {beleg.title}
+                                            </p>
+                                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                                                {new Date(beleg.document_date).toLocaleDateString('de-DE')} • {beleg.contact?.name || '-'}
+                                            </p>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <Badge variant="outline" className={`text-[10px] h-5 px-1.5 font-normal ${statusStyles[beleg.status]}`}>
+                                                {statusLabels[beleg.status]}
+                                            </Badge>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Desktop Table View */}
+                        <table className="hidden md:table w-full text-sm text-left">
                             <thead className="bg-slate-50/50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
                                 <tr>
                                     <th className="px-6 py-4 font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider text-xs">
