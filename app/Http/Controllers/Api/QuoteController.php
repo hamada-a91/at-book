@@ -2,10 +2,11 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Controller;
 use App\Http\Controllers\Concerns\HasTenantScope;
-use App\Models\Quote;
+use App\Http\Controllers\Controller;
 use App\Models\Order;
+use App\Models\Quote;
+use App\Rules\TenantExists;
 use Illuminate\Http\Request;
 
 class QuoteController extends Controller
@@ -19,13 +20,14 @@ class QuoteController extends Controller
             ->with(['contact', 'lines'])
             ->orderBy('id', 'desc')
             ->get();
+
         return response()->json($quotes);
     }
 
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'contact_id' => 'required|exists:contacts,id',
+            'contact_id' => ['required', new TenantExists('contacts')],
             'quote_date' => 'required|date',
             'valid_until' => 'nullable|date',
             'intro_text' => 'nullable|string',
@@ -33,7 +35,7 @@ class QuoteController extends Controller
             'footer_note' => 'nullable|string',
             'notes' => 'nullable|string',
             'lines' => 'required|array|min:1',
-            'lines.*.product_id' => 'nullable|exists:products,id',
+            'lines.*.product_id' => ['nullable', new TenantExists('products')],
             'lines.*.description' => 'required|string',
             'lines.*.quantity' => 'required|numeric|min:0',
             'lines.*.unit' => 'nullable|string',
@@ -50,7 +52,7 @@ class QuoteController extends Controller
             ->latest('id')
             ->first();
         $nextNumber = $lastQuote ? intval(substr($lastQuote->quote_number, -4)) + 1 : 1;
-        $quoteNumber = sprintf("AN-%s-%04d", $year, $nextNumber);
+        $quoteNumber = sprintf('AN-%s-%04d', $year, $nextNumber);
 
         // Calculate totals
         $subtotal = 0;
@@ -102,7 +104,7 @@ class QuoteController extends Controller
     {
         $tenant = $this->getTenantOrFail();
         $quote = Quote::where('tenant_id', $tenant->id)->findOrFail($id);
-        
+
         return response()->json($quote->load(['contact', 'lines.product', 'order']));
     }
 
@@ -114,7 +116,7 @@ class QuoteController extends Controller
         }
 
         $validated = $request->validate([
-            'contact_id' => 'required|exists:contacts,id',
+            'contact_id' => ['required', new TenantExists('contacts')],
             'quote_date' => 'required|date',
             'valid_until' => 'nullable|date',
             'intro_text' => 'nullable|string',
@@ -122,7 +124,7 @@ class QuoteController extends Controller
             'footer_note' => 'nullable|string',
             'notes' => 'nullable|string',
             'lines' => 'required|array',
-            'lines.*.product_id' => 'nullable|exists:products,id',
+            'lines.*.product_id' => ['nullable', new TenantExists('products')],
             'lines.*.description' => 'required|string',
             'lines.*.quantity' => 'required|numeric|min:0',
             'lines.*.unit' => 'required|string',
@@ -182,6 +184,7 @@ class QuoteController extends Controller
 
         // Hard delete for drafts (permanently remove, no soft delete)
         $quote->forceDelete();
+
         return response()->json(['message' => 'Angebot gelöscht']);
     }
 
@@ -191,7 +194,7 @@ class QuoteController extends Controller
     public function send(Request $request, Quote $quote)
     {
         $tenant = $this->getTenantOrFail();
-        
+
         if ($quote->tenant_id !== $tenant->id) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
@@ -218,12 +221,12 @@ class QuoteController extends Controller
 
         // Save PDF temporarily
         $pdfPath = storage_path("app/temp/quote-{$quote->quote_number}.pdf");
-        
+
         // Ensure directory exists
-        if (!is_dir(storage_path('app/temp'))) {
+        if (! is_dir(storage_path('app/temp'))) {
             mkdir(storage_path('app/temp'), 0755, true);
         }
-        
+
         $pdf->save($pdfPath);
 
         try {
@@ -237,7 +240,7 @@ class QuoteController extends Controller
             );
 
             $to = $validated['to'];
-            if (!empty($validated['cc'])) {
+            if (! empty($validated['cc'])) {
                 \Illuminate\Support\Facades\Mail::to($to)
                     ->cc($validated['cc'])
                     ->send($mail);
@@ -264,9 +267,9 @@ class QuoteController extends Controller
             if (file_exists($pdfPath)) {
                 unlink($pdfPath);
             }
-            
+
             return response()->json([
-                'error' => 'Fehler beim Senden der E-Mail: ' . $e->getMessage(),
+                'error' => 'Fehler beim Senden der E-Mail: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -281,6 +284,7 @@ class QuoteController extends Controller
         }
 
         $quote->update(['status' => 'accepted']);
+
         return response()->json($quote->load(['contact', 'lines']));
     }
 
@@ -306,7 +310,7 @@ class QuoteController extends Controller
             ->latest('id')
             ->first();
         $nextNumber = $lastOrder ? intval(substr($lastOrder->order_number, -4)) + 1 : 1;
-        $orderNumber = sprintf("AB-%s-%04d", $year, $nextNumber);
+        $orderNumber = sprintf('AB-%s-%04d', $year, $nextNumber);
 
         // Create order
         $order = Order::create([
@@ -355,15 +359,15 @@ class QuoteController extends Controller
     {
         $tenant = $this->getTenantOrFail();
         $quote = Quote::where('tenant_id', $tenant->id)->findOrFail($id);
-        
+
         $quote->load(['contact', 'lines']);
         $settings = \App\Models\CompanySetting::first();
-        
+
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('quotes.pdf', [
             'quote' => $quote,
             'settings' => $settings,
         ])->setPaper('a4');
-        
+
         return $pdf->download("Angebot-{$quote->quote_number}.pdf");
     }
 }

@@ -3,19 +3,16 @@
 namespace App\Modules\Accounting\Services;
 
 use App\Modules\Accounting\Models\JournalEntry;
-use App\Modules\Accounting\Models\JournalEntryLine;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Auth;
-use Exception;
 use Carbon\Carbon;
+use Exception;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class BookingService
 {
     /**
      * Create a new booking batch (Draft).
-     * 
-     * @param array $data
-     * @return JournalEntry
+     *
      * @throws Exception
      */
     public function createBooking(array $data): JournalEntry
@@ -52,7 +49,7 @@ class BookingService
             }
 
             // 4. Update Beleg status if linked
-            if (!empty($data['beleg_id'])) {
+            if (! empty($data['beleg_id'])) {
                 $beleg = \App\Models\Beleg::find($data['beleg_id']);
                 if ($beleg && $beleg->status === 'draft') {
                     $beleg->update(['status' => 'booked']);
@@ -66,22 +63,28 @@ class BookingService
     /**
      * GoBD: Lock a booking to make it immutable.
      * Once locked, it cannot be edited, only reversed (storniert).
-     * 
-     * @param int $journalEntryId
-     * @return JournalEntry
+     *
      * @throws Exception
      */
     public function lockBooking(int $journalEntryId): JournalEntry
     {
+        // SPEC-03/3.3: findOrFail ohne explizites where('tenant_id', ...) ist hier
+        // sicher, weil JournalEntry::BelongsToTenant einen Global Scope registriert,
+        // der im HTTP-Kontext (tenant() gesetzt via SetTenantFromUser) automatisch
+        // greift - eine fremde ID führt zu ModelNotFoundException (404), nicht zum
+        // Zugriff auf einen anderen Mandanten. Wird diese Methode je aus einem Job/
+        // einer Console-Command aufgerufen, MUSS der Aufrufer vorher
+        // app()->instance('currentTenant', $tenant) setzen, sonst greift der Scope
+        // nicht (siehe CLAUDE.md Regel 6).
         $entry = JournalEntry::findOrFail($journalEntryId);
 
         if ($entry->locked_at) {
-            throw new Exception("Booking is already locked/posted.");
+            throw new Exception('Booking is already locked/posted.');
         }
 
         // In a real system, we might assign a sequential 'Journal Number' here
         // which must be gapless (Lückenlos).
-        
+
         $entry->update([
             'status' => 'posted',
             'locked_at' => Carbon::now(),
@@ -99,21 +102,23 @@ class BookingService
     public function reverseBooking(int $journalEntryId): JournalEntry
     {
         return DB::transaction(function () use ($journalEntryId) {
+            // SPEC-03/3.3: Wie in lockBooking() oben - Global Scope aus BelongsToTenant
+            // schützt findOrFail() im HTTP-Kontext bereits vor Fremd-Tenant-Zugriff.
             $original = JournalEntry::with('lines')->findOrFail($journalEntryId);
-            
-            if (!$original->locked_at) {
-                throw new Exception("Drafts can be deleted. Only locked bookings need reversal.");
+
+            if (! $original->locked_at) {
+                throw new Exception('Drafts can be deleted. Only locked bookings need reversal.');
             }
 
             // Check if already cancelled
             if ($original->status === 'cancelled') {
-                throw new Exception("This booking has already been reversed.");
+                throw new Exception('This booking has already been reversed.');
             }
 
             // Create Reversal Header
             $reversal = $original->replicate();
             $reversal->batch_id = (string) \Illuminate\Support\Str::uuid();
-            $reversal->description = "Storno: " . $original->description;
+            $reversal->description = 'Storno: '.$original->description;
             $reversal->status = 'posted'; // Reversals are immediately effective
             $reversal->locked_at = Carbon::now();
             $reversal->push();

@@ -2,14 +2,15 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Controller;
 use App\Http\Controllers\Concerns\HasTenantScope;
+use App\Http\Controllers\Controller;
 use App\Models\Beleg;
 use App\Models\Product;
+use App\Rules\TenantExists;
 use App\Services\InventoryService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class BelegController extends Controller
 {
@@ -39,13 +40,14 @@ class BelegController extends Controller
         // Search
         if ($request->has('search')) {
             $search = $request->search;
-            $query->where(function($q) use ($search) {
+            $query->where(function ($q) use ($search) {
                 $q->where('document_number', 'like', "%{$search}%")
-                  ->orWhere('title', 'like', "%{$search}%");
+                    ->orWhere('title', 'like', "%{$search}%");
             });
         }
 
         $belege = $query->latest('document_date')->get();
+
         return response()->json($belege);
     }
 
@@ -57,29 +59,29 @@ class BelegController extends Controller
             'document_date' => 'required|date',
             'amount' => 'required|integer|min:0',
             'tax_amount' => 'nullable|integer|min:0',
-            'contact_id' => 'nullable|exists:contacts,id',
-            'category_account_id' => 'nullable|exists:accounts,id',
+            'contact_id' => ['nullable', new TenantExists('contacts')],
+            'category_account_id' => ['nullable', new TenantExists('accounts')],
             'is_paid' => 'nullable|boolean',
-            'payment_account_id' => 'nullable|exists:accounts,id',
+            'payment_account_id' => ['nullable', new TenantExists('accounts')],
             'notes' => 'nullable|string',
             'due_date' => 'nullable|date',
             'file' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
             // Line items (optional)
             'lines' => 'nullable|array',
-            'lines.*.product_id' => 'nullable|exists:products,id',
+            'lines.*.product_id' => ['nullable', new TenantExists('products')],
             'lines.*.description' => 'required|string',
             'lines.*.quantity' => 'required|numeric|min:0',
             'lines.*.unit' => 'nullable|string',
             'lines.*.unit_price' => 'required|integer',
             'lines.*.tax_rate' => 'nullable|numeric|min:0',
-            'lines.*.account_id' => 'nullable|exists:accounts,id',
+            'lines.*.account_id' => ['nullable', new TenantExists('accounts')],
         ]);
 
         // Generate document number (BEL-2025-0001)
         $year = date('Y');
         $lastBeleg = Beleg::withTrashed()->where('document_number', 'like', "BEL-$year-%")->latest('id')->first();
         $nextNumber = $lastBeleg ? intval(substr($lastBeleg->document_number, -4)) + 1 : 1;
-        $documentNumber = sprintf("BEL-%s-%04d", $year, $nextNumber);
+        $documentNumber = sprintf('BEL-%s-%04d', $year, $nextNumber);
 
         // Handle file upload if present
         $filePath = null;
@@ -109,7 +111,7 @@ class BelegController extends Controller
         ]);
 
         // Create beleg lines if provided
-        if (!empty($validated['lines'])) {
+        if (! empty($validated['lines'])) {
             foreach ($validated['lines'] as $line) {
                 $lineTotal = ($line['quantity'] ?? 1) * ($line['unit_price'] ?? 0);
                 $beleg->lines()->create([
@@ -127,13 +129,14 @@ class BelegController extends Controller
 
         // Load relationships and return
         $beleg->load(['contact', 'journalEntry', 'categoryAccount', 'paymentAccount', 'lines.product']);
-        
+
         return response()->json($beleg, 201);
     }
 
     public function show(Beleg $beleg)
     {
         $beleg->load(['contact', 'journalEntry', 'categoryAccount', 'paymentAccount', 'lines.product']);
+
         return response()->json($beleg);
     }
 
@@ -150,10 +153,10 @@ class BelegController extends Controller
             'document_date' => 'required|date',
             'amount' => 'required|integer|min:0',
             'tax_amount' => 'nullable|integer|min:0',
-            'contact_id' => 'nullable|exists:contacts,id',
-            'category_account_id' => 'nullable|exists:accounts,id',
+            'contact_id' => ['nullable', new TenantExists('contacts')],
+            'category_account_id' => ['nullable', new TenantExists('accounts')],
             'is_paid' => 'nullable|boolean',
-            'payment_account_id' => 'nullable|exists:accounts,id',
+            'payment_account_id' => ['nullable', new TenantExists('accounts')],
             'notes' => 'nullable|string',
             'due_date' => 'nullable|date',
         ]);
@@ -176,6 +179,7 @@ class BelegController extends Controller
 
         // Hard delete for drafts (permanently remove from database)
         $beleg->forceDelete();
+
         return response()->json(['message' => 'Beleg gelöscht']);
     }
 
@@ -187,16 +191,16 @@ class BelegController extends Controller
 
         // Logic to create a Journal Entry from the Beleg
         // This is a simplified version. In a real app, you'd likely have a more complex service.
-        
+
         try {
             DB::beginTransaction();
 
             $lines = [];
-            
+
             // 1. Contact Line (Debitor/Kreditor)
-            if ($beleg->contact_id && (!$beleg->contact || !$beleg->contact->account_id)) {
-                 // Reload contact to be sure
-                 $beleg->load('contact');
+            if ($beleg->contact_id && (! $beleg->contact || ! $beleg->contact->account_id)) {
+                // Reload contact to be sure
+                $beleg->load('contact');
             }
 
             if ($beleg->contact) {
@@ -211,7 +215,7 @@ class BelegController extends Controller
 
                 if ($accountId) {
                     $type = ($beleg->document_type === 'ausgang') ? 'debit' : 'credit';
-                    
+
                     $lines[] = [
                         'account_id' => $accountId,
                         'type' => $type,
@@ -223,80 +227,80 @@ class BelegController extends Controller
                     throw new \Exception('Kein passendes Konto für den Kontakt gefunden.');
                 }
             } else {
-                 // If no contact/account, we can't auto-book fully. 
-                 throw new \Exception('Kein Kontakt ausgewählt.');
+                // If no contact/account, we can't auto-book fully.
+                throw new \Exception('Kein Kontakt ausgewählt.');
             }
 
             // 2. Contra Account (Revenue/Expense) - Use user-selected Sachkonto or fallback
             $contraAccount = null;
-            
+
             // First try user-selected category account
             if ($beleg->category_account_id) {
                 $contraAccount = \App\Modules\Accounting\Models\Account::find($beleg->category_account_id);
             }
-            
+
             // Fallback to default accounts if no category selected
-            if (!$contraAccount) {
+            if (! $contraAccount) {
                 $contraAccountCode = ($beleg->document_type === 'ausgang') ? '8400' : '3400'; // SKR03/04 examples
                 $contraAccount = \App\Modules\Accounting\Models\Account::where('code', $contraAccountCode)->first();
             }
-            
-            if (!$contraAccount) {
-                 // Fallback to any revenue/expense
-                 $type = ($beleg->document_type === 'ausgang') ? 'revenue' : 'expense';
-                 $contraAccount = \App\Modules\Accounting\Models\Account::where('type', $type)->first();
+
+            if (! $contraAccount) {
+                // Fallback to any revenue/expense
+                $type = ($beleg->document_type === 'ausgang') ? 'revenue' : 'expense';
+                $contraAccount = \App\Modules\Accounting\Models\Account::where('type', $type)->first();
             }
 
-            if (!$contraAccount) {
+            if (! $contraAccount) {
                 throw new \Exception('Kein Sachkonto (Kategorie) ausgewählt.');
             }
-                $type = ($beleg->document_type === 'ausgang') ? 'credit' : 'debit';
-                $netAmount = $beleg->amount - $beleg->tax_amount;
-                
-                $lines[] = [
-                    'account_id' => $contraAccount->id,
-                    'type' => $type,
-                    'amount' => $netAmount,
-                    'tax_key' => null, // Simplified
-                    'tax_amount' => 0,
-                ];
-                
-                // 3. Tax Line
-                if ($beleg->tax_amount > 0) {
-                     // Find tax account... simplified
-                     // Assuming 19%
-                     $taxAccountCode = ($beleg->document_type === 'ausgang') ? '1776' : '1576';
-                     $taxAccount = \App\Modules\Accounting\Models\Account::where('code', $taxAccountCode)->first();
-                     
-                     if ($taxAccount) {
-                        $lines[] = [
-                            'account_id' => $taxAccount->id,
-                            'type' => $type, // Same side as revenue/expense usually? No.
-                            // Sales: Revenue Credit, VAT Credit.
-                            // Purchase: Expense Debit, Input Tax Debit.
-                            'amount' => $beleg->tax_amount,
-                            'tax_key' => null,
-                            'tax_amount' => 0,
-                        ];
-                     }
+            $type = ($beleg->document_type === 'ausgang') ? 'credit' : 'debit';
+            $netAmount = $beleg->amount - $beleg->tax_amount;
+
+            $lines[] = [
+                'account_id' => $contraAccount->id,
+                'type' => $type,
+                'amount' => $netAmount,
+                'tax_key' => null, // Simplified
+                'tax_amount' => 0,
+            ];
+
+            // 3. Tax Line
+            if ($beleg->tax_amount > 0) {
+                // Find tax account... simplified
+                // Assuming 19%
+                $taxAccountCode = ($beleg->document_type === 'ausgang') ? '1776' : '1576';
+                $taxAccount = \App\Modules\Accounting\Models\Account::where('code', $taxAccountCode)->first();
+
+                if ($taxAccount) {
+                    $lines[] = [
+                        'account_id' => $taxAccount->id,
+                        'type' => $type, // Same side as revenue/expense usually? No.
+                        // Sales: Revenue Credit, VAT Credit.
+                        // Purchase: Expense Debit, Input Tax Debit.
+                        'amount' => $beleg->tax_amount,
+                        'tax_key' => null,
+                        'tax_amount' => 0,
+                    ];
                 }
+            }
 
             $bookingService = app(\App\Modules\Accounting\Services\BookingService::class);
             $journalEntry = $bookingService->createBooking([
                 'date' => $beleg->document_date->format('Y-m-d'),
                 'description' => $beleg->title,
                 'contact_id' => $beleg->contact_id,
-                'lines' => $lines
+                'lines' => $lines,
             ]);
 
             // If marked as paid, create a payment booking
             $paymentJournalEntry = null;
             if ($beleg->is_paid && $beleg->payment_account_id) {
                 $paymentAccount = \App\Modules\Accounting\Models\Account::find($beleg->payment_account_id);
-                
+
                 if ($paymentAccount && $accountId) {
                     $paymentLines = [];
-                    
+
                     if ($beleg->document_type === 'ausgang') {
                         // Outgoing (sales): Bank/Cash debit, Customer credit
                         $paymentLines[] = [
@@ -330,12 +334,12 @@ class BelegController extends Controller
                             'tax_amount' => 0,
                         ];
                     }
-                    
+
                     $paymentJournalEntry = $bookingService->createBooking([
                         'date' => $beleg->document_date->format('Y-m-d'),
-                        'description' => 'Zahlung: ' . $beleg->title,
+                        'description' => 'Zahlung: '.$beleg->title,
                         'contact_id' => $beleg->contact_id,
-                        'lines' => $paymentLines
+                        'lines' => $paymentLines,
                     ]);
                 }
             }
@@ -347,10 +351,10 @@ class BelegController extends Controller
 
             // Process inventory for product lines
             $beleg->load('lines.product');
-            $inventoryService = new InventoryService();
-            
+            $inventoryService = new InventoryService;
+
             foreach ($beleg->lines as $line) {
-                if (!empty($line->product_id)) {
+                if (! empty($line->product_id)) {
                     $product = Product::find($line->product_id);
                     if ($product && $line->quantity > 0) {
                         if ($beleg->document_type === 'eingang') {
@@ -382,6 +386,7 @@ class BelegController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
@@ -417,7 +422,7 @@ class BelegController extends Controller
      */
     public function downloadFile(Beleg $beleg)
     {
-        if (!$beleg->file_path || !Storage::disk('public')->exists($beleg->file_path)) {
+        if (! $beleg->file_path || ! Storage::disk('public')->exists($beleg->file_path)) {
             return response()->json(['error' => 'Datei nicht gefunden'], 404);
         }
 

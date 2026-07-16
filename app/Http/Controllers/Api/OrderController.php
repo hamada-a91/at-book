@@ -2,11 +2,12 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Controller;
 use App\Http\Controllers\Concerns\HasTenantScope;
-use App\Models\Order;
+use App\Http\Controllers\Controller;
 use App\Models\DeliveryNote;
 use App\Models\Invoice;
+use App\Models\Order;
+use App\Rules\TenantExists;
 use Illuminate\Http\Request;
 
 class OrderController extends Controller
@@ -20,13 +21,14 @@ class OrderController extends Controller
             ->with(['contact', 'lines', 'quote'])
             ->orderBy('id', 'desc')
             ->get();
+
         return response()->json($orders);
     }
 
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'contact_id' => 'required|exists:contacts,id',
+            'contact_id' => ['required', new TenantExists('contacts')],
             'order_date' => 'required|date',
             'delivery_date' => 'nullable|date',
             'intro_text' => 'nullable|string',
@@ -34,7 +36,7 @@ class OrderController extends Controller
             'footer_note' => 'nullable|string',
             'notes' => 'nullable|string',
             'lines' => 'required|array|min:1',
-            'lines.*.product_id' => 'nullable|exists:products,id',
+            'lines.*.product_id' => ['nullable', new TenantExists('products')],
             'lines.*.description' => 'required|string',
             'lines.*.quantity' => 'required|numeric|min:0',
             'lines.*.unit' => 'nullable|string',
@@ -51,7 +53,7 @@ class OrderController extends Controller
             ->latest('id')
             ->first();
         $nextNumber = $lastOrder ? intval(substr($lastOrder->order_number, -4)) + 1 : 1;
-        $orderNumber = sprintf("AB-%s-%04d", $year, $nextNumber);
+        $orderNumber = sprintf('AB-%s-%04d', $year, $nextNumber);
 
         // Calculate totals
         $subtotal = 0;
@@ -105,19 +107,19 @@ class OrderController extends Controller
     {
         $tenant = $this->getTenantOrFail();
         $order = Order::where('tenant_id', $tenant->id)->findOrFail($id);
-        
+
         return response()->json($order->load(['contact', 'lines.product', 'quote', 'deliveryNotes', 'invoices']));
     }
 
     public function update(Request $request, Order $order)
     {
         // Only allow editing open orders
-        if (!in_array($order->status, ['open'])) {
+        if (! in_array($order->status, ['open'])) {
             return response()->json(['message' => 'Nur offene Aufträge können bearbeitet werden'], 403);
         }
 
         $validated = $request->validate([
-            'contact_id' => 'required|exists:contacts,id',
+            'contact_id' => ['required', new TenantExists('contacts')],
             'order_date' => 'required|date',
             'delivery_date' => 'nullable|date',
             'intro_text' => 'nullable|string',
@@ -195,6 +197,7 @@ class OrderController extends Controller
         }
 
         $order->delete();
+
         return response()->json(['message' => 'Auftrag gelöscht']);
     }
 
@@ -218,7 +221,7 @@ class OrderController extends Controller
             ->latest('id')
             ->first();
         $nextNumber = $lastDN ? intval(substr($lastDN->delivery_note_number, -4)) + 1 : 1;
-        $deliveryNoteNumber = sprintf("LS-%s-%04d", $year, $nextNumber);
+        $deliveryNoteNumber = sprintf('LS-%s-%04d', $year, $nextNumber);
 
         // Create delivery note
         $deliveryNote = DeliveryNote::create([
@@ -232,12 +235,12 @@ class OrderController extends Controller
         // Create delivery note lines and update order line quantities
         foreach ($validated['items'] as $item) {
             $orderLine = $order->lines()->findOrFail($item['order_line_id']);
-            
+
             // Check if we're not over-delivering
             $remainingQty = $orderLine->quantity - $orderLine->delivered_quantity;
             if ($item['quantity'] > $remainingQty) {
                 return response()->json([
-                    'error' => "Position '{$orderLine->description}': Liefermenge ({$item['quantity']}) überschreitet verbleibende Menge ({$remainingQty})"
+                    'error' => "Position '{$orderLine->description}': Liefermenge ({$item['quantity']}) überschreitet verbleibende Menge ({$remainingQty})",
                 ], 400);
             }
 
@@ -293,7 +296,7 @@ class OrderController extends Controller
             ->latest('id')
             ->first();
         $nextNumber = $lastInvoice ? intval(substr($lastInvoice->invoice_number, -4)) + 1 : 1;
-        $invoiceNumber = sprintf("RE-%s-%04d", $year, $nextNumber);
+        $invoiceNumber = sprintf('RE-%s-%04d', $year, $nextNumber);
 
         // Calculate totals
         $subtotal = 0;
@@ -301,12 +304,12 @@ class OrderController extends Controller
 
         foreach ($validated['items'] as $item) {
             $orderLine = $order->lines()->findOrFail($item['order_line_id']);
-            
+
             // Check if we're not over-invoicing
             $remainingQty = $orderLine->quantity - $orderLine->invoiced_quantity;
             if ($item['quantity'] > $remainingQty) {
                 return response()->json([
-                    'error' => "Position '{$orderLine->description}': Rechnungsmenge ({$item['quantity']}) überschreitet verbleibende Menge ({$remainingQty})"
+                    'error' => "Position '{$orderLine->description}': Rechnungsmenge ({$item['quantity']}) überschreitet verbleibende Menge ({$remainingQty})",
                 ], 400);
             }
 
@@ -337,9 +340,9 @@ class OrderController extends Controller
         // Create invoice lines and update order line quantities
         foreach ($validated['items'] as $item) {
             $orderLine = $order->lines()->findOrFail($item['order_line_id']);
-            
+
             $lineTotal = $item['quantity'] * $orderLine->unit_price;
-            
+
             $invoice->lines()->create([
                 'description' => $orderLine->description,
                 'quantity' => $item['quantity'],
@@ -379,7 +382,7 @@ class OrderController extends Controller
     public function send(Request $request, Order $order)
     {
         $tenant = $this->getTenantOrFail();
-        
+
         if ($order->tenant_id !== $tenant->id) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
@@ -404,12 +407,12 @@ class OrderController extends Controller
 
         // Save PDF temporarily
         $pdfPath = storage_path("app/temp/order-{$order->order_number}.pdf");
-        
+
         // Ensure directory exists
-        if (!is_dir(storage_path('app/temp'))) {
+        if (! is_dir(storage_path('app/temp'))) {
             mkdir(storage_path('app/temp'), 0755, true);
         }
-        
+
         $pdf->save($pdfPath);
 
         try {
@@ -423,7 +426,7 @@ class OrderController extends Controller
             );
 
             $to = $validated['to'];
-            if (!empty($validated['cc'])) {
+            if (! empty($validated['cc'])) {
                 \Illuminate\Support\Facades\Mail::to($to)
                     ->cc($validated['cc'])
                     ->send($mail);
@@ -450,9 +453,9 @@ class OrderController extends Controller
             if (file_exists($pdfPath)) {
                 unlink($pdfPath);
             }
-            
+
             return response()->json([
-                'error' => 'Fehler beim Senden der E-Mail: ' . $e->getMessage(),
+                'error' => 'Fehler beim Senden der E-Mail: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -464,16 +467,15 @@ class OrderController extends Controller
     {
         $tenant = $this->getTenantOrFail();
         $order = Order::where('tenant_id', $tenant->id)->findOrFail($id);
-        
+
         $order->load(['contact', 'lines']);
         $settings = \App\Models\CompanySetting::first();
-        
+
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('orders.pdf', [
             'order' => $order,
             'settings' => $settings,
         ])->setPaper('a4');
-        
+
         return $pdf->download("Auftrag-{$order->order_number}.pdf");
     }
 }
-

@@ -2,11 +2,12 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Controller;
 use App\Http\Controllers\Concerns\HasTenantScope;
+use App\Http\Controllers\Controller;
 use App\Modules\Accounting\Services\BookingService;
-use Illuminate\Http\Request;
+use App\Rules\TenantExists;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class JournalEntryController extends Controller
 {
@@ -24,10 +25,10 @@ class JournalEntryController extends Controller
         $validated = $request->validate([
             'date' => 'required|date',
             'description' => 'required|string|min:3',
-            'contact_id' => 'nullable|exists:contacts,id',
-            'beleg_id' => 'nullable|exists:belege,id',
+            'contact_id' => ['nullable', new TenantExists('contacts')],
+            'beleg_id' => ['nullable', new TenantExists('belege')],
             'lines' => 'required|array|min:2',
-            'lines.*.account_id' => 'required|exists:accounts,id',
+            'lines.*.account_id' => ['required', new TenantExists('accounts')],
             'lines.*.type' => 'required|in:debit,credit',
             'lines.*.amount' => 'required|integer|min:1',
             'lines.*.tax_key' => 'nullable|string',
@@ -36,6 +37,7 @@ class JournalEntryController extends Controller
 
         try {
             $entry = $this->bookingService->createBooking($validated);
+
             return response()->json($entry->load('lines'), 201);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 422);
@@ -49,6 +51,7 @@ class JournalEntryController extends Controller
     {
         try {
             $entry = $this->bookingService->lockBooking($id);
+
             return response()->json($entry);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 422);
@@ -62,6 +65,7 @@ class JournalEntryController extends Controller
     {
         try {
             $reversal = $this->bookingService->reverseBooking($id);
+
             return response()->json($reversal->load('lines'), 201);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 422);
@@ -84,9 +88,9 @@ class JournalEntryController extends Controller
 
         if ($request->filled('search')) {
             $search = $request->search;
-            $query->where(function($q) use ($search) {
+            $query->where(function ($q) use ($search) {
                 $q->where('description', 'like', "%{$search}%")
-                  ->orWhere('id', 'like', "%{$search}%");
+                    ->orWhere('id', 'like', "%{$search}%");
             });
         }
 
@@ -99,6 +103,7 @@ class JournalEntryController extends Controller
         }
 
         $entries = $query->paginate(50);
+
         return response()->json($entries);
     }
 
@@ -109,6 +114,7 @@ class JournalEntryController extends Controller
     {
         $entry = \App\Modules\Accounting\Models\JournalEntry::with(['lines.account', 'beleg'])
             ->findOrFail($id);
+
         return response()->json($entry);
     }
 }

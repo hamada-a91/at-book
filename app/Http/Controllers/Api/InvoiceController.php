@@ -2,16 +2,18 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Controller;
 use App\Http\Controllers\Concerns\HasTenantScope;
+use App\Http\Controllers\Controller;
 use App\Models\Invoice;
 use App\Models\Product;
+use App\Rules\TenantExists;
 use App\Services\InventoryService;
 use Illuminate\Http\Request;
 
 class InvoiceController extends Controller
 {
     use HasTenantScope;
+
     public function index()
     {
         $tenant = $this->getTenantOrFail();
@@ -19,14 +21,15 @@ class InvoiceController extends Controller
             ->with(['contact', 'lines', 'order'])
             ->orderBy('id', 'desc')
             ->get();
+
         return response()->json($invoices);
     }
 
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'contact_id' => 'required|exists:contacts,id',
-            'order_id' => 'nullable|exists:orders,id',
+            'contact_id' => ['required', new TenantExists('contacts')],
+            'order_id' => ['nullable', new TenantExists('orders')],
             'invoice_date' => 'required|date',
             'due_date' => 'required|date',
             'notes' => 'nullable|string',
@@ -34,12 +37,12 @@ class InvoiceController extends Controller
             'payment_terms' => 'nullable|string',
             'footer_note' => 'nullable|string',
             'lines' => 'required|array|min:1',
-            'lines.*.product_id' => 'nullable|exists:products,id',
+            'lines.*.product_id' => ['nullable', new TenantExists('products')],
             'lines.*.description' => 'required|string',
             'lines.*.quantity' => 'required|numeric|min:0',
             'lines.*.unit_price' => 'required|integer',
             'lines.*.tax_rate' => 'required|numeric|min:0',
-            'lines.*.account_id' => 'required|exists:accounts,id',
+            'lines.*.account_id' => ['required', new TenantExists('accounts')],
         ]);
 
         // Generate invoice number (RE-2025-0001) - tenant-scoped
@@ -50,7 +53,7 @@ class InvoiceController extends Controller
             ->latest('id')
             ->first();
         $nextNumber = $lastInvoice ? intval(substr($lastInvoice->invoice_number, -4)) + 1 : 1;
-        $invoiceNumber = sprintf("RE-%s-%04d", $year, $nextNumber);
+        $invoiceNumber = sprintf('RE-%s-%04d', $year, $nextNumber);
 
         // Calculate totals
         $subtotal = 0;
@@ -98,7 +101,7 @@ class InvoiceController extends Controller
         }
 
         // Update order status if invoice was created from an order
-        if (!empty($validated['order_id'])) {
+        if (! empty($validated['order_id'])) {
             $order = \App\Models\Order::find($validated['order_id']);
             if ($order) {
                 $order->update(['status' => 'invoiced']);
@@ -112,7 +115,7 @@ class InvoiceController extends Controller
     {
         $tenant = $this->getTenantOrFail();
         $invoice = Invoice::where('tenant_id', $tenant->id)->findOrFail($id);
-        
+
         return response()->json($invoice->load(['contact', 'lines.account']));
     }
 
@@ -132,6 +135,7 @@ class InvoiceController extends Controller
 
         // Hard delete for drafts (Invoice doesn't use SoftDeletes)
         $invoice->delete();
+
         return response()->json(['message' => 'Rechnung gelöscht']);
     }
 
@@ -152,12 +156,12 @@ class InvoiceController extends Controller
             $invoice->load(['contact.account', 'lines.account']);
 
             // Check if contact exists and has name
-            if (!$invoice->contact) {
+            if (! $invoice->contact) {
                 return response()->json(['error' => 'Kunde nicht gefunden'], 400);
             }
 
             // Check if contact has an account
-            if (!$invoice->contact->customer_account_id) {
+            if (! $invoice->contact->customer_account_id) {
                 return response()->json(['error' => "Kunde '{$invoice->contact->name}' hat kein Debitorenkonto. Bitte Kunden neu anlegen."], 400);
             }
 
@@ -181,8 +185,8 @@ class InvoiceController extends Controller
             // Group by account and tax rate
             $revenueGroups = [];
             foreach ($invoice->lines as $line) {
-                $key = $line->account_id . '_' . $line->tax_rate;
-                if (!isset($revenueGroups[$key])) {
+                $key = $line->account_id.'_'.$line->tax_rate;
+                if (! isset($revenueGroups[$key])) {
                     $revenueGroups[$key] = [
                         'account_id' => $line->account_id,
                         'tax_rate' => $line->tax_rate,
@@ -206,12 +210,12 @@ class InvoiceController extends Controller
                 // Find tax account based on tax rate
                 // Assuming account codes: 1776 (19% USt), 1771 (7% USt)
                 $taxAccount = \App\Modules\Accounting\Models\Account::where('code', '1776')->first();
-                
-                if (!$taxAccount) {
+
+                if (! $taxAccount) {
                     // Try to find any tax account
                     $taxAccount = \App\Modules\Accounting\Models\Account::where('code', 'like', '177%')->first();
                 }
-                
+
                 if ($taxAccount) {
                     \App\Modules\Accounting\Models\JournalEntryLine::create([
                         'journal_entry_id' => $journalEntry->id,
@@ -229,10 +233,10 @@ class InvoiceController extends Controller
             ]);
 
             // Reduce inventory for products with tracking enabled
-            $inventoryService = new InventoryService();
+            $inventoryService = new InventoryService;
             foreach ($invoice->lines as $line) {
                 // Check if line has a product_id
-                if (!empty($line->product_id)) {
+                if (! empty($line->product_id)) {
                     $product = Product::find($line->product_id);
                     if ($product) {
                         $inventoryService->removeStock(
@@ -247,16 +251,16 @@ class InvoiceController extends Controller
             }
 
             return response()->json($invoice->load(['contact', 'lines', 'journalEntry']));
-            
+
         } catch (\Exception $e) {
             \Log::error('Invoice booking failed', [
                 'invoice_id' => $invoice->id,
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
             ]);
-            
+
             return response()->json([
-                'error' => 'Fehler beim Buchen der Rechnung: ' . $e->getMessage()
+                'error' => 'Fehler beim Buchen der Rechnung: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -269,7 +273,7 @@ class InvoiceController extends Controller
     public function recordPayment(Request $request, Invoice $invoice)
     {
         $validated = $request->validate([
-            'payment_account_id' => 'required|exists:accounts,id', // Kasse oder Bank
+            'payment_account_id' => ['required', new TenantExists('accounts')], // Kasse oder Bank
             'payment_date' => 'required|date',
         ]);
 
@@ -318,20 +322,20 @@ class InvoiceController extends Controller
         }
 
         $validated = $request->validate([
-            'contact_id' => 'required|exists:contacts,id',
+            'contact_id' => ['required', new TenantExists('contacts')],
             'invoice_date' => 'required|date',
             'due_date' => 'required|date',
             'intro_text' => 'nullable|string',
             'payment_terms' => 'nullable|string',
             'footer_note' => 'nullable|string',
             'lines' => 'required|array',
-            'lines.*.product_id' => 'nullable|exists:products,id',
+            'lines.*.product_id' => ['nullable', new TenantExists('products')],
             'lines.*.description' => 'required|string',
             'lines.*.quantity' => 'required|numeric|min:0',
             'lines.*.unit' => 'required|string',
             'lines.*.unit_price' => 'required|integer',
             'lines.*.tax_rate' => 'required|numeric|min:0',
-            'lines.*.account_id' => 'required|exists:accounts,id',
+            'lines.*.account_id' => ['required', new TenantExists('accounts')],
         ]);
 
         // Calculate totals
@@ -384,7 +388,7 @@ class InvoiceController extends Controller
     public function send(Request $request, Invoice $invoice)
     {
         $tenant = $this->getTenantOrFail();
-        
+
         // Validate tenant ownership
         if ($invoice->tenant_id !== $tenant->id) {
             return response()->json(['error' => 'Unauthorized'], 403);
@@ -412,12 +416,12 @@ class InvoiceController extends Controller
 
         // Save PDF temporarily
         $pdfPath = storage_path("app/temp/invoice-{$invoice->invoice_number}.pdf");
-        
+
         // Ensure directory exists
-        if (!is_dir(storage_path('app/temp'))) {
+        if (! is_dir(storage_path('app/temp'))) {
             mkdir(storage_path('app/temp'), 0755, true);
         }
-        
+
         $pdf->save($pdfPath);
 
         try {
@@ -431,7 +435,7 @@ class InvoiceController extends Controller
             );
 
             $to = $validated['to'];
-            if (!empty($validated['cc'])) {
+            if (! empty($validated['cc'])) {
                 \Illuminate\Support\Facades\Mail::to($to)
                     ->cc($validated['cc'])
                     ->send($mail);
@@ -458,9 +462,9 @@ class InvoiceController extends Controller
             if (file_exists($pdfPath)) {
                 unlink($pdfPath);
             }
-            
+
             return response()->json([
-                'error' => 'Fehler beim Senden der E-Mail: ' . $e->getMessage(),
+                'error' => 'Fehler beim Senden der E-Mail: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -472,16 +476,15 @@ class InvoiceController extends Controller
     {
         $tenant = $this->getTenantOrFail();
         $invoice = Invoice::where('tenant_id', $tenant->id)->findOrFail($id);
-        
+
         $invoice->load(['contact', 'lines.account']);
         $settings = \App\Models\CompanySetting::first();
-        
+
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('invoices.pdf', [
             'invoice' => $invoice,
             'settings' => $settings,
         ])->setPaper('a4');
-        
+
         return $pdf->download("Rechnung-{$invoice->invoice_number}.pdf");
     }
 }
-
