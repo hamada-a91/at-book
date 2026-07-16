@@ -22,7 +22,9 @@
       "Bash(python3 -c ' *)",
       "Bash(./vendor/bin/sail exec *)",
       "Bash(docker compose *)",
-      "Bash(time ./vendor/bin/sail artisan test)"
+      "Bash(time ./vendor/bin/sail artisan test)",
+      "Bash(gh run *)",
+      "Bash(curl -s \"https://api.github.com/repos/hamada-a91/at-book/actions/runs?branch=v1.1&per_page=3\")"
     ]
   }
 }
