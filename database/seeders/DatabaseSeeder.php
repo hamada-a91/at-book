@@ -7,14 +7,20 @@ use Illuminate\Database\Seeder;
 class DatabaseSeeder extends Seeder
 {
     /**
-     * Seed the application's database.
-     * 
-     * NOTE: For multi-tenant applications, we don't seed demo data.
-     * Each tenant creates their own data through the onboarding process.
+     * Basis-Seeding: Rollen/Permissions + Plattform-Admin (immer nötig).
+     * In lokalen Umgebungen zusätzlich ein kompletter Demo-Tenant zum Testen.
+     *
+     * Fachdaten der Mandanten entstehen normal über Registrierung + Onboarding.
      */
     public function run(): void
     {
-        // No seeding needed - tenants create their own data via onboarding
-        $this->command->info('✅ Multi-tenant app - no seeding required. Use onboarding to create data.');
+        $this->call([
+            RolePermissionSeeder::class,
+            AdminUserSeeder::class,
+        ]);
+
+        if (app()->environment('local', 'testing')) {
+            $this->call(DemoTenantSeeder::class);
+        }
     }
 }

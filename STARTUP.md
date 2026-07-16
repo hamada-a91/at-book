@@ -1,169 +1,69 @@
-# 🚀 AT-Book Projekt Starten - Anleitung
+# 🚀 AT-Book starten – Schnellanleitung
 
-## Problem: "Vite manifest not found"
+> Ausführliche Doku: [docs/README.md](docs/README.md) · Setup-Details: [docs/07-entwicklung-deployment.md](docs/07-entwicklung-deployment.md)
 
-Dieser Fehler tritt auf, weil der Vite Development Server noch nicht läuft.
-
-## ✅ Lösung: Projekt in 2 Terminals starten
-
-### Terminal 1: Vite Development Server (Frontend)
+## Start-Sequenz (Entwicklung)
 
 ```bash
-# Im WSL Terminal
 cd /home/ahmed/LaravelProjects/at-book
 
-# Vite starten
-npm run dev
-```
-
-**Erwartete Ausgabe:**
-```
-VITE v7.x.x  ready in xxx ms
-
-➜  Local:   http://localhost:5173/
-➜  Network: use --host to expose
-```
-
-### Terminal 2: Laravel Sail (Backend)
-
-```bash
-# Im WSL Terminal (neues Terminal)
-cd /home/ahmed/LaravelProjects/at-book
-
-# Laravel Sail starten (falls noch nicht läuft)
+# 1. Container starten (App + PostgreSQL)
 ./vendor/bin/sail up -d
 
-# Prüfen ob Sail läuft
-./vendor/bin/sail ps
+# 2. Datenbank migrieren + Testdaten seeden (idempotent, gefahrlos wiederholbar)
+./vendor/bin/sail artisan migrate --seed
+
+# 3. Frontend-Dev-Server (Vite, Port 5173)
+./vendor/bin/sail npm run dev
+
+# Optional: Queue-Worker (nötig für Backups)
+./vendor/bin/sail artisan queue:work
 ```
 
-## 🌐 Projekt öffnen
+**App öffnen:** http://localhost
 
-Nach dem Start beider Server:
+## 🔑 Test-Logins (werden durch `migrate --seed` angelegt)
 
-1. **Öffnen Sie Ihren Browser**
-2. **Gehen Sie zu:** `http://localhost` (oder der Port den Sail verwendet, z.B. `http://localhost:80`)
+| Rolle | E-Mail | Passwort | Einstieg |
+|---|---|---|---|
+| **Demo-Tenant (Owner)** | `demo@at-book.local` | `password` | http://localhost → Login → `/demo-firma/dashboard` |
+| **Plattform-Admin** | Wert von `ADMIN_EMAIL` aus `.env` (Default: `admin@at-book.local`) | Wert von `ADMIN_PASSWORD` aus `.env`; wenn leer, wird beim Seeden ein Zufallspasswort **einmalig in der Konsole** angezeigt | `/admin` (Tenants, User, Seriennummern, Bug-Reports) |
+
+Der **Demo-Tenant** (`DemoTenantSeeder`, nur in `local`/`testing`) enthält fertige Testdaten:
+SKR03-Kontenplan (47 Konten), Kunde „Muster GmbH“ + Lieferant „Bürobedarf Schmidt KG“ (mit Debitoren-/Kreditorenkonto), 2 Produkte (Laptop mit Lagerbestand 10, IT-Beratung), Bankkonto, 2 Rechnungs-Entwürfe (zum Testen von Buchen/PDF/E-Mail), 1 offener Eingangsbeleg und Journalbuchungen in allen Status (Entwurf / festgeschrieben / storniert).
+
+> ⚠️ Hinweis: In bestehenden Datenbanken kann noch der alte Admin-User (`ahmed.tahhan@web.de`) existieren – dessen Passwort stand früher im Code und sollte geändert werden.
+
+## 📝 Registrierung testen (eigener neuer Tenant)
+
+`ENABLE_SERIAL_NUMBER_ACTIVATION` in der `.env` steuert die Seriennummern-Pflicht bei der Registrierung:
+
+- `false` → einfach unter http://localhost registrieren → Tenant + Owner entstehen, danach Onboarding-Wizard (Firmendaten, Kontenplan-Generierung).
+- `true` → zuerst als Plattform-Admin unter `/admin` eine Seriennummer anlegen, dann damit registrieren.
+
+Nach Änderung der `.env`: `./vendor/bin/sail artisan config:clear`.
 
 ## 🔧 Troubleshooting
 
-### Problem: npm install schlägt fehl
+| Problem | Lösung |
+|---|---|
+| „Vite manifest not found“ | `./vendor/bin/sail npm run dev` läuft nicht → starten (oder `npm run build` für statischen Build) |
+| `SQLSTATE … Connection refused` | PostgreSQL-Container fehlt → `./vendor/bin/sail up -d`, dann `./vendor/bin/sail ps` prüfen (es müssen **2** Container laufen: `laravel.test` + `pgsql`) |
+| Port belegt | `APP_PORT=8080 ./vendor/bin/sail up -d` oder Vite: `sail npm run dev -- --port 5174` |
+| Login schlägt fehl / Rollen fehlen | `./vendor/bin/sail artisan db:seed` (Rollen + Admin + Demo-Tenant, idempotent) |
+| Backups bleiben „pending“ | Queue-Worker starten: `./vendor/bin/sail artisan queue:work` |
+| Kompletter Reset | `./vendor/bin/sail artisan migrate:fresh --seed` ⚠️ **löscht alle Daten!** |
+
+## Tests & Code-Style
 
 ```bash
-# Cache leeren
-npm cache clean --force
-
-# Neu installieren
-npm install
+./vendor/bin/sail artisan test                    # komplette Suite
+./vendor/bin/sail artisan test --filter=Backup    # Backup-Regression (vor jedem Merge!)
+vendor/bin/pint --dirty                           # Code-Style
 ```
 
-### Problem: Port bereits belegt
+## Stoppen
 
 ```bash
-# Vite auf anderem Port starten
-npm run dev -- --port 5174
+./vendor/bin/sail down        # Container stoppen (Daten bleiben im Volume)
 ```
-
-### Problem: Laravel Sail läuft nicht
-
-```bash
-# Sail starten
-./vendor/bin/sail up -d
-
-# Logs anschauen
-./vendor/bin/sail logs
-```
-
-### Problem: Datenbank nicht migriert
-
-```bash
-# Migrationen ausführen
-./vendor/bin/sail artisan migrate:fresh
-
-# Accounts seeden
-./vendor/bin/sail artisan db:seed --class=AccountSeeder
-```
-
-## 📋 Komplette Startup-Sequenz
-
-```bash
-# 1. Zum Projektverzeichnis
-cd /home/ahmed/LaravelProjects/at-book
-
-# 2. NPM Dependencies installieren (einmalig)
-npm install
-
-# 3. Laravel Sail starten
-./vendor/bin/sail up -d
-
-# 4. Datenbank migrieren (einmalig)
-./vendor/bin/sail artisan migrate:fresh
-./vendor/bin/sail artisan db:seed --class=AccountSeeder
-
-# 5. Vite Development Server starten
-npm run dev
-```
-
-## 🎯 Was Sie sehen sollten
-
-Nach erfolgreichem Start sehen Sie:
-
-1. **Im Terminal (Vite):**
-   ```
-   ➜  Local:   http://localhost:5173/
-   ➜  ready in 234 ms
-   ```
-
-2. **Im Browser (http://localhost):**
-   - AT-Book Header
-   - "GoBD-Compliant Accounting System" Untertitel
-   - Booking Mask Formular
-
-## 🔄 Entwicklungs-Workflow
-
-### Jeden Tag starten:
-
-```bash
-# Terminal 1: Vite
-npm run dev
-
-# Terminal 2: Sail (falls gestoppt)
-./vendor/bin/sail up -d
-```
-
-### Am Ende des Tages stoppen:
-
-```bash
-# Vite: Ctrl+C im Terminal
-
-# Sail stoppen
-./vendor/bin/sail down
-```
-
-## 🆘 Häufige Fehler
-
-### "Cannot find module 'react'"
-```bash
-npm install
-```
-
-### "SQLSTATE[HY000] [2002] Connection refused"
-```bash
-./vendor/bin/sail up -d
-```
-
-### "Class 'AccountSeeder' not found"
-```bash
-./vendor/bin/sail artisan db:seed --class=AccountSeeder
-```
-
-## 📞 Nächste Schritte
-
-Nach erfolgreichem Start können Sie:
-
-1. ✅ Buchungen erstellen über die UI
-2. ✅ API testen mit Postman: `http://localhost/api/accounts`
-3. ✅ Datenbank prüfen: `./vendor/bin/sail artisan tinker`
-
----
-
-**Viel Erfolg! 🚀**

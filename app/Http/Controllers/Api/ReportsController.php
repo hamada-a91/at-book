@@ -6,11 +6,16 @@ use App\Http\Controllers\Controller;
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Models\JournalEntry;
 use App\Modules\Accounting\Models\JournalEntryLine;
-use Illuminate\Http\Request;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
+/**
+ * WICHTIG (GoBD/Generalumkehr): Stornierte Buchungen (status=cancelled) und ihre
+ * Storno-Gegenbuchungen müssen BEIDE in alle Auswertungen einfließen – sie
+ * neutralisieren sich zu 0. Ein Filter auf status != cancelled trifft nur das
+ * Original und verfälscht alle Salden (Original und Storno sind nicht verknüpft).
+ */
 class ReportsController extends Controller
 {
     /**
@@ -23,8 +28,7 @@ class ReportsController extends Controller
 
         $accounts = Account::with(['journalEntryLines' => function ($query) use ($fromDate, $toDate) {
             $query->whereHas('journalEntry', function ($q) use ($fromDate, $toDate) {
-                $q->whereBetween('booking_date', [$fromDate, $toDate])
-                  ->where('status', '!=', 'cancelled');
+                $q->whereBetween('booking_date', [$fromDate, $toDate]);
             });
         }])->get();
 
@@ -55,7 +59,7 @@ class ReportsController extends Controller
             'totals' => [
                 'debit' => $reportData->sum('total_debit'),
                 'credit' => $reportData->sum('total_credit'),
-            ]
+            ],
         ]);
     }
 
@@ -71,8 +75,7 @@ class ReportsController extends Controller
         $revenueAccounts = Account::where('type', 'revenue')
             ->with(['journalEntryLines' => function ($query) use ($fromDate, $toDate) {
                 $query->whereHas('journalEntry', function ($q) use ($fromDate, $toDate) {
-                    $q->whereBetween('booking_date', [$fromDate, $toDate])
-                      ->where('status', '!=', 'cancelled');
+                    $q->whereBetween('booking_date', [$fromDate, $toDate]);
                 });
             }])->get();
 
@@ -80,8 +83,7 @@ class ReportsController extends Controller
         $expenseAccounts = Account::where('type', 'expense')
             ->with(['journalEntryLines' => function ($query) use ($fromDate, $toDate) {
                 $query->whereHas('journalEntry', function ($q) use ($fromDate, $toDate) {
-                    $q->whereBetween('booking_date', [$fromDate, $toDate])
-                      ->where('status', '!=', 'cancelled');
+                    $q->whereBetween('booking_date', [$fromDate, $toDate]);
                 });
             }])->get();
 
@@ -89,19 +91,21 @@ class ReportsController extends Controller
             return $accounts->map(function ($account) {
                 $debit = $account->journalEntryLines->where('type', 'debit')->sum('amount');
                 $credit = $account->journalEntryLines->where('type', 'credit')->sum('amount');
-                // For P&L: Revenue is Credit - Debit, Expense is Debit - Credit usually, 
+                // For P&L: Revenue is Credit - Debit, Expense is Debit - Credit usually,
                 // but let's keep it simple: Balance = Credit - Debit (Revenue positive, Expense negative if normal balance)
                 // Or standard: Revenue (Credit balance), Expense (Debit balance)
-                
+
                 $balance = $credit - $debit; // Positive for Revenue, Negative for Expense usually
 
-                if ($debit === 0 && $credit === 0) return null;
+                if ($debit === 0 && $credit === 0) {
+                    return null;
+                }
 
                 return [
                     'code' => $account->code,
                     'name' => $account->name,
                     'amount' => abs($balance), // Show absolute value
-                    'balance_type' => $balance >= 0 ? 'credit' : 'debit'
+                    'balance_type' => $balance >= 0 ? 'credit' : 'debit',
                 ];
             })->filter()->values();
         };
@@ -110,12 +114,12 @@ class ReportsController extends Controller
         $expenses = $processAccounts($expenseAccounts);
 
         $totalRevenue = $revenueAccounts->sum(function ($acc) {
-            return $acc->journalEntryLines->where('type', 'credit')->sum('amount') - 
+            return $acc->journalEntryLines->where('type', 'credit')->sum('amount') -
                    $acc->journalEntryLines->where('type', 'debit')->sum('amount');
         });
 
         $totalExpense = $expenseAccounts->sum(function ($acc) {
-            return $acc->journalEntryLines->where('type', 'debit')->sum('amount') - 
+            return $acc->journalEntryLines->where('type', 'debit')->sum('amount') -
                    $acc->journalEntryLines->where('type', 'credit')->sum('amount');
         });
 
@@ -127,7 +131,7 @@ class ReportsController extends Controller
             'expenses' => $expenses,
             'total_revenue' => $totalRevenue,
             'total_expense' => $totalExpense,
-            'net_profit' => $netProfit
+            'net_profit' => $netProfit,
         ]);
     }
 
@@ -142,12 +146,12 @@ class ReportsController extends Controller
         // ===== ASSETS: Process aggregation =====
         // Get regular asset accounts (EXCLUDE 10000-19999 - those are individual debtors)
         $regularAssets = Account::where('type', 'asset')
-            ->where(function($q) {
+            ->where(function ($q) {
                 $q->where('code', '<', '10000')->orWhere('code', '>=', '20000');
             })
             ->with(['journalEntryLines' => function ($query) use ($date) {
                 $query->whereHas('journalEntry', function ($q) use ($date) {
-                    $q->where('booking_date', '<=', $date)->where('status', '!=', 'cancelled');
+                    $q->where('booking_date', '<=', $date);
                 });
             }])->get();
 
@@ -155,13 +159,14 @@ class ReportsController extends Controller
         $debtorAccounts = Account::whereBetween('code', ['10000', '19999'])
             ->with(['journalEntryLines' => function ($query) use ($date) {
                 $query->whereHas('journalEntry', function ($q) use ($date) {
-                    $q->where('booking_date', '<=', $date)->where('status', '!=', 'cancelled');
+                    $q->where('booking_date', '<=', $date);
                 });
             }])->get();
 
-        $totalDebtors = $debtorAccounts->sum(function($acc) {
+        $totalDebtors = $debtorAccounts->sum(function ($acc) {
             $debit = $acc->journalEntryLines->where('type', 'debit')->sum('amount');
             $credit = $acc->journalEntryLines->where('type', 'credit')->sum('amount');
+
             return $debit - $credit;
         });
 
@@ -177,7 +182,7 @@ class ReportsController extends Controller
                     'name' => $account->name,
                     'category' => $account->category,
                     'balance' => $balance,
-                    'is_aggregated' => false
+                    'is_aggregated' => false,
                 ]);
             }
         }
@@ -190,19 +195,19 @@ class ReportsController extends Controller
                 'category' => 'Umlaufvermögen',
                 'balance' => $totalDebtors,
                 'is_aggregated' => true,
-                'detail_count' => $debtorAccounts->count()
+                'detail_count' => $debtorAccounts->count(),
             ]);
         }
 
         // ===== LIABILITIES: Process aggregation =====
         // Get regular liabilities (EXCLUDE 70000-79999 - those are individual creditors)
         $regularLiabilities = Account::where('type', 'liability')
-            ->where(function($q) {
+            ->where(function ($q) {
                 $q->where('code', '<', '70000')->orWhere('code', '>=', '80000');
             })
             ->with(['journalEntryLines' => function ($query) use ($date) {
                 $query->whereHas('journalEntry', function ($q) use ($date) {
-                    $q->where('booking_date', '<=', $date)->where('status', '!=', 'cancelled');
+                    $q->where('booking_date', '<=', $date);
                 });
             }])->get();
 
@@ -210,13 +215,14 @@ class ReportsController extends Controller
         $creditorAccounts = Account::whereBetween('code', ['70000', '79999'])
             ->with(['journalEntryLines' => function ($query) use ($date) {
                 $query->whereHas('journalEntry', function ($q) use ($date) {
-                    $q->where('booking_date', '<=', $date)->where('status', '!=', 'cancelled');
+                    $q->where('booking_date', '<=', $date);
                 });
             }])->get();
 
-        $totalCreditors = $creditorAccounts->sum(function($acc) {
+        $totalCreditors = $creditorAccounts->sum(function ($acc) {
             $debit = $acc->journalEntryLines->where('type', 'debit')->sum('amount');
             $credit = $acc->journalEntryLines->where('type', 'credit')->sum('amount');
+
             return $credit - $debit;
         });
 
@@ -232,7 +238,7 @@ class ReportsController extends Controller
                     'name' => $account->name,
                     'category' => $account->category,
                     'balance' => $balance,
-                    'is_aggregated' => false
+                    'is_aggregated' => false,
                 ]);
             }
         }
@@ -245,7 +251,7 @@ class ReportsController extends Controller
                 'category' => 'Verbindlichkeiten',
                 'balance' => $totalCreditors,
                 'is_aggregated' => true,
-                'detail_count' => $creditorAccounts->count()
+                'detail_count' => $creditorAccounts->count(),
             ]);
         }
 
@@ -253,7 +259,7 @@ class ReportsController extends Controller
         $equityAccounts = Account::where('type', 'equity')
             ->with(['journalEntryLines' => function ($query) use ($date) {
                 $query->whereHas('journalEntry', function ($q) use ($date) {
-                    $q->where('booking_date', '<=', $date)->where('status', '!=', 'cancelled');
+                    $q->where('booking_date', '<=', $date);
                 });
             }])->get();
 
@@ -268,7 +274,7 @@ class ReportsController extends Controller
                     'name' => $account->name,
                     'category' => $account->category,
                     'balance' => $balance,
-                    'is_aggregated' => false
+                    'is_aggregated' => false,
                 ]);
             }
         }
@@ -286,7 +292,7 @@ class ReportsController extends Controller
             'total_assets' => $totalAssets,
             'total_liabilities' => $totalLiabilities,
             'total_equity' => $totalEquity,
-            'calculated_profit_loss' => $calculatedProfit
+            'calculated_profit_loss' => $calculatedProfit,
         ]);
     }
 
@@ -300,14 +306,13 @@ class ReportsController extends Controller
 
         $entries = JournalEntry::with(['lines.account'])
             ->whereBetween('booking_date', [$fromDate, $toDate])
-            ->where('status', '!=', 'cancelled')
             ->orderBy('booking_date')
             ->orderBy('id')
             ->get();
 
         return response()->json([
             'period' => ['from' => $fromDate, 'to' => $toDate],
-            'entries' => $entries
+            'entries' => $entries,
         ]);
     }
 
@@ -320,7 +325,7 @@ class ReportsController extends Controller
         $fromDate = $request->input('from_date', Carbon::now()->startOfYear()->toDateString());
         $toDate = $request->input('to_date', Carbon::now()->endOfYear()->toDateString());
 
-        if (!$accountId) {
+        if (! $accountId) {
             return response()->json(['error' => 'Account ID required'], 400);
         }
 
@@ -329,13 +334,12 @@ class ReportsController extends Controller
         // Get opening balance (movements before from_date)
         $openingLines = JournalEntryLine::where('account_id', $accountId)
             ->whereHas('journalEntry', function ($q) use ($fromDate) {
-                $q->where('booking_date', '<', $fromDate)
-                  ->where('status', '!=', 'cancelled');
+                $q->where('booking_date', '<', $fromDate);
             })->get();
-            
+
         $openingDebit = $openingLines->where('type', 'debit')->sum('amount');
         $openingCredit = $openingLines->where('type', 'credit')->sum('amount');
-        
+
         // Determine normal balance side based on type
         $isAssetOrExpense = in_array($account->type, ['asset', 'expense']);
         $openingBalance = $isAssetOrExpense ? ($openingDebit - $openingCredit) : ($openingCredit - $openingDebit);
@@ -344,12 +348,11 @@ class ReportsController extends Controller
         $movements = JournalEntryLine::where('account_id', $accountId)
             ->with('journalEntry')
             ->whereHas('journalEntry', function ($q) use ($fromDate, $toDate) {
-                $q->whereBetween('booking_date', [$fromDate, $toDate])
-                  ->where('status', '!=', 'cancelled');
+                $q->whereBetween('booking_date', [$fromDate, $toDate]);
             })
             ->get()
-            ->sortBy(function($line) {
-                return $line->journalEntry->booking_date . '-' . $line->journalEntry->id;
+            ->sortBy(function ($line) {
+                return $line->journalEntry->booking_date.'-'.$line->journalEntry->id;
             })
             ->values();
 
@@ -359,10 +362,10 @@ class ReportsController extends Controller
             'opening_balance' => $openingBalance,
             'movements' => $movements,
             'closing_balance' => $openingBalance + (
-                $isAssetOrExpense 
+                $isAssetOrExpense
                 ? ($movements->where('type', 'debit')->sum('amount') - $movements->where('type', 'credit')->sum('amount'))
                 : ($movements->where('type', 'credit')->sum('amount') - $movements->where('type', 'debit')->sum('amount'))
-            )
+            ),
         ]);
     }
 
@@ -375,12 +378,11 @@ class ReportsController extends Controller
         $toDate = $request->input('to_date', Carbon::now()->endOfMonth()->toDateString());
 
         // Find all lines with tax_key or tax_amount
-        $taxLines = JournalEntryLine::where(function($q) {
-                $q->whereNotNull('tax_key')->orWhere('tax_amount', '>', 0);
-            })
+        $taxLines = JournalEntryLine::where(function ($q) {
+            $q->whereNotNull('tax_key')->orWhere('tax_amount', '>', 0);
+        })
             ->whereHas('journalEntry', function ($q) use ($fromDate, $toDate) {
-                $q->whereBetween('booking_date', [$fromDate, $toDate])
-                  ->where('status', '!=', 'cancelled');
+                $q->whereBetween('booking_date', [$fromDate, $toDate]);
             })
             ->with(['journalEntry', 'account'])
             ->get();
@@ -391,7 +393,7 @@ class ReportsController extends Controller
                 'tax_key' => $key,
                 'base_amount' => $lines->sum('amount'),
                 'tax_amount' => $lines->sum('tax_amount'),
-                'count' => $lines->count()
+                'count' => $lines->count(),
             ];
         });
 
@@ -403,7 +405,7 @@ class ReportsController extends Controller
         return response()->json([
             'period' => ['from' => $fromDate, 'to' => $toDate],
             'tax_summary' => $grouped,
-            'total_tax_amount' => $taxLines->sum('tax_amount')
+            'total_tax_amount' => $taxLines->sum('tax_amount'),
         ]);
     }
 }

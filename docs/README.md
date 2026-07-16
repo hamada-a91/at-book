@@ -2,7 +2,7 @@
 
 AT-Book ist eine **Multi-Tenant-Buchhaltungsanwendung** (ähnlich Lexware) auf Basis von Laravel 12 + React. Diese Dokumentation ist der zentrale Einstiegspunkt für alle Entwickler und AI-Agents.
 
-> **Wichtig:** Die vielen `*.md`-Dateien im Projekt-Root (z.B. `ALL_FIXES_COMPLETE.md`, `QUICK_FIX_GUIDE.md`, …) sind **historische Arbeitsnotizen** aus der Entwicklungsphase und teilweise veraltet. Verbindlich ist die Dokumentation hier im `docs/`-Ordner sowie die `CLAUDE.md` im Root.
+> **Wichtig:** Die vielen `*.md`-Dateien im Projekt-Root (z.B. `ALL_FIXES_COMPLETE.md`, `QUICK_FIX_GUIDE.md`, …) sind **historische Arbeitsnotizen** aus der Entwicklungsphase und teilweise veraltet. Verbindlich ist die Dokumentation hier im `docs/`-Ordner, die `CLAUDE.md` sowie die **[STARTUP.md](../STARTUP.md)** (Schnellstart + Test-Logins) im Root.
 
 ## Inhaltsverzeichnis
 

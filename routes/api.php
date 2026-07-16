@@ -1,71 +1,17 @@
 <?php
 
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Schema;
-
-// Schema Fix Route (Temporary)
-Route::get('/force-schema-fix', function () {
-    $messages = [];
-    
-    if (Schema::hasTable('accounts')) {
-        // 1. Try to drop old unique constraint
-        try {
-            Schema::table('accounts', function (Illuminate\Database\Schema\Blueprint $table) {
-                $table->dropUnique('accounts_code_unique');
-            });
-            $messages[] = 'Dropped accounts_code_unique';
-        } catch (\Exception $e) {
-            $messages[] = 'Drop failed (might not exist): ' . $e->getMessage();
-        }
-        
-        // 2. Try to add new scoped unique constraint
-        try {
-            Schema::table('accounts', function (Illuminate\Database\Schema\Blueprint $table) {
-                $table->unique(['tenant_id', 'code']);
-            });
-             $messages[] = 'Added unique(tenant_id, code)';
-        } catch (\Exception $e) {
-             $messages[] = 'Add unique failed (might exist): ' . $e->getMessage();
-        }
-        // 3. Fix Tax Codes table similarly
-        if (Schema::hasTable('tax_codes')) {
-            try {
-                Schema::table('tax_codes', function (Illuminate\Database\Schema\Blueprint $table) {
-                    $table->dropUnique('tax_codes_code_unique');
-                });
-                $messages[] = 'Dropped tax_codes_code_unique';
-            } catch (\Exception $e) {
-                $messages[] = 'Drop tax_unique failed: ' . $e->getMessage();
-            }
-            
-            try {
-                Schema::table('tax_codes', function (Illuminate\Database\Schema\Blueprint $table) {
-                    $table->unique(['tenant_id', 'code']);
-                });
-                $messages[] = 'Added unique(tenant_id, code) to tax_codes';
-            } catch (\Exception $e) {
-                $messages[] = 'Add tax_unique failed: ' . $e->getMessage();
-            }
-        }
-    }
-    
-    return response()->json(['messages' => $messages]);
-});
-use App\Http\Controllers\Api\ContactController;
-use App\Http\Controllers\Api\AccountController;
-use App\Http\Controllers\Api\UserController;
-use App\Http\Controllers\Api\RoleController;
-use App\Http\Controllers\Api\BugReportController;
 use App\Http\Controllers\Api\AccountBalanceController;
-use App\Http\Controllers\Api\JournalEntryController;
-use App\Http\Controllers\Api\DashboardController;
-use App\Http\Controllers\Api\CompanySettingController;
-use App\Http\Controllers\Api\ReportsController;
+use App\Http\Controllers\Api\AccountController;
 use App\Http\Controllers\Api\AccountPlanController;
+use App\Http\Controllers\Api\CompanySettingController;
+use App\Http\Controllers\Api\ContactController;
+use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\JournalEntryController;
 use App\Http\Controllers\Api\OnboardingController;
-use App\Http\Controllers\Auth\RegistrationController;
+use App\Http\Controllers\Api\ReportsController;
 use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\Auth\RegistrationController;
+use Illuminate\Support\Facades\Route;
 
 // ===== PUBLIC AUTHENTICATION ROUTES =====
 Route::post('/register', [RegistrationController::class, 'register'])->name('api.register');
@@ -76,44 +22,44 @@ Route::get('/config', [\App\Http\Controllers\PublicConfigController::class, 'ind
 
 Route::middleware(['api', 'auth:api', \App\Http\Middleware\SetTenantFromUser::class])->group(function () {
     // ===== UNPROTECTED ROUTES (accessible during onboarding) =====
-    
+
     // Note: auth:sanctum supports BOTH session auth (web) AND token auth (API)
     // This allows the frontend to call these routes during onboarding (session)
     // and also via API tokens after login
-    
+
     // Onboarding Status
     Route::get('/onboarding/status', [OnboardingController::class, 'status']);
     Route::post('/onboarding/complete', [OnboardingController::class, 'complete']);
-    
+
     // Company Settings (needed for onboarding)
     Route::get('/settings', [CompanySettingController::class, 'show']);
     Route::post('/settings', [CompanySettingController::class, 'update']);
-    
+
     // Account Plan Management
     Route::post('/account-plan/generate', [AccountPlanController::class, 'generate']);
     Route::post('/account-plan/extend', [AccountPlanController::class, 'extend']);
     Route::get('/account-plan/status', [AccountPlanController::class, 'status']);
     Route::get('/account-plan/missing', [AccountPlanController::class, 'missing']);
-    
+
     // ===== PROTECTED ROUTES (require completed onboarding) =====
     Route::middleware(['onboarding.complete'])->group(function () {
         // Dashboard
         Route::get('/dashboard/summary', [DashboardController::class, 'summary']);
         Route::get('/dashboard/chart', [DashboardController::class, 'chart']);
         Route::get('/dashboard/recent-bookings', [DashboardController::class, 'recentBookings']);
-        
+
         // Accounts
         Route::get('/accounts', [AccountController::class, 'index']);
         Route::post('/accounts', [AccountController::class, 'store']);
         Route::get('/accounts/{id}', [AccountController::class, 'show']);
-        
+
         // Account Balances
         Route::get('/accounts/balances', [AccountBalanceController::class, 'index']);
         Route::get('/accounts/{account}/balance', [AccountBalanceController::class, 'show']);
 
         // Contacts
         Route::apiResource('contacts', ContactController::class);
-        
+
         // Reports Routes
         Route::prefix('reports')->group(function () {
             Route::get('/trial-balance', [ReportsController::class, 'trialBalance']);
@@ -150,7 +96,7 @@ Route::middleware(['api', 'auth:api', \App\Http\Middleware\SetTenantFromUser::cl
 
         // Products & Inventory
         Route::apiResource('products', \App\Http\Controllers\Api\ProductController::class);
-        
+
         // Product Categories
         Route::get('/product-categories', [\App\Http\Controllers\Api\ProductCategoryController::class, 'index']);
         Route::post('/product-categories', [\App\Http\Controllers\Api\ProductCategoryController::class, 'store']);
@@ -178,7 +124,7 @@ Route::middleware(['api', 'auth:api', \App\Http\Middleware\SetTenantFromUser::cl
         // Delivery Notes (Lieferscheine)
         Route::apiResource('delivery-notes', \App\Http\Controllers\Api\DeliveryNoteController::class);
         Route::post('/delivery-notes/{deliveryNote}/create-invoice', [\App\Http\Controllers\Api\DeliveryNoteController::class, 'createInvoice']);
-        
+
         // Role & User Management
         Route::get('/roles', [\App\Http\Controllers\Api\RoleController::class, 'index']);
         Route::apiResource('users', \App\Http\Controllers\Api\UserController::class);
@@ -188,14 +134,14 @@ Route::middleware(['api', 'auth:api', \App\Http\Middleware\SetTenantFromUser::cl
         Route::prefix('backup')->group(function () {
             // Export
             Route::post('/export', [\App\Http\Controllers\Api\BackupController::class, 'startExport']);
-            
+
             // Jobs
             Route::get('/jobs', [\App\Http\Controllers\Api\BackupController::class, 'listJobs']);
             Route::get('/jobs/{id}', [\App\Http\Controllers\Api\BackupController::class, 'getJob']);
             Route::get('/jobs/{id}/download-url', [\App\Http\Controllers\Api\BackupController::class, 'getDownloadUrl']);
             Route::delete('/jobs/{id}', [\App\Http\Controllers\Api\BackupController::class, 'deleteBackup']);
             Route::post('/jobs/{id}/cancel', [\App\Http\Controllers\Api\BackupController::class, 'cancelJob']);
-            
+
             // Import
             Route::post('/import/upload', [\App\Http\Controllers\Api\BackupController::class, 'uploadImport']);
             Route::post('/import/{id}/validate', [\App\Http\Controllers\Api\BackupController::class, 'validateImport']);
@@ -208,18 +154,18 @@ Route::middleware(['api', 'auth:api', \App\Http\Middleware\SetTenantFromUser::cl
 Route::get('/backup/download/{id}', [\App\Http\Controllers\Api\BackupController::class, 'downloadBackupSigned']);
 
 // Admin Routes - Outside tenant middleware (global access)
-Route::middleware(['auth:api'])->prefix('admin')->group(function () {
+Route::middleware(['auth:api', 'role:admin,api'])->prefix('admin')->group(function () {
     Route::get('/stats', [\App\Http\Controllers\Api\AdminController::class, 'stats']);
     Route::get('/tenants', [\App\Http\Controllers\Api\AdminController::class, 'tenants']);
     Route::get('/users', [\App\Http\Controllers\Api\AdminController::class, 'users']);
     Route::get('/bug-reports', [\App\Http\Controllers\Api\AdminController::class, 'bugReports']);
     Route::patch('/bug-reports/{id}', [\App\Http\Controllers\Api\AdminController::class, 'updateBugReport']);
-    
+
     // Serial Numbers
     Route::get('/serial-numbers', [\App\Http\Controllers\Api\Admin\SerialNumberController::class, 'index']);
     Route::post('/serial-numbers', [\App\Http\Controllers\Api\Admin\SerialNumberController::class, 'store']);
     Route::delete('/serial-numbers/{id}', [\App\Http\Controllers\Api\Admin\SerialNumberController::class, 'destroy']);
-    
+
     // User Blocking
     Route::post('/users/{id}/block', [\App\Http\Controllers\Api\AdminController::class, 'blockUser']);
     Route::post('/users/{id}/unblock', [\App\Http\Controllers\Api\AdminController::class, 'unblockUser']);

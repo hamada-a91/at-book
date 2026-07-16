@@ -56,7 +56,6 @@ window.fetch = function (...args: Parameters<typeof originalFetch>) {
         // Add auth token if available, BUT skip for public auth routes to prevent 401s from stale tokens
         const isPublicAuthRoute = url.endsWith('/login') || url.endsWith('/register');
         if (token && !isPublicAuthRoute) {
-            console.log('🔐 Attaching auth token to request:', url);
             headers.set('Authorization', `Bearer ${token}`);
         } else {
             console.log('⚠️ No auth token attached or public route:', url, { hasToken: !!token, isPublic: isPublicAuthRoute });

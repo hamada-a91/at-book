@@ -17,13 +17,16 @@ return Application::configure(basePath: dirname(__DIR__))
             'onboarding.complete' => \App\Http\Middleware\OnboardingMiddleware::class,
             'tenant' => \App\Http\Middleware\SetTenantFromPath::class,
             'force.json' => \App\Http\Middleware\ForceJsonResponse::class,
+            'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
+            'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
+            'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
         ]);
-        
+
         // Add tenant middleware to web group (runs for all web routes)
         $middleware->web(append: [
             \App\Http\Middleware\SetTenantFromPath::class,
         ]);
-        
+
         // JWT Authentication Middleware for API routes
         // CRITICAL: This ensures JWT tokens are parsed from Authorization header
         $middleware->api(prepend: [

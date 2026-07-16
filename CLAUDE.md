@@ -10,7 +10,7 @@ Vollständige Doku in **`docs/`** (auf Deutsch): [docs/README.md](docs/README.md
 - Geplante Features (Projekte/Kostenstellen, OCR, AI): `docs/09-roadmap.md`
 - **Arbeitsplan: `docs/10-verbesserungsplan.md`** + Specs in `docs/specs/` (SPEC-01…10). Bei jeder Schema-Änderung gelten die **Backup-Schutzregeln** in `docs/specs/README.md` – das Backup-Modul (`app/Services/Backup/`) darf nie brechen: Transformer erweitern, alte Backups importierbar halten, `test --filter=Backup` vor jedem Merge.
 
-⚠️ Die vielen `*.md`-Dateien im Root (ALL_FIXES_COMPLETE.md etc.) sind veraltete Arbeitsnotizen – ignorieren.
+⚠️ Die vielen `*.md`-Dateien im Root (ALL_FIXES_COMPLETE.md etc.) sind veraltete Arbeitsnotizen – ignorieren. **Ausnahme:** `STARTUP.md` (aktueller Schnellstart inkl. Test-Logins) und `README.md`.
 
 ## Befehle
 

@@ -21,8 +21,9 @@ services:
       # Production Settings
       APP_NAME: 'Laravel'
       APP_ENV: 'production'
-      APP_KEY: 'base64:9KVD+I4etlRv3C/QBAPQWv6shR6xeqx9MSBWHrItd8w='
-      APP_DEBUG: 'true'
+      APP_KEY: '${APP_KEY}'
+      JWT_SECRET: '${JWT_SECRET}'
+      APP_DEBUG: 'false'
       APP_URL: 'https://at-book.vorpoint.de'
       SESSION_SECURE_COOKIE: 'true'
       # Database Connection (Overrides .env for Docker networking)
@@ -51,7 +52,9 @@ services:
     environment:
       WWWUSER: '${WWWUSER:-1000}'
       APP_ENV: 'production'
-      APP_KEY: 'base64:9KVD+I4etlRv3C/QBAPQWv6shR6xeqx9MSBWHrItd8w='
+      APP_KEY: '${APP_KEY}'
+      JWT_SECRET: '${JWT_SECRET}'
+      APP_DEBUG: 'false'
       DB_CONNECTION: 'pgsql'
       DB_HOST: 'pgsql'
       DB_PORT: '5432'

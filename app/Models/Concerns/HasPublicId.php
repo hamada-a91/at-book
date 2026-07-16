@@ -7,7 +7,7 @@ use Illuminate\Support\Str;
 
 /**
  * Trait HasPublicId
- * 
+ *
  * Adds a UUID public_id to the model and auto-generates it on creation.
  */
 trait HasPublicId
@@ -21,6 +21,13 @@ trait HasPublicId
             if (empty($model->public_id)) {
                 $model->public_id = (string) Str::uuid();
             }
+        });
+
+        // replicate() kopiert alle Attribute inkl. public_id – die Kopie muss
+        // eine eigene UUID bekommen, sonst Unique-Verletzung (z.B. Storno via
+        // BookingService::reverseBooking).
+        static::replicating(function (Model $model) {
+            $model->public_id = null;
         });
     }
 

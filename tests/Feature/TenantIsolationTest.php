@@ -2,12 +2,12 @@
 
 namespace Tests\Feature;
 
-use Tests\TestCase;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Contacts\Models\Contact;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
 
 class TenantIsolationTest extends TestCase
 {
@@ -72,6 +72,9 @@ class TenantIsolationTest extends TestCase
      */
     public function test_registration_creates_tenant_and_user()
     {
+        // Registrierung weist die Rolle "owner" zu – Rollen wie bei echter Installation seeden
+        $this->seed(\Database\Seeders\RolePermissionSeeder::class);
+
         $response = $this->postJson('/api/register', [
             'company_name' => 'Test Company',
             'slug' => 'test-company',

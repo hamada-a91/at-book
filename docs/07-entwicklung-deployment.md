@@ -46,12 +46,16 @@ vendor/bin/pint                    # Code-Style (Laravel Pint)
 ```
 
 ### Seeder-Überblick
+`sail artisan migrate --seed` führt den `DatabaseSeeder` aus: Rollen + Admin immer, Demo-Tenant nur in `local`/`testing`.
+
 | Seeder | Inhalt |
 |---|---|
 | `RolePermissionSeeder` | Rollen `owner`, `manager`, `cachier`, `buchhalter`, `admin` + Permissions (Guard `api`) |
-| `AccountSeeder` | Basis-Kontenplan |
-| `AdminUserSeeder` | Plattform-Admin-User |
-| `CompanySettingSeeder` | Default-Firmeneinstellungen |
+| `AdminUserSeeder` | Plattform-Admin (`ADMIN_EMAIL`/`ADMIN_PASSWORD` aus `.env`, sonst Zufallspasswort mit Konsolen-Ausgabe) |
+| `DemoTenantSeeder` | **Kompletter Test-Tenant** (nur lokal): Login `demo@at-book.local` / `password`, Slug `demo-firma` – SKR03-Konten, Kunde+Lieferant mit Personenkonten, Produkte mit Lagerbestand, Bankkonto, Rechnungs-Drafts, Buchungen (draft/festgeschrieben/storniert), Eingangsbeleg |
+| `AccountSeeder` | Basis-Kontenplan (Altbestand, wird vom Demo-Seeder nicht genutzt) |
+
+Registrierung testen: `ENABLE_SERIAL_NUMBER_ACTIVATION` steuert die Seriennummern-Pflicht (Config `atbook.serial_number_activation` – immer über `config()` abfragen, nie `env()` direkt!).
 
 ## Tests
 

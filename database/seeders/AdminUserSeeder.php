@@ -2,35 +2,50 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class AdminUserSeeder extends Seeder
 {
     /**
-     * Run the database seeds.
+     * Erstellt den Plattform-Admin (tenant-los, Rolle "admin").
+     *
+     * Zugangsdaten kommen aus der Umgebung (ADMIN_EMAIL / ADMIN_PASSWORD,
+     * siehe config/atbook.php). Ohne ADMIN_PASSWORD wird ein Zufallspasswort
+     * generiert und einmalig ausgegeben – niemals Passwörter hardcoden!
      */
     public function run(): void
     {
-        // Create Admin User
+        $email = config('atbook.admin_email');
+        $password = config('atbook.admin_password');
+
+        $generated = false;
+        if (empty($password)) {
+            $password = Str::password(20);
+            $generated = true;
+        }
+
         $user = \App\Models\User::firstOrCreate(
-            ['email' => 'ahmed.tahhan@web.de'],
+            ['email' => $email],
             [
-                'name' => 'Ahmed Tahhan',
-                'password' => \Illuminate\Support\Facades\Hash::make('AT-book1987'),
-                'tenant_id' => null, // Explicitly null
+                'name' => config('atbook.admin_name'),
+                'password' => Hash::make($password),
+                'tenant_id' => null, // Plattform-Admin gehört zu keinem Tenant
             ]
         );
 
-        // Ensure proper guard for role verification
-        $user->guard_name = 'api';
-        
-        // Create admin role if not exists (should be handled by RolePermissionSeeder but safe to check)
         $role = \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'api']);
-        
-        // Assign Role
-        if (!$user->hasRole('admin')) {
+
+        if (! $user->hasRole('admin')) {
             $user->assignRole($role);
         }
+
+        if ($user->wasRecentlyCreated && $generated) {
+            $this->command->warn("⚠️  Admin-Passwort generiert (einmalige Anzeige!): {$password}");
+            $this->command->line('   Setze ADMIN_PASSWORD in der .env, um ein eigenes zu verwenden.');
+        }
+
+        $this->command->info("✅ Plattform-Admin: {$email}");
     }
 }

@@ -13,7 +13,7 @@ use Illuminate\Validation\Rules\Password;
 
 /**
  * RegistrationController
- * 
+ *
  * Handles new tenant registration with JWT authentication
  */
 class RegistrationController extends Controller
@@ -29,7 +29,7 @@ class RegistrationController extends Controller
             'password' => ['required', 'confirmed', Password::defaults()],
         ]);
 
-        if (env('ENABLE_SERIAL_NUMBER_ACTIVATION', false)) {
+        if (config('atbook.serial_number_activation')) {
             $validator->addRules([
                 'serial_number' => [
                     'required',
@@ -48,18 +48,18 @@ class RegistrationController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'message' => 'Validation failed',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 422);
         }
 
         try {
             $result = DB::transaction(function () use ($request) {
                 // Check serial number usage again within transaction to prevent race conditions
-                if (env('ENABLE_SERIAL_NUMBER_ACTIVATION', false)) {
-                     $serial = \App\Models\SerialNumber::where('serial_number', $request->serial_number)->lockForUpdate()->first();
-                     if (!$serial || $serial->is_used) {
-                         throw new \Exception('Serial number invalid or already used.');
-                     }
+                if (config('atbook.serial_number_activation')) {
+                    $serial = \App\Models\SerialNumber::where('serial_number', $request->serial_number)->lockForUpdate()->first();
+                    if (! $serial || $serial->is_used) {
+                        throw new \Exception('Serial number invalid or already used.');
+                    }
                 }
 
                 // Create tenant
@@ -105,13 +105,13 @@ class RegistrationController extends Controller
                 'tenant' => $result['tenant'],
                 'user' => $result['user'],
                 'token' => $token,
-                'redirect' => '/' . $result['tenant']->slug . '/onboarding',
+                'redirect' => '/'.$result['tenant']->slug.'/onboarding',
             ], 201);
 
         } catch (\Exception $e) {
             return response()->json([
                 'message' => 'Registration failed',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }

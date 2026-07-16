@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n '^use \\\\|Request::\\\\|Request $request\\\\|new Request\\\\|: Request' routes/api.php)",
+      "Bash(git -C /home/ahmed/LaravelProjects/at-book grep \"base64:\" -- compose.production.yaml)",
+      "Bash(echo \"exit:$?\")",
+      "Bash(php -r \"echo file_get_contents\\('vendor/tymon/jwt-auth/src/JWTGuard.php'\\);\")",
+      "Bash(./vendor/bin/sail up *)",
+      "Bash(./vendor/bin/sail artisan *)",
+      "Bash(git stash *)",
+      "Bash(vendor/bin/pint routes/api.php bootstrap/app.php database/seeders/AdminUserSeeder.php tests/Feature/AdminAccessTest.php --test)",
+      "Bash(vendor/bin/pint routes/api.php bootstrap/app.php tests/Feature/AdminAccessTest.php)",
+      "Bash(echo \"grep-exit:$?\")",
+      "Bash(./vendor/bin/sail ps *)",
+      "Bash(./vendor/bin/pint --dirty)",
+      "Bash(curl -s -X POST http://localhost/api/login -H 'Content-Type: application/json' -H 'Accept: application/json' -d '{\"email\":\"demo@at-book.local\",\"password\":\"password\"}')",
+      "Bash(vendor/bin/pint --dirty)",
+      "Bash(python3 -m json.tool)"
+    ]
+  }
+}

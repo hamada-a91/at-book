@@ -18,16 +18,16 @@ class DashboardController extends Controller
         // Get date range (default: current month)
         $startDate = $request->input('start_date', now()->startOfMonth()->toDateString());
         $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
-        
+
         // Calculate income (revenue accounts: 8000-8999)
         $income = $this->calculateAccountTypeTotal('revenue', $startDate, $endDate);
-        
+
         // Calculate expenses (expense accounts: 4000-6999)
         $expenses = $this->calculateAccountTypeTotal('expense', $startDate, $endDate);
-        
+
         // Calculate profit
         $profit = $income - $expenses;
-        
+
         return response()->json([
             'income' => $income,
             'income_formatted' => $this->formatCurrency($income),
@@ -41,24 +41,24 @@ class DashboardController extends Controller
             ],
         ]);
     }
-    
+
     /**
      * Get recent bookings
      */
     public function recentBookings(Request $request): JsonResponse
     {
         $limit = $request->input('limit', 10);
-        
+
         $bookings = JournalEntry::with(['contact', 'lines.account'])
             ->where('status', 'posted')
             ->orderBy('booking_date', 'desc')
             ->orderBy('created_at', 'desc')
             ->limit($limit)
             ->get();
-        
+
         return response()->json($bookings);
     }
-    
+
     /**
      * Calculate total for account type within date range
      */
@@ -66,25 +66,27 @@ class DashboardController extends Controller
     {
         $accounts = Account::where('type', $type)->get();
         $total = 0;
-        
+
         foreach ($accounts as $account) {
             // Get all journal entry lines for this account within date range
             $debitSum = $account->journalEntryLines()
                 ->whereHas('journalEntry', function ($query) use ($startDate, $endDate) {
-                    $query->where('status', 'posted')
+                    // posted + cancelled: Storno-Paare müssen sich neutralisieren (siehe ReportsController)
+                    $query->whereIn('status', ['posted', 'cancelled'])
                         ->whereBetween('booking_date', [$startDate, $endDate]);
                 })
                 ->where('type', 'debit')
                 ->sum('amount');
-                
+
             $creditSum = $account->journalEntryLines()
                 ->whereHas('journalEntry', function ($query) use ($startDate, $endDate) {
-                    $query->where('status', 'posted')
+                    // posted + cancelled: Storno-Paare müssen sich neutralisieren (siehe ReportsController)
+                    $query->whereIn('status', ['posted', 'cancelled'])
                         ->whereBetween('booking_date', [$startDate, $endDate]);
                 })
                 ->where('type', 'credit')
                 ->sum('amount');
-            
+
             // For revenue: credits increase income
             // For expense: debits increase expenses
             if ($type === 'revenue') {
@@ -93,10 +95,10 @@ class DashboardController extends Controller
                 $total += ($debitSum - $creditSum);
             }
         }
-        
+
         return $total;
     }
-    
+
     /**
      * Get chart data for income vs expenses
      */
@@ -114,9 +116,9 @@ class DashboardController extends Controller
         // User is on WSL/Ubuntu, likely MySQL or SQLite. Laravel projects usually default to MySQL.
         // Let's use a collection-based approach to be DB-agnostic if performance allows, or try to detect driver.
         // For robustness in this environment, let's fetch relevant lines and aggregate in PHP.
-        
+
         $entries = JournalEntry::with(['lines.account'])
-            ->where('status', 'posted')
+            ->whereIn('status', ['posted', 'cancelled'])
             ->whereBetween('booking_date', [$startDate, $endDate])
             ->orderBy('booking_date')
             ->get();
@@ -125,13 +127,15 @@ class DashboardController extends Controller
 
         foreach ($entries as $entry) {
             $date = \Carbon\Carbon::parse($entry->booking_date)->format($phpDateFormat);
-            
-            if (!isset($data[$date])) {
+
+            if (! isset($data[$date])) {
                 $data[$date] = ['date' => $date, 'income' => 0, 'expense' => 0];
             }
 
             foreach ($entry->lines as $line) {
-                if (!$line->account) continue;
+                if (! $line->account) {
+                    continue;
+                }
 
                 if ($line->account->type === 'revenue') {
                     if ($line->type === 'credit') {
@@ -171,6 +175,7 @@ class DashboardController extends Controller
     private function formatCurrency(int $cents): string
     {
         $euros = $cents / 100;
-        return number_format($euros, 2, ',', '.') . ' €';
+
+        return number_format($euros, 2, ',', '.').' €';
     }
 }
