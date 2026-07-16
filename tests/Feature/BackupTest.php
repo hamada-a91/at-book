@@ -8,7 +8,6 @@ use App\Models\Tenant;
 use App\Models\User;
 use App\Services\Backup\BackupExportService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -17,6 +16,7 @@ class BackupTest extends TestCase
     use RefreshDatabase;
 
     protected Tenant $tenant;
+
     protected User $user;
 
     protected function setUp(): void
@@ -29,7 +29,7 @@ class BackupTest extends TestCase
             'tenant_id' => $this->tenant->id,
             'password' => bcrypt('password123'),
         ]);
-        
+
         // Assign owner role if roles exist
         try {
             if (class_exists(\Spatie\Permission\Models\Role::class)) {
@@ -52,7 +52,7 @@ class BackupTest extends TestCase
         } catch (\Exception $e) {
             // Ignore cleanup errors
         }
-        
+
         parent::tearDown();
     }
 
@@ -127,7 +127,7 @@ class BackupTest extends TestCase
         ]);
 
         $job->markAsFailed('Something went wrong', ['exception' => 'RuntimeException']);
-        
+
         $this->assertEquals(BackupJob::STATUS_FAILED, $job->status);
         $this->assertEquals('Something went wrong', $job->error_message);
         $this->assertEquals(['exception' => 'RuntimeException'], $job->error_details);

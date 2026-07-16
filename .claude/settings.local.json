@@ -15,7 +15,14 @@
       "Bash(./vendor/bin/pint --dirty)",
       "Bash(curl -s -X POST http://localhost/api/login -H 'Content-Type: application/json' -H 'Accept: application/json' -d '{\"email\":\"demo@at-book.local\",\"password\":\"password\"}')",
       "Bash(vendor/bin/pint --dirty)",
-      "Bash(python3 -m json.tool)"
+      "Bash(python3 -m json.tool)",
+      "Bash(xargs cat)",
+      "Bash(xargs -I{} sh -c 'echo ==={}===; cat {}')",
+      "Bash(GENERATE_BACKUP_FIXTURE=true ./vendor/bin/sail artisan test --filter=test_generate_reference_fixture -d GENERATE_BACKUP_FIXTURE=true)",
+      "Bash(python3 -c ' *)",
+      "Bash(./vendor/bin/sail exec *)",
+      "Bash(docker compose *)",
+      "Bash(time ./vendor/bin/sail artisan test)"
     ]
   }
 }

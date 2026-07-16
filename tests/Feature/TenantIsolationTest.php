@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Contacts\Models\Contact;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Support\TenantTestDataFactory;
 use Tests\TestCase;
 
 class TenantIsolationTest extends TestCase
@@ -146,5 +147,36 @@ class TenantIsolationTest extends TestCase
         $accounts = Account::all();
         $this->assertCount(1, $accounts);
         $this->assertEquals('Account B', $accounts->first()->name);
+    }
+
+    /**
+     * SPEC-02, Abschnitt 2.2: eingeloggter User von Tenant B darf Rechnungen
+     * und Buchungen von Tenant A weder sehen noch erraten können - Fremd-IDs
+     * in show() müssen 404 liefern (nicht 403, da schon die Existenz der ID
+     * für den fremden Tenant nicht verraten werden soll).
+     */
+    public function test_cross_tenant_show_returns_404_for_invoices_and_bookings()
+    {
+        $dataA = TenantTestDataFactory::create('isoA');
+        $dataB = TenantTestDataFactory::create('isoB');
+
+        $tokenB = auth('api')->login($dataB->user);
+
+        $this->withHeader('Authorization', "Bearer {$tokenB}")
+            ->getJson("/api/invoices/{$dataA->invoice->id}")
+            ->assertStatus(404);
+
+        $this->withHeader('Authorization', "Bearer {$tokenB}")
+            ->getJson("/api/bookings/{$dataA->journalPosted->id}")
+            ->assertStatus(404);
+
+        // Gegenprobe: der eigene Tenant kann seine eigenen Datensätze sehen.
+        $this->withHeader('Authorization', "Bearer {$tokenB}")
+            ->getJson("/api/invoices/{$dataB->invoice->id}")
+            ->assertOk();
+
+        $this->withHeader('Authorization', "Bearer {$tokenB}")
+            ->getJson("/api/bookings/{$dataB->journalPosted->id}")
+            ->assertOk();
     }
 }

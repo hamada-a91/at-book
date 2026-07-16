@@ -1,16 +1,15 @@
 <?php
 
-require __DIR__ . '/../vendor/autoload.php';
+require __DIR__.'/../vendor/autoload.php';
 
-$app = require_once __DIR__ . '/../bootstrap/app.php';
+$app = require_once __DIR__.'/../bootstrap/app.php';
 
 $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
 $kernel->bootstrap();
 
-
-use App\Modules\Contacts\Models\Contact;
-use App\Modules\Accounting\Models\Account;
 use App\Http\Controllers\Api\ContactController;
+use App\Modules\Accounting\Models\Account;
+use App\Modules\Contacts\Models\Contact;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -22,7 +21,7 @@ $contactData = [
     'email' => 'test@dual.com',
 ];
 
-$controller = new ContactController();
+$controller = new ContactController;
 $request = new Request($contactData);
 
 // Mock validation (since we are calling store directly which uses $request->validate)
@@ -33,15 +32,15 @@ $request = new Request($contactData);
 // Simulate Controller Logic for Store
 $nextCode = Account::max('code') + 1;
 $customerAccount = Account::create([
-    'code' => (string)$nextCode,
-    'name' => $contactData['name'] . ' (Kunde)',
+    'code' => (string) $nextCode,
+    'name' => $contactData['name'].' (Kunde)',
     'type' => 'asset',
     'is_system' => false,
 ]);
 
 $vendorAccount = Account::create([
-    'code' => (string)($nextCode + 1),
-    'name' => $contactData['name'] . ' (Lieferant)',
+    'code' => (string) ($nextCode + 1),
+    'name' => $contactData['name'].' (Lieferant)',
     'type' => 'liability',
     'is_system' => false,
 ]);
@@ -88,8 +87,8 @@ $bookingService->createBooking([
             'amount' => 10000,
             'tax_key' => null,
             'tax_amount' => 0,
-        ]
-    ]
+        ],
+    ],
 ]);
 
 // Credit Vendor Account (Bill) -> -50
@@ -111,8 +110,8 @@ $bookingService->createBooking([
             'amount' => 5000,
             'tax_key' => null,
             'tax_amount' => 0,
-        ]
-    ]
+        ],
+    ],
 ]);
 
 // Check Balances
@@ -120,9 +119,9 @@ $customerBalance = $controller->calculateAccountBalance($contact->customerAccoun
 $vendorBalance = $controller->calculateAccountBalance($contact->vendorAccount);
 $netBalance = $customerBalance + $vendorBalance;
 
-echo "Customer Balance: " . ($customerBalance / 100) . "\n";
-echo "Vendor Balance: " . ($vendorBalance / 100) . "\n";
-echo "Net Balance: " . ($netBalance / 100) . "\n";
+echo 'Customer Balance: '.($customerBalance / 100)."\n";
+echo 'Vendor Balance: '.($vendorBalance / 100)."\n";
+echo 'Net Balance: '.($netBalance / 100)."\n";
 
 if ($customerBalance == 10000 && $vendorBalance == -5000 && $netBalance == 5000) {
     echo "SUCCESS: Balances calculated correctly.\n";

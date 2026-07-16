@@ -5,7 +5,7 @@ Jede Datei ist eine eigenständig umsetzbare Spezifikation. Reihenfolge und Abh�
 | Spec | Titel | Phase | Status |
 |---|---|---|---|
 | [SPEC-01](SPEC-01-sicherheits-hotfixes.md) | Sicherheits-Hotfixes (P0) | 0 | ✅ fertig |
-| [SPEC-02](SPEC-02-tests-ci-backup-regression.md) | Tests, CI & Backup-Regressionsanker | 1 | 🔲 offen |
+| [SPEC-02](SPEC-02-tests-ci-backup-regression.md) | Tests, CI & Backup-Regressionsanker | 1 | ✅ fertig |
 | [SPEC-03](SPEC-03-tenant-scoped-validierung.md) | Tenant-scoped Validierung | 1 | 🔲 offen |
 | [SPEC-04](SPEC-04-buchungslogik.md) | Buchungslogik härten | 2 | 🔲 offen |
 | [SPEC-05](SPEC-05-nummernkreise.md) | Lückenlose Nummernkreise | 2 | 🔲 offen |
