@@ -3,6 +3,7 @@
 namespace App\Modules\Accounting\Services;
 
 use App\Models\CompanySetting;
+use App\Modules\Accounting\Models\AuditLog;
 use App\Modules\Accounting\Models\JournalEntry;
 use App\Services\NumberSequenceService;
 use Carbon\Carbon;
@@ -131,14 +132,30 @@ class BookingService
             throw new Exception('Booking is already locked/posted.');
         }
 
+        // SPEC-06: alter Status VOR dem Update sichern - getOriginal() wäre
+        // nach update() bereits auf die neuen Werte synchronisiert.
+        $oldStatus = $entry->status;
+
         $entry->update([
             'status' => 'posted',
             'locked_at' => Carbon::now(),
             'journal_number' => $this->numberSequenceService->next('journal', 0),
         ]);
 
-        // Trigger audit log (handled by observer usually, but explicit here for clarity)
-        // AuditLog::log($entry, 'lock');
+        // SPEC-06: fachlicher Event, explizit aus dem Service gefeuert (siehe
+        // AuditObserver::isServiceManaged() - der generische 'updated'-Eintrag
+        // für genau diesen Übergang wird dort unterdrückt, damit hier GENAU
+        // EIN Eintrag entsteht).
+        AuditLog::record(
+            $entry,
+            'locked',
+            ['status' => $oldStatus, 'locked_at' => null],
+            [
+                'status' => $entry->status,
+                'locked_at' => $entry->locked_at?->toIso8601String(),
+                'journal_number' => $entry->journal_number,
+            ]
+        );
 
         return $entry;
     }
@@ -193,6 +210,17 @@ class BookingService
             }
 
             $settings->update(['books_locked_until' => $untilDateNormalized->toDateString()]);
+
+            // SPEC-06: EIN zusammenfassender Eintrag am CompanySetting - die
+            // einzelnen Buchungen bekommen bereits je einen eigenen
+            // 'locked'-Eintrag über lockBooking() oben (kein doppeltes
+            // Protokollieren pro Buchung nötig).
+            AuditLog::record(
+                $settings,
+                'period_locked',
+                ['books_locked_until' => $currentLockedUntil?->toDateString()],
+                ['books_locked_until' => $untilDateNormalized->toDateString(), 'locked_count' => $count]
+            );
 
             return $count;
         });
@@ -309,8 +337,20 @@ class BookingService
             }
 
             // Mark original as cancelled (GoBD: can't delete, must reverse)
+            $oldOriginalStatus = $original->status;
             $original->status = 'cancelled';
             $original->save();
+
+            // SPEC-06: fachlicher Event am ORIGINAL (die Storno-Buchung selbst
+            // bekommt bereits automatisch einen 'created'-Eintrag über den
+            // AuditObserver, siehe $reversal->push() oben - kein weiterer
+            // expliziter Aufruf hier nötig).
+            AuditLog::record(
+                $original,
+                'reversed',
+                ['status' => $oldOriginalStatus],
+                ['status' => $original->status, 'reversal_journal_entry_public_id' => $reversal->public_id]
+            );
 
             return $reversal;
         });

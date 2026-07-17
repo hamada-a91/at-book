@@ -39,10 +39,14 @@ class BackupExportService
         'journal_entry_lines',
         'inventory_transactions',
         // Note: 'documents' excluded - uses morph relationship without direct tenant_id
+        // SPEC-06: audit_logs zuletzt - kann auf jede Entity oben verweisen.
+        'audit_logs',
     ];
 
     protected EntityTransformerRegistry $transformerRegistry;
+
     protected string $disk = 'public';
+
     protected string $backupPath = 'backups';
 
     public function __construct(EntityTransformerRegistry $transformerRegistry)
@@ -100,7 +104,7 @@ class BackupExportService
 
             foreach (self::ENTITY_ORDER as $entityType) {
                 $currentEntity++;
-                $progress = 5 + (int)(($currentEntity / $totalEntities) * 70);
+                $progress = 5 + (int) (($currentEntity / $totalEntities) * 70);
                 $job->updateProgress($progress, "Exporting {$entityType}...");
 
                 $count = $this->exportEntityType($entityType, $tenant, $dataDir);
@@ -161,8 +165,8 @@ class BackupExportService
     protected function exportEntityType(string $entityType, Tenant $tenant, string $dataDir): int
     {
         $transformer = $this->transformerRegistry->getTransformer($entityType);
-        
-        if (!$transformer) {
+
+        if (! $transformer) {
             return 0;
         }
 
@@ -172,10 +176,10 @@ class BackupExportService
 
         // Use cursor for memory efficiency
         $query = $transformer->getQuery($tenant);
-        
+
         foreach ($query->cursor() as $model) {
             $data = $transformer->transform($model);
-            fwrite($handle, json_encode($data, JSON_UNESCAPED_UNICODE) . "\n");
+            fwrite($handle, json_encode($data, JSON_UNESCAPED_UNICODE)."\n");
             $count++;
         }
 
@@ -207,12 +211,12 @@ class BackupExportService
 
         foreach ($belege as $beleg) {
             if ($beleg->file_path && Storage::disk($this->disk)->exists($beleg->file_path)) {
-                $relativePath = "belege/{$beleg->public_id}/" . basename($beleg->file_path);
+                $relativePath = "belege/{$beleg->public_id}/".basename($beleg->file_path);
                 $targetPath = "{$filesDir}/{$relativePath}";
-                
+
                 // Create directory if needed
                 $targetDir = dirname($targetPath);
-                if (!is_dir($targetDir)) {
+                if (! is_dir($targetDir)) {
                     mkdir($targetDir, 0755, true);
                 }
 
@@ -225,7 +229,7 @@ class BackupExportService
                     'original_path' => $beleg->file_path,
                     'disk' => $this->disk, // Store disk for proper restoration
                     'size' => strlen($content),
-                    'checksum' => 'sha256:' . hash('sha256', $content),
+                    'checksum' => 'sha256:'.hash('sha256', $content),
                     'entity_type' => 'beleg',
                     'entity_public_id' => $beleg->public_id,
                 ];
@@ -238,7 +242,7 @@ class BackupExportService
         try {
             $journalEntryIds = \App\Modules\Accounting\Models\JournalEntry::where('tenant_id', $tenant->id)
                 ->pluck('id');
-            
+
             $documents = \Illuminate\Support\Facades\DB::table('documents')
                 ->where('documentable_type', 'App\\Modules\\Accounting\\Models\\JournalEntry')
                 ->whereIn('documentable_id', $journalEntryIds)
@@ -247,11 +251,11 @@ class BackupExportService
             foreach ($documents as $document) {
                 $filePath = $document->path;
                 if ($filePath && Storage::disk($this->disk)->exists($filePath)) {
-                    $relativePath = "documents/{$document->id}/" . basename($filePath);
+                    $relativePath = "documents/{$document->id}/".basename($filePath);
                     $targetPath = "{$filesDir}/{$relativePath}";
-                    
+
                     $targetDir = dirname($targetPath);
-                    if (!is_dir($targetDir)) {
+                    if (! is_dir($targetDir)) {
                         mkdir($targetDir, 0755, true);
                     }
 
@@ -263,7 +267,7 @@ class BackupExportService
                         'original_path' => $filePath,
                         'disk' => $this->disk, // Store disk for proper restoration
                         'size' => strlen($content),
-                        'checksum' => 'sha256:' . hash('sha256', $content),
+                        'checksum' => 'sha256:'.hash('sha256', $content),
                         'entity_type' => 'document',
                         'entity_id' => $document->id,
                         'documentable_type' => $document->documentable_type,
@@ -320,7 +324,7 @@ class BackupExportService
                     'type' => $entityType,
                     'file' => "data/{$entityType}.ndjson",
                     'count' => $stats[$entityType] ?? 0,
-                    'checksum' => 'sha256:' . hash_file('sha256', $filePath),
+                    'checksum' => 'sha256:'.hash_file('sha256', $filePath),
                 ];
             }
         }
@@ -332,7 +336,7 @@ class BackupExportService
             unlink($fileManifestPath); // Clean up temp file
         }
 
-        $totalEntities = array_sum(array_map(fn($e) => $e['count'], $entities));
+        $totalEntities = array_sum(array_map(fn ($e) => $e['count'], $entities));
 
         return [
             'entities' => $entities,
@@ -347,15 +351,15 @@ class BackupExportService
      */
     protected function createZipArchive(BackupJob $job, string $tempDir): string
     {
-        $zipPath = sys_get_temp_dir() . '/backup_' . $job->public_id . '.zip';
-        
-        $zip = new ZipArchive();
+        $zipPath = sys_get_temp_dir().'/backup_'.$job->public_id.'.zip';
+
+        $zip = new ZipArchive;
         if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
             throw new \RuntimeException("Cannot create ZIP archive at {$zipPath}");
         }
 
         $this->addDirectoryToZip($zip, $tempDir, '');
-        
+
         $zip->close();
 
         return $zipPath;
@@ -372,9 +376,9 @@ class BackupExportService
         );
 
         foreach ($files as $file) {
-            if (!$file->isDir()) {
+            if (! $file->isDir()) {
                 $filePath = $file->getRealPath();
-                $relativePath = $prefix . substr($filePath, strlen($directory) + 1);
+                $relativePath = $prefix.substr($filePath, strlen($directory) + 1);
                 $zip->addFile($filePath, $relativePath);
             }
         }
@@ -391,11 +395,11 @@ class BackupExportService
             $tenant->slug ?? $tenant->public_id,
             now()->format('Y-m-d_His')
         );
-        
+
         $storagePath = "{$this->backupPath}/{$tenant->id}/{$filename}";
-        
+
         Storage::disk($this->disk)->put($storagePath, file_get_contents($tempZipPath));
-        
+
         // Clean up temp file
         unlink($tempZipPath);
 
@@ -407,9 +411,9 @@ class BackupExportService
      */
     protected function createTempDirectory(BackupJob $job): string
     {
-        $tempDir = sys_get_temp_dir() . '/at-book-backup-' . $job->public_id;
-        
-        if (!is_dir($tempDir)) {
+        $tempDir = sys_get_temp_dir().'/at-book-backup-'.$job->public_id;
+
+        if (! is_dir($tempDir)) {
             mkdir($tempDir, 0755, true);
         }
 
@@ -421,7 +425,7 @@ class BackupExportService
      */
     protected function removeTempDirectory(string $tempDir): void
     {
-        if (!is_dir($tempDir)) {
+        if (! is_dir($tempDir)) {
             return;
         }
 
@@ -449,9 +453,9 @@ class BackupExportService
         $migrationPath = database_path('migrations');
         $migrations = glob("{$migrationPath}/*.php");
         sort($migrations);
-        
+
         $migrationNames = array_map('basename', $migrations);
-        
+
         return substr(md5(implode(',', $migrationNames)), 0, 12);
     }
 
@@ -460,7 +464,7 @@ class BackupExportService
      */
     public function getDownloadPath(BackupJob $job): ?string
     {
-        if ($job->status !== BackupJob::STATUS_COMPLETED || !$job->file_path) {
+        if ($job->status !== BackupJob::STATUS_COMPLETED || ! $job->file_path) {
             return null;
         }
 

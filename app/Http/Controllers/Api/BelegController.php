@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Beleg;
 use App\Models\Product;
 use App\Models\TaxCode;
+use App\Modules\Accounting\Models\AuditLog;
 use App\Modules\Accounting\Services\BookingService;
 use App\Rules\TenantExists;
 use App\Services\InventoryService;
@@ -332,10 +333,22 @@ class BelegController extends Controller
                     }
                 }
 
+                $oldBelegStatus = $beleg->status;
+
                 $beleg->update([
                     'status' => ($beleg->is_paid && $beleg->payment_account_id) ? 'paid' : 'booked',
                     'journal_entry_id' => $journalEntry->id,
                 ]);
+
+                // SPEC-06: fachlicher Event, explizit hier gefeuert (siehe
+                // AuditObserver::isServiceManaged() - unterdrückt den
+                // generischen 'updated'-Eintrag für genau diesen Übergang).
+                AuditLog::record(
+                    $beleg,
+                    'booked',
+                    ['status' => $oldBelegStatus, 'journal_entry_id' => null],
+                    ['status' => $beleg->status, 'journal_entry_id' => $beleg->journal_entry_id]
+                );
 
                 // Process inventory for product lines (innerhalb derselben Transaktion)
                 $beleg->load('lines.product');
@@ -400,6 +413,9 @@ class BelegController extends Controller
             Storage::disk('public')->delete($beleg->file_path);
         }
 
+        $oldFilePath = $beleg->file_path;
+        $oldFileName = $beleg->file_name;
+
         $file = $request->file('file');
         $fileName = $file->getClientOriginalName();
         $path = $file->store('belege', 'public');
@@ -408,6 +424,16 @@ class BelegController extends Controller
             'file_path' => $path,
             'file_name' => $fileName,
         ]);
+
+        // SPEC-06: fachlicher Event, explizit hier gefeuert (siehe
+        // AuditObserver::isServiceManaged() - unterdrückt den generischen
+        // 'updated'-Eintrag für genau diesen Übergang).
+        AuditLog::record(
+            $beleg,
+            'file_uploaded',
+            ['file_path' => $oldFilePath, 'file_name' => $oldFileName],
+            ['file_path' => $beleg->file_path, 'file_name' => $beleg->file_name]
+        );
 
         return response()->json($beleg->load(['contact', 'journalEntry']));
     }

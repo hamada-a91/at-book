@@ -95,6 +95,9 @@ Route::middleware(['api', 'auth:api', \App\Http\Middleware\SetTenantFromUser::cl
         Route::post('/bookings/{id}/lock', [JournalEntryController::class, 'lock']);
         Route::post('/bookings/{id}/reverse', [JournalEntryController::class, 'reverse']);
 
+        // Audit-Log (SPEC-06)
+        Route::get('/audit-logs', [\App\Http\Controllers\Api\AuditLogController::class, 'index'])->middleware('role:owner|buchhalter,api');
+
         // Inventory Report
         Route::get('/inventory-report', [\App\Http\Controllers\Api\InventoryReportController::class, 'index']);
 

@@ -46,6 +46,9 @@ class EntityTransformerRegistry
             'journal_entry_lines' => JournalEntryLineTransformer::class,
             'inventory_transactions' => InventoryTransactionTransformer::class,
             // Note: 'documents' excluded - uses morph relationship without direct tenant_id
+            // SPEC-06: audit_logs bewusst ZULETZT registriert - ein Audit-Eintrag
+            // kann auf jede andere Entity oben verweisen (siehe AuditLogTransformer).
+            'audit_logs' => AuditLogTransformer::class,
         ];
     }
 
@@ -62,13 +65,13 @@ class EntityTransformerRegistry
      */
     public function getTransformer(string $entityType): ?BaseTransformer
     {
-        if (!isset($this->transformers[$entityType])) {
+        if (! isset($this->transformers[$entityType])) {
             return null;
         }
 
         $class = $this->transformers[$entityType];
-        
-        if (!class_exists($class)) {
+
+        if (! class_exists($class)) {
             return null;
         }
 
@@ -80,7 +83,7 @@ class EntityTransformerRegistry
      */
     public function hasTransformer(string $entityType): bool
     {
-        return isset($this->transformers[$entityType]) && 
+        return isset($this->transformers[$entityType]) &&
                class_exists($this->transformers[$entityType]);
     }
 

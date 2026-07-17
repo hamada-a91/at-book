@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Modules\Accounting\Models\AuditLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -13,7 +14,7 @@ class UserController extends Controller
 {
     public function index()
     {
-        if (!auth()->user()->can('user.view')) {
+        if (! auth()->user()->can('user.view')) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -26,7 +27,7 @@ class UserController extends Controller
 
     public function store(Request $request)
     {
-        if (!auth()->user()->can('user.create')) {
+        if (! auth()->user()->can('user.create')) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -40,8 +41,8 @@ class UserController extends Controller
         // Prevent creating Owner/Admin if not authorized (e.g. Manager shouldn't create Owner)
         // For now, let's keep it simple: Manager has user.create so they can create.
         // Maybe restrict Manager from assigning 'owner' role?
-        if ($validated['role'] === 'owner' && !auth()->user()->hasRole('owner')) {
-             return response()->json(['message' => 'Only owners can create other owners'], 403);
+        if ($validated['role'] === 'owner' && ! auth()->user()->hasRole('owner')) {
+            return response()->json(['message' => 'Only owners can create other owners'], 403);
         }
 
         $user = User::create([
@@ -58,10 +59,10 @@ class UserController extends Controller
 
     public function show(User $user)
     {
-        if (!auth()->user()->can('user.view')) {
-             return response()->json(['message' => 'Unauthorized'], 403);
+        if (! auth()->user()->can('user.view')) {
+            return response()->json(['message' => 'Unauthorized'], 403);
         }
-        
+
         if ($user->tenant_id !== auth()->user()->tenant_id) {
             return response()->json(['message' => 'Not found'], 404);
         }
@@ -71,8 +72,8 @@ class UserController extends Controller
 
     public function update(Request $request, User $user)
     {
-        if (!auth()->user()->can('user.edit')) {
-             return response()->json(['message' => 'Unauthorized'], 403);
+        if (! auth()->user()->can('user.edit')) {
+            return response()->json(['message' => 'Unauthorized'], 403);
         }
 
         if ($user->tenant_id !== auth()->user()->tenant_id) {
@@ -87,13 +88,13 @@ class UserController extends Controller
         ]);
 
         // Constraint: Manager cannot edit Owner
-        if ($user->hasRole('owner') && !auth()->user()->hasRole('owner')) {
+        if ($user->hasRole('owner') && ! auth()->user()->hasRole('owner')) {
             return response()->json(['message' => 'Managers cannot edit Owners'], 403);
         }
-        
+
         // Constraint: Manager cannot assign Owner role
-        if (isset($validated['role']) && $validated['role'] === 'owner' && !auth()->user()->hasRole('owner')) {
-             return response()->json(['message' => 'Only owners can assign owner role'], 403);
+        if (isset($validated['role']) && $validated['role'] === 'owner' && ! auth()->user()->hasRole('owner')) {
+            return response()->json(['message' => 'Only owners can assign owner role'], 403);
         }
 
         $user->fill([
@@ -101,14 +102,21 @@ class UserController extends Controller
             'email' => $validated['email'] ?? $user->email,
         ]);
 
-        if (!empty($validated['password'])) {
+        if (! empty($validated['password'])) {
             $user->password = Hash::make($validated['password']);
         }
 
         $user->save();
 
         if (isset($validated['role'])) {
+            $oldRoles = $user->getRoleNames()->all();
             $user->syncRoles([$validated['role']]);
+
+            // SPEC-06: syncRoles() ändert nur die Pivot-Tabelle (model_has_roles),
+            // löst also KEIN 'updated'-Event auf $user selbst aus - eigener
+            // expliziter Eintrag nötig (kein Duplikat-Risiko über den
+            // AuditObserver).
+            AuditLog::record($user, 'role_changed', ['roles' => $oldRoles], ['roles' => $user->getRoleNames()->all()]);
         }
 
         return response()->json($user->load('roles'));
@@ -116,25 +124,25 @@ class UserController extends Controller
 
     public function destroy(User $user)
     {
-        if (!auth()->user()->can('user.delete')) {
-             return response()->json(['message' => 'Unauthorized'], 403);
+        if (! auth()->user()->can('user.delete')) {
+            return response()->json(['message' => 'Unauthorized'], 403);
         }
 
         if ($user->tenant_id !== auth()->user()->tenant_id) {
             return response()->json(['message' => 'Not found'], 404);
         }
-        
+
         if ($user->id === auth()->id()) {
             return response()->json(['message' => 'Cannot delete yourself'], 400);
         }
-        
-        // Prevent deleting the last owner? 
+
+        // Prevent deleting the last owner?
         // Logic: if user is owner, check if other owners exist.
         if ($user->hasRole('owner')) {
-             $ownerCount = User::where('tenant_id', $user->tenant_id)->role('owner')->count();
-             if ($ownerCount <= 1) {
-                 return response()->json(['message' => 'Cannot delete the last owner'], 400);
-             }
+            $ownerCount = User::where('tenant_id', $user->tenant_id)->role('owner')->count();
+            if ($ownerCount <= 1) {
+                return response()->json(['message' => 'Cannot delete the last owner'], 400);
+            }
         }
 
         $user->delete();

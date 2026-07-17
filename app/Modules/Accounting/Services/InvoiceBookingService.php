@@ -5,6 +5,7 @@ namespace App\Modules\Accounting\Services;
 use App\Models\Invoice;
 use App\Models\Product;
 use App\Models\TaxCode;
+use App\Modules\Accounting\Models\AuditLog;
 use App\Modules\Accounting\Models\JournalEntry;
 use App\Services\InventoryService;
 use DomainException;
@@ -57,10 +58,22 @@ class InvoiceBookingService
             // CLAUDE.md "Bekannte Fallen").
             $this->bookingService->lockBooking($entry->id);
 
+            $oldInvoiceStatus = $invoice->status;
+
             $invoice->update([
                 'status' => 'booked',
                 'journal_entry_id' => $entry->id,
             ]);
+
+            // SPEC-06: fachlicher Event, explizit aus dem Service gefeuert
+            // (siehe AuditObserver::isServiceManaged() - unterdrückt den
+            // generischen 'updated'-Eintrag für genau diesen Übergang).
+            AuditLog::record(
+                $invoice,
+                'booked',
+                ['status' => $oldInvoiceStatus, 'journal_entry_id' => null],
+                ['status' => $invoice->status, 'journal_entry_id' => $invoice->journal_entry_id]
+            );
 
             $this->reduceInventory($invoice);
 
@@ -104,7 +117,24 @@ class InvoiceBookingService
 
             $this->bookingService->lockBooking($entry->id);
 
+            $oldInvoiceStatus = $invoice->status;
+
             $invoice->update(['status' => 'paid']);
+
+            // SPEC-06: fachlicher Event, explizit aus dem Service gefeuert
+            // (siehe AuditObserver::isServiceManaged() - unterdrückt den
+            // generischen 'updated'-Eintrag für genau diesen Übergang).
+            AuditLog::record(
+                $invoice,
+                'payment_recorded',
+                ['status' => $oldInvoiceStatus],
+                [
+                    'status' => $invoice->status,
+                    'payment_account_id' => $paymentAccountId,
+                    'payment_date' => $paymentDate,
+                    'journal_entry_public_id' => $entry->public_id,
+                ]
+            );
 
             return $entry->fresh('lines');
         });

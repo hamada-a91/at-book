@@ -4,8 +4,10 @@ namespace App\Services\Backup;
 
 use App\Models\BackupAuditLog;
 use App\Models\BackupJob;
+use App\Models\CompanySetting;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Modules\Accounting\Models\AuditLog;
 use App\Services\Backup\DTO\ImportIdMapping;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -39,6 +41,29 @@ class BackupImportService
         'journal_entry_lines',
         'inventory_transactions',
         // Note: 'documents' excluded - uses morph relationship without direct tenant_id
+        // SPEC-06: audit_logs zuletzt importieren - die auditable-Referenz
+        // (mapAuditLogAuditable()) braucht die ImportIdMapping-Einträge ALLER
+        // anderen Entities, die vorher in dieser Liste importiert wurden.
+        'audit_logs',
+    ];
+
+    /**
+     * SPEC-06: Kurzname (AuditLog::AUDITABLE_TYPE_MAP) -> ENTITY_ORDER-Schlüssel
+     * (bzw. ImportIdMapping-Namespace). Getrennt von AuditLog::AUDITABLE_TYPE_MAP,
+     * weil dort FQCN als Werte stehen, hier aber die (teils abweichend benannten,
+     * z.B. Singular/Plural) String-Schlüssel gebraucht werden, unter denen
+     * ImportIdMapping die public_id->id-Zuordnung für die jeweilige Entity führt.
+     */
+    private const AUDITABLE_SHORT_NAME_TO_ENTITY_TYPE = [
+        'journal_entry' => 'journal_entries',
+        'invoice' => 'invoices',
+        'beleg' => 'belege',
+        'account' => 'accounts',
+        'tax_code' => 'tax_codes',
+        'bank_account' => 'bank_accounts',
+        'contact' => 'contacts',
+        'user' => 'users',
+        'company_setting' => 'company_settings',
     ];
 
     protected string $disk = 'public';
@@ -292,6 +317,24 @@ class BackupImportService
                 'mode' => $mode,
             ]);
 
+            // SPEC-06 (Backup-Impact Punkt 5): EIN 'imported'-Eintrag im
+            // GoBD-Audit-Log (audit_logs, NICHT backup_audit_logs - das ist
+            // die separate Tabelle für Backup-Prozess-Metadaten, oben) am
+            // CompanySetting des ZIEL-Tenants. Bewusst außerhalb der
+            // Transaktion (wie die BackupAuditLog-Einträge auch) und mit dem
+            // importierenden Nutzer statt Auth::id(), da dieser Code auch in
+            // einem Queue-Job ohne HTTP-/Auth-Kontext läuft.
+            $targetCompanySetting = CompanySetting::where('tenant_id', $tenant->id)->first();
+            if ($targetCompanySetting) {
+                AuditLog::record(
+                    $targetCompanySetting,
+                    'imported',
+                    [],
+                    ['stats' => $stats, 'mode' => $mode, 'backup_job_public_id' => $job->public_id],
+                    $importingUser?->id
+                );
+            }
+
         } catch (\Throwable $e) {
             // Clean up temp directory on failure
             if ($extractDir && is_dir($extractDir)) {
@@ -346,6 +389,11 @@ class BackupImportService
             'users', 'accounts', 'tax_codes', 'product_categories', 'products',
             'contacts', 'bank_accounts', 'company_settings', 'quotes', 'orders',
             'delivery_notes', 'invoices', 'belege', 'journal_entries', 'inventory_transactions',
+            // SPEC-06: audit_logs hat eine eigene tenant_id-Spalte (kein Child-Table) und
+            // keine eingehenden FK-Constraints von anderen Tabellen - Reihenfolge relativ
+            // zu den übrigen Einträgen ist daher unkritisch, wird aber der Vollständigkeit
+            // halber ans Ende gesetzt (wird beim reversen Löschen dadurch zuerst entfernt).
+            'audit_logs',
         ];
 
         // Child tables that need to be deleted via their parent relationship
@@ -674,6 +722,16 @@ class BackupImportService
      */
     protected function mapForeignKeys(string $entityType, array $data, ImportIdMapping $idMapping): array
     {
+        // SPEC-06: audit_logs verweist über (auditable_type_short,
+        // auditable_public_id) auf eine BELIEBIGE andere Entity (siehe
+        // AuditLog::AUDITABLE_TYPE_MAP) - anders als die festen
+        // Einzel-FK-Mappings unten (jeweils genau EIN Ziel-Entity-Typ pro
+        // Feld) variiert hier der Ziel-Entity-Typ selbst pro Zeile, das
+        // braucht einen eigenen Auflösungspfad.
+        if ($entityType === 'audit_logs') {
+            return $this->mapAuditLogAuditable($data, $idMapping);
+        }
+
         // Define foreign key mappings
         $mappings = [
             'invoices' => [
@@ -787,13 +845,75 @@ class BackupImportService
     }
 
     /**
+     * SPEC-06: löst die auditable-Referenz eines audit_logs-Datensatzes
+     * (auditable_type_short, auditable_public_id) über die ImportIdMapping
+     * auf eine neue interne (auditable_type, auditable_id) im Zieltenant auf.
+     *
+     * Ist das Ziel nicht auffindbar - unbekannter/fehlender Kurzname (z.B.
+     * ein künftiges, hier noch unbekanntes altes Backup-Format), oder das
+     * referenzierte Objekt wurde im Zieltenant zwischenzeitlich hart gelöscht
+     * bzw. beim Import ausgelassen (z.B. eine übersprungene Backup-Zeile) -
+     * wird auditable_id bewusst NUR auf null gesetzt. Der Rest des
+     * Audit-Eintrags (event, old_values, new_values, Zeitpunkt, Nutzer)
+     * bleibt erhalten: die GoBD-Historie geht dadurch nie verloren, auch wenn
+     * die Verknüpfung zum ursprünglichen Objekt nicht mehr herstellbar ist
+     * (siehe SPEC-06, Backup-Impact Punkt 5).
+     */
+    protected function mapAuditLogAuditable(array $data, ImportIdMapping $idMapping): array
+    {
+        $shortName = $data['auditable_type_short'] ?? null;
+        $auditablePublicId = $data['auditable_public_id'] ?? null;
+        unset($data['auditable_type_short']);
+
+        $fullClass = $shortName ? AuditLog::classForShortName($shortName) : null;
+        $entityTypeKey = $shortName ? (self::AUDITABLE_SHORT_NAME_TO_ENTITY_TYPE[$shortName] ?? null) : null;
+
+        $mappedId = ($entityTypeKey && $auditablePublicId)
+            ? $idMapping->get($entityTypeKey, $auditablePublicId)
+            : null;
+
+        $data['auditable_type'] = $fullClass;
+        $data['auditable_id'] = $mappedId;
+
+        if ($mappedId && $fullClass) {
+            // auditable_public_id im Backup gehört zum ALTEN Datensatz - bei
+            // einem Cross-Tenant-Import bekommt das remappte Ziel eine NEUE
+            // public_id (siehe importEntityType()); hier auf den aktuellen
+            // Stand bringen, damit die Referenz auch über public_id (nicht
+            // nur über die interne ID) weiterhin stimmt.
+            try {
+                $freshPublicId = $fullClass::withoutGlobalScopes()->whereKey($mappedId)->value('public_id');
+                if ($freshPublicId) {
+                    $data['auditable_public_id'] = $freshPublicId;
+                }
+            } catch (\Throwable $e) {
+                // Best effort - der ursprüngliche (ggf. veraltete) Wert aus
+                // dem Backup bleibt in $data['auditable_public_id'] stehen.
+            }
+        } else {
+            \Log::warning("Import: audit_logs auditable-Mapping fehlgeschlagen (short_name={$shortName}, public_id={$auditablePublicId}) - auditable_id wird null gesetzt, Eintrag bleibt erhalten.");
+        }
+
+        return $data;
+    }
+
+    /**
      * Prepare data for database insert.
      */
     protected function prepareForInsert(string $entityType, array $data): array
     {
-        // Remove created_at and updated_at - let timestamps be handled automatically
-        // BUT keep deleted_at to preserve soft-deleted records!
-        unset($data['created_at'], $data['updated_at']);
+        // Remove updated_at - let timestamps be handled automatically. created_at
+        // ebenso, ABER NICHT für audit_logs (SPEC-06): dort ist created_at der
+        // GESCHÄFTLICHE Zeitpunkt der protokollierten Aktion, kein reines
+        // Laravel-Verwaltungs-Timestamp - er MUSS den Import überleben, sonst
+        // geht die GoBD-Nachvollziehbarkeit (wann geschah was) beim Restore
+        // verloren. BUT keep deleted_at to preserve soft-deleted records!
+        unset($data['updated_at']);
+        if ($entityType === 'audit_logs' && isset($data['created_at'])) {
+            $data['created_at'] = \Carbon\Carbon::parse($data['created_at']);
+        } else {
+            unset($data['created_at']);
+        }
 
         // Handle deleted_at field properly
         if (array_key_exists('deleted_at', $data)) {
@@ -1064,6 +1184,7 @@ class BackupImportService
             'journal_entry_lines' => \App\Modules\Accounting\Models\JournalEntryLine::class,
             'inventory_transactions' => \App\Models\InventoryTransaction::class,
             // Note: 'documents' excluded - uses morph relationship without direct tenant_id
+            'audit_logs' => AuditLog::class,
         ];
 
         return $map[$entityType] ?? null;

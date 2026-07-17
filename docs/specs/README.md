@@ -9,7 +9,7 @@ Jede Datei ist eine eigenständig umsetzbare Spezifikation. Reihenfolge und Abh�
 | [SPEC-03](SPEC-03-tenant-scoped-validierung.md) | Tenant-scoped Validierung | 1 | ✅ fertig |
 | [SPEC-04](SPEC-04-buchungslogik.md) | Buchungslogik härten | 2 | ✅ fertig |
 | [SPEC-05](SPEC-05-nummernkreise.md) | Lückenlose Nummernkreise & Periodenfestschreibung | 2 | ✅ fertig |
-| [SPEC-06](SPEC-06-audit-log.md) | Audit-Log aktivieren | 2 | 🔲 offen |
+| [SPEC-06](SPEC-06-audit-log.md) | Audit-Log aktivieren | 2 | ✅ fertig |
 | [SPEC-07](SPEC-07-db-haertung.md) | DB-Härtung (bigint, Indizes, Cache) | 2 | 🔲 offen |
 | [SPEC-08](SPEC-08-projekte-kostenstellen.md) | Feature: Projekte, Kostenstellen & Kostenträger | 3 | 🔲 offen |
 | [SPEC-09](SPEC-09-ocr-belege.md) | Feature: OCR-Belegerfassung | 3 | 🔲 offen |

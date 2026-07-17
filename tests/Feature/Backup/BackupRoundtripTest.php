@@ -208,9 +208,16 @@ class BackupRoundtripTest extends TestCase
         // stattdessen unten gezielt per public_id-Stichprobe geprüft.
         $knownCrossTenantLeakTypes = ['quote_lines', 'order_lines', 'delivery_note_lines', 'invoice_lines', 'beleg_lines'];
 
+        // SPEC-06: audit_logs ist bewusst KEIN 1:1-Zähler-Vergleich - der Import
+        // selbst schreibt einen zusätzlichen 'imported'-Eintrag an
+        // Tenant B's CompanySetting (siehe BackupImportService::processImport()),
+        // der im zweiten Export (von B) mitgezählt wird. B hat daher IMMER genau
+        // einen audit_logs-Eintrag mehr als A - das wird unten gezielt geprüft.
+        $countMismatchByDesign = [...$knownCrossTenantLeakTypes, 'audit_logs'];
+
         $registry = new EntityTransformerRegistry;
         foreach ($registry->getEntityTypes() as $entityType) {
-            if (in_array($entityType, $knownCrossTenantLeakTypes, true)) {
+            if (in_array($entityType, $countMismatchByDesign, true)) {
                 continue;
             }
 
@@ -226,6 +233,25 @@ class BackupRoundtripTest extends TestCase
 
         // Sanity: Der Datenbestand ist nicht leer (sonst wäre der Vergleich trivial).
         $this->assertGreaterThan(0, $exportA['manifest']['total_entities']);
+
+        // SPEC-06: audit_logs-Zähler - A's komplette Historie muss den Roundtrip
+        // überleben (+1 für den 'imported'-Eintrag, den der Import selbst erzeugt).
+        $auditCountA = $this->manifestCount($exportA['manifest'], 'audit_logs');
+        $auditCountB = $this->manifestCount($exportB['manifest'], 'audit_logs');
+        $this->assertGreaterThan(0, $auditCountA, 'Sanity: Tenant A muss über TenantTestDataFactory bereits Audit-Einträge (created/locked/reversed/...) angesammelt haben.');
+        $this->assertSame($auditCountA + 1, $auditCountB, 'audit_logs: B muss exakt A + den einen imported-Eintrag aus dem Restore selbst enthalten.');
+
+        // SPEC-06: Stichprobe Remapping - ein 'locked'-Audit-Eintrag zur
+        // festgeschriebenen Buchung (journalPosted) muss in B über die
+        // auditable-Referenz (auditable_type_short/auditable_public_id im
+        // Backup -> auditable_type/auditable_id nach dem Import) auf die
+        // KORREKT remappte JournalEntry in Tenant B zeigen, nicht auf die
+        // (nicht mehr existierende) numerische ID aus Tenant A.
+        $lockedAuditRowsA = array_values(array_filter(
+            $exportA['data']['audit_logs'] ?? [],
+            fn (array $row) => $row['event'] === 'locked' && $row['auditable_type_short'] === 'journal_entry'
+        ));
+        $this->assertNotEmpty($lockedAuditRowsA, 'Sanity: Tenant A muss mindestens einen locked-Audit-Eintrag für eine JournalEntry haben.');
 
         // invoice_lines: gezielte Stichprobe statt Zähler-Vergleich (s.o.) - über
         // die stabile invoice_number (s.u.) finden wir B's Zeilen und vergleichen
@@ -286,6 +312,20 @@ class BackupRoundtripTest extends TestCase
         $this->assertNotNull($journalPostedB);
         $this->assertNotSame($dataA->journalPosted->public_id, $journalPostedB->public_id);
         $this->assertNotNull($journalPostedB->locked_at, 'locked_at (GoBD-Festschreibung) muss den Roundtrip überleben.');
+
+        // SPEC-06: Stichprobe Remapping - der 'locked'-Audit-Eintrag zu
+        // journalPosted muss in B über auditable_type/auditable_id auf GENAU
+        // die oben identifizierte, korrekt remappte JournalEntry zeigen (nicht
+        // auf die alte, in B nicht mehr existierende ID aus Tenant A).
+        $lockedAuditB = \App\Modules\Accounting\Models\AuditLog::withoutGlobalScopes()
+            ->where('tenant_id', $tenantB->id)
+            ->where('event', 'locked')
+            ->where('auditable_type', JournalEntry::class)
+            ->where('auditable_id', $journalPostedB->id)
+            ->first();
+        $this->assertNotNull($lockedAuditB, "Audit-Eintrag 'locked' muss nach dem Import auf die remappte JournalEntry in Tenant B zeigen.");
+        $this->assertSame($journalPostedB->public_id, $lockedAuditB->auditable_public_id, 'auditable_public_id muss nach dem Remapping auf B\'s NEUE public_id zeigen.');
+        $this->assertSame('posted', $lockedAuditB->new_values['status'] ?? null, 'new_values muss den Roundtrip inhaltlich überleben (JSON alt/neu-Werte).');
 
         // SPEC-05 (Teil A): journal_number (seit lockBooking() vergeben) muss den
         // Roundtrip überleben (JournalEntryTransformer).
