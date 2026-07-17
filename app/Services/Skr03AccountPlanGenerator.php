@@ -3,75 +3,73 @@
 namespace App\Services;
 
 use App\Modules\Accounting\Models\Account;
-use Illuminate\Support\Facades\DB;
 
 class Skr03AccountPlanGenerator
 {
     /**
      * Generiert Kontenplan basierend auf Geschäftsmodellen und Rechtsform
-     * 
-     * @param array $businessModels Array of business models
-     * @param string $legalForm Legal form of company
+     *
+     * @param  array  $businessModels  Array of business models
+     * @param  string  $legalForm  Legal form of company
      * @return array Generated accounts
      */
     public function generateAccounts(array $businessModels, string $legalForm): array
     {
         $accounts = [];
-        
+
         // 1. Basis-Kontenplan (immer enthalten)
         $accounts = array_merge($accounts, $this->getBaseAccounts());
-        
+
         // 2. Geschäftsmodell-spezifische Konten
         foreach ($businessModels as $model) {
             $accounts = array_merge($accounts, $this->getBusinessModelAccounts($model));
         }
-        
+
         // 3. Rechtsform-spezifische Konten
         $accounts = array_merge($accounts, $this->getLegalFormAccounts($legalForm));
-        
+
         // 4. Duplikate entfernen (basierend auf code)
         $accounts = $this->removeDuplicates($accounts);
-        
+
         return $accounts;
     }
-    
+
     /**
      * Erweitert bestehenden Kontenplan um neue Geschäftsmodelle
      * (Legt nur fehlende Konten an!)
-     * 
-     * @param array $newBusinessModels New business models to add
+     *
+     * @param  array  $newBusinessModels  New business models to add
      * @return array Newly created accounts
      */
     public function extendAccountPlan(array $newBusinessModels): array
     {
         $newAccounts = [];
-        
+
         // Get current tenant
         $tenant = tenant();
-        if (!$tenant && auth('api')->check()) {
+        if (! $tenant && auth('api')->check()) {
             $tenant = auth('api')->user()->tenant;
         }
-        
-        if (!$tenant) {
+
+        if (! $tenant) {
             throw new \Exception('No tenant context available');
         }
-        
+
         // 1. Sammle alle Ziel-Konten für neue Business-Models
         foreach ($newBusinessModels as $model) {
             $newAccounts = array_merge($newAccounts, $this->getBusinessModelAccounts($model));
         }
-        
+
         // 2. Remove duplicates from the new accounts list itself (based on code)
         $newAccounts = $this->removeDuplicates($newAccounts);
-        
+
         // 3. Prüfe, welche Konten bereits existieren für diesen Tenant
         $existingCodes = Account::where('tenant_id', $tenant->id)->pluck('code')->toArray();
-        
+
         // 4. Filtere nur fehlende Konten
-        $missingAccounts = array_filter($newAccounts, fn($acc) => 
-            !in_array($acc['code'], $existingCodes)
+        $missingAccounts = array_filter($newAccounts, fn ($acc) => ! in_array($acc['code'], $existingCodes)
         );
-        
+
         // 5. Lege nur neue Konten an (bestehende NIEMALS anfassen!)
         $createdAccounts = [];
         foreach ($missingAccounts as $account) {
@@ -79,10 +77,10 @@ class Skr03AccountPlanGenerator
             $account['tenant_id'] = $tenant->id;
             $createdAccounts[] = Account::create($account);
         }
-        
+
         return $createdAccounts;
     }
-    
+
     /**
      * Basis-Kontenplan nach SKR03 (~150 Konten)
      * ZWINGEND: 1400 und 1600 Sammelkonten
@@ -102,7 +100,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => null,
                 'tax_automation_type' => 'none',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '0100',
@@ -115,7 +113,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => null,
                 'tax_automation_type' => 'none',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '0200',
@@ -128,7 +126,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => null,
                 'tax_automation_type' => 'none',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '0300',
@@ -141,7 +139,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => null,
                 'tax_automation_type' => 'none',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '0420',
@@ -154,7 +152,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => null,
                 'tax_automation_type' => 'none',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '0440',
@@ -167,7 +165,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => null,
                 'tax_automation_type' => 'none',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '0600',
@@ -180,9 +178,9 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => null,
                 'tax_automation_type' => 'none',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
-            
+
             // ==== KLASSE 1: UMLAUFVERMÖGEN, KASSE, BANK ====
             [
                 'code' => '1000',
@@ -195,7 +193,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => null,
                 'tax_automation_type' => 'none',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '1200',
@@ -208,7 +206,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => null,
                 'tax_automation_type' => 'none',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '1360',
@@ -221,7 +219,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => null,
                 'tax_automation_type' => 'none',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '1400',
@@ -234,10 +232,10 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => null,
                 'tax_automation_type' => 'none',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             // Hinweis: 10000+ werden dynamisch von ContactController erstellt
-            
+
             // Vor steuerkonten
             [
                 'code' => '1571',
@@ -250,7 +248,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => 7,
                 'tax_automation_type' => 'fixed',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '1576',
@@ -263,9 +261,9 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => 19,
                 'tax_automation_type' => 'fixed',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
-            
+
             // ==== KLASSE 2: EIGENKAPITAL UND FREMDKAPITAL ====
             [
                 'code' => '1600',
@@ -278,10 +276,10 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => null,
                 'tax_automation_type' => 'none',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             // Hinweis: 70000+ werden dynamisch von ContactController erstellt
-            
+
             [
                 'code' => '1701',
                 'name' => 'Erhaltene Anzahlungen 7% USt',
@@ -293,7 +291,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => 7,
                 'tax_automation_type' => 'default',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '1706',
@@ -306,7 +304,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => 19,
                 'tax_automation_type' => 'default',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '1771',
@@ -319,7 +317,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => 7,
                 'tax_automation_type' => 'fixed',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '1776',
@@ -332,7 +330,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => 19,
                 'tax_automation_type' => 'fixed',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '1780',
@@ -345,7 +343,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => 19,
                 'tax_automation_type' => 'fixed',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
 
             // ==== KLASSE 4: BETRIEBLICHE AUFWENDUNGEN ====
@@ -360,7 +358,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => null,
                 'tax_automation_type' => 'none',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '4130',
@@ -373,7 +371,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => null,
                 'tax_automation_type' => 'none',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '4610',
@@ -386,7 +384,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => 19,
                 'tax_automation_type' => 'default',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '4630',
@@ -399,7 +397,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => 19,
                 'tax_automation_type' => 'default',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '4650',
@@ -412,7 +410,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => 19,
                 'tax_automation_type' => 'default',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '4800',
@@ -425,7 +423,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => 19,
                 'tax_automation_type' => 'default',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '4920',
@@ -438,7 +436,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => 19,
                 'tax_automation_type' => 'default',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '4930',
@@ -451,7 +449,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => 19,
                 'tax_automation_type' => 'default',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '0480',
@@ -464,7 +462,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => 19,
                 'tax_automation_type' => 'default',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '4855',
@@ -477,7 +475,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => null,
                 'tax_automation_type' => 'none',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '4945',
@@ -490,7 +488,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => 19,
                 'tax_automation_type' => 'default',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '4980',
@@ -503,9 +501,9 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => 19,
                 'tax_automation_type' => 'default',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
-            
+
             // ==== KLASSE 6: WEITERE BETRIEBLICHE AUFWENDUNGEN ====
             [
                 'code' => '6000',
@@ -518,7 +516,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => null,
                 'tax_automation_type' => 'none',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '6200',
@@ -531,9 +529,9 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => null,
                 'tax_automation_type' => 'none',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
-            
+
             // ==== KLASSE 7: WEITERE AUFWENDUNGEN ====
             [
                 'code' => '7300',
@@ -546,9 +544,9 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => null,
                 'tax_automation_type' => 'none',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
-            
+
             // ==== KLASSE 8: ERLÖSE ====
             [
                 'code' => '8100',
@@ -561,7 +559,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => 0,
                 'tax_automation_type' => 'default',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '8300',
@@ -574,7 +572,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => 7,
                 'tax_automation_type' => 'default',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '8400',
@@ -587,7 +585,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => 19,
                 'tax_automation_type' => 'default',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '8500',
@@ -600,7 +598,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => 19,
                 'tax_automation_type' => 'default',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '8736',
@@ -613,17 +611,17 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => null,
                 'tax_automation_type' => 'none',
                 'is_system' => true,
-                'is_generated' => true
+                'is_generated' => true,
             ],
         ];
     }
-    
+
     /**
      * Geschäftsmodell-spezifische Konten
      */
     private function getBusinessModelAccounts(string $model): array
     {
-        return match($model) {
+        return match ($model) {
             'dienst leistungen' => $this->getServiceAccounts(),
             'handel' => $this->getTradeAccounts(),
             'produktion' => $this->getProductionAccounts(),
@@ -634,7 +632,7 @@ class Skr03AccountPlanGenerator
             default => []
         };
     }
-    
+
     /**
      * Dienstleistungs-spezifische Konten
      */
@@ -652,7 +650,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => 19,
                 'tax_automation_type' => 'default',
                 'is_system' => false,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '8200',
@@ -665,11 +663,11 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => 19,
                 'tax_automation_type' => 'default',
                 'is_system' => false,
-                'is_generated' => true
+                'is_generated' => true,
             ],
         ];
     }
-    
+
     /**
      * Handels-spezifische Konten
      * WICHTIG: Klasse 3 Unterscheidung!
@@ -689,7 +687,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => 19,
                 'tax_automation_type' => 'default',
                 'is_system' => false,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '3300',
@@ -702,7 +700,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => 7,
                 'tax_automation_type' => 'default',
                 'is_system' => false,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             // WARENBESTAND = BESTANDSKONTO → Bilanz
             [
@@ -716,7 +714,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => null,
                 'tax_automation_type' => 'none',
                 'is_system' => false,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '4200',
@@ -729,11 +727,11 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => 19,
                 'tax_automation_type' => 'default',
                 'is_system' => false,
-                'is_generated' => true
+                'is_generated' => true,
             ],
         ];
     }
-    
+
     /**
      * Produktions-spezifische Konten
      */
@@ -751,7 +749,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => null,
                 'tax_automation_type' => 'none',
                 'is_system' => false,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '3200',
@@ -764,11 +762,11 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => null,
                 'tax_automation_type' => 'none',
                 'is_system' => false,
-                'is_generated' => true
+                'is_generated' => true,
             ],
         ]);
     }
-    
+
     /**
      * Online-Geschäfts-spezifische Konten
      */
@@ -786,7 +784,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => null,
                 'tax_automation_type' => 'none',
                 'is_system' => false,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '1202',
@@ -799,7 +797,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => null,
                 'tax_automation_type' => 'none',
                 'is_system' => false,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '4940',
@@ -812,11 +810,11 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => 19,
                 'tax_automation_type' => 'default',
                 'is_system' => false,
-                'is_generated' => true
+                'is_generated' => true,
             ],
         ];
     }
-    
+
     /**
      * Offline-Geschäfts-spezifische Konten
      */
@@ -835,17 +833,17 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => 19,
                 'tax_automation_type' => 'default',
                 'is_system' => false,
-                'is_generated' => true
+                'is_generated' => true,
             ],
         ];
     }
-    
+
     /**
      * Rechtsform-spezifische Konten
      */
     private function getLegalFormAccounts(string $legalForm): array
     {
-        return match($legalForm) {
+        return match ($legalForm) {
             'einzelunternehmen' => $this->getSoleProprietorAccounts(),
             'gmbh', 'ug' => $this->getGmbHAccounts(),
             'ag' => $this->getAGAccounts(),
@@ -853,7 +851,7 @@ class Skr03AccountPlanGenerator
             default => []
         };
     }
-    
+
     /**
      * Einzelunternehmer-Konten
      */
@@ -871,7 +869,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => null,
                 'tax_automation_type' => 'none',
                 'is_system' => false,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '1890',
@@ -884,11 +882,11 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => null,
                 'tax_automation_type' => 'none',
                 'is_system' => false,
-                'is_generated' => true
+                'is_generated' => true,
             ],
         ];
     }
-    
+
     /**
      * GmbH/UG-Konten
      */
@@ -906,7 +904,7 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => null,
                 'tax_automation_type' => 'none',
                 'is_system' => false,
-                'is_generated' => true
+                'is_generated' => true,
             ],
             [
                 'code' => '0820',
@@ -919,11 +917,11 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => null,
                 'tax_automation_type' => 'none',
                 'is_system' => false,
-                'is_generated' => true
+                'is_generated' => true,
             ],
         ];
     }
-    
+
     /**
      * AG-Konten
      */
@@ -941,11 +939,11 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => null,
                 'tax_automation_type' => 'none',
                 'is_system' => false,
-                'is_generated' => true
+                'is_generated' => true,
             ],
         ]);
     }
-    
+
     /**
      * Personengesellschafts-Konten (GbR, OHG, KG)
      */
@@ -963,11 +961,11 @@ class Skr03AccountPlanGenerator
                 'default_tax_rate' => null,
                 'tax_automation_type' => 'none',
                 'is_system' => false,
-                'is_generated' => true
+                'is_generated' => true,
             ],
         ];
     }
-    
+
     /**
      * Duplikate entfernen (basierend auf Code)
      */
@@ -975,17 +973,17 @@ class Skr03AccountPlanGenerator
     {
         $seen = [];
         $result = [];
-        
+
         foreach ($accounts as $account) {
-            if (!isset($seen[$account['code']])) {
+            if (! isset($seen[$account['code']])) {
                 $seen[$account['code']] = true;
                 $result[] = $account;
             }
         }
-        
+
         return $result;
     }
-    
+
     /**
      * SKR03-Konformität prüfen
      */
@@ -993,20 +991,39 @@ class Skr03AccountPlanGenerator
     {
         foreach ($accounts as $account) {
             // Prüfe Kontonummer
-            if (!is_numeric($account['code'])) {
+            if (! is_numeric($account['code'])) {
                 return false;
             }
-            
+
             // Prüfe SKR03-Klasse
-            $firstDigit = (int)substr($account['code'], 0, 1);
+            $firstDigit = (int) substr($account['code'], 0, 1);
             if ($firstDigit < 0 || $firstDigit > 9) {
                 return false;
             }
         }
-        
+
         return true;
     }
-    
+
+    /**
+     * SPEC-04 (4.1, Verifikation): Standard-Kontozuordnung für neu angelegte
+     * Steuerschlüssel beim initialen Kontenplan-Setup (Onboarding). Bewusst hier
+     * im Seeder/Generator und NICHT im Controller (App\Http\Controllers\Api\
+     * AccountPlanController), damit feste SKR03-Kontocodes ausschließlich in
+     * Seeder/Factory/Resolver vorkommen (git grep der Kontocodes in app/Http
+     * muss leer bleiben - siehe CLAUDE.md "Bekannte Fallen").
+     */
+    public function defaultAccountCodeForTaxCode(string $taxCodeCode): ?string
+    {
+        return match ($taxCodeCode) {
+            'UST19' => '1776',
+            'UST7' => '1771',
+            'VST19' => '1576',
+            'VST7' => '1571',
+            default => null,
+        };
+    }
+
     /**
      * Standard-Steuerschlüssel generieren
      */
@@ -1018,49 +1035,49 @@ class Skr03AccountPlanGenerator
                 'name' => 'Umsatzsteuer 19%',
                 'type' => 'output_tax',
                 'rate' => 19.00,
-                'account_id' => null  // Wird später gesetzt
+                'account_id' => null,  // Wird später gesetzt
             ],
             [
                 'code' => 'UST7',
                 'name' => 'Umsatzsteuer 7%',
                 'type' => 'output_tax',
                 'rate' => 7.00,
-                'account_id' => null
+                'account_id' => null,
             ],
             [
                 'code' => 'VST19',
                 'name' => 'Vorsteuer 19%',
                 'type' => 'input_tax',
                 'rate' => 19.00,
-                'account_id' => null
+                'account_id' => null,
             ],
             [
                 'code' => 'VST7',
                 'name' => 'Vorsteuer 7%',
                 'type' => 'input_tax',
                 'rate' => 7.00,
-                'account_id' => null
+                'account_id' => null,
             ],
             [
                 'code' => 'RC',
                 'name' => 'Reverse Charge',
                 'type' => 'reverse_charge',
                 'rate' => 0.00,
-                'account_id' => null
+                'account_id' => null,
             ],
             [
                 'code' => 'IG',
                 'name' => 'Innergemeinschaftlich',
                 'type' => 'intra_eu',
                 'rate' => 0.00,
-                'account_id' => null
+                'account_id' => null,
             ],
             [
                 'code' => 'EX',
                 'name' => 'Export (steuerfrei)',
                 'type' => 'export',
                 'rate' => 0.00,
-                'account_id' => null
+                'account_id' => null,
             ],
         ];
     }

@@ -7,12 +7,12 @@ use Tests\Support\TenantTestDataFactory;
 use Tests\TestCase;
 
 /**
- * Kern-Feature-Test: POST /api/invoices/{id}/book (SPEC-02, Abschnitt 2.2).
+ * Kern-Feature-Test: POST /api/invoices/{id}/book (SPEC-02, Abschnitt 2.2;
+ * gehärtet in SPEC-04, Abschnitt 4.1).
  *
- * Prüft den Ist-Zustand von InvoiceController::book() (siehe CLAUDE.md,
- * "Bekannte Fallen"): bucht ohne DB::transaction() und ohne locked_at -
- * das wird hier NICHT verändert (gehört zu SPEC-04), sondern als
- * Ist-Zustand getestet.
+ * Seit SPEC-04 läuft die Buchung transaktional über InvoiceBookingService
+ * und wird sofort per BookingService::lockBooking() festgeschrieben (GoBD) -
+ * die erzeugte JournalEntry ist danach unveränderlich (siehe GobdTest).
  */
 class InvoiceBookingTest extends TestCase
 {
@@ -37,6 +37,19 @@ class InvoiceBookingTest extends TestCase
         $this->assertNotNull($invoice->journal_entry_id);
 
         $journalEntry = \App\Modules\Accounting\Models\JournalEntry::with('lines')->findOrFail($invoice->journal_entry_id);
+
+        // GoBD: seit SPEC-04 wird die Rechnungsbuchung sofort festgeschrieben.
+        $this->assertSame('posted', $journalEntry->status);
+        $this->assertNotNull($journalEntry->locked_at);
+
+        // Festgeschriebene Buchung ist unveränderlich (Enforcement siehe GobdTest,
+        // ausführlich getestet - hier nur als zusätzlicher Beleg im Buchungs-Flow).
+        try {
+            $journalEntry->update(['description' => 'Sollte fehlschlagen']);
+            $this->fail('Update einer festgeschriebenen Buchung hätte fehlschlagen müssen.');
+        } catch (\DomainException $e) {
+            $this->assertStringContainsString('kann nicht geändert werden', $e->getMessage());
+        }
 
         $debitSum = $journalEntry->lines->where('type', 'debit')->sum('amount');
         $creditSum = $journalEntry->lines->where('type', 'credit')->sum('amount');

@@ -4,15 +4,23 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Concerns\HasTenantScope;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\BookInvoiceRequest;
+use App\Http\Requests\StoreInvoiceRequest;
 use App\Models\Invoice;
-use App\Models\Product;
+use App\Modules\Accounting\Services\InvoiceBookingService;
 use App\Rules\TenantExists;
-use App\Services\InventoryService;
+use DomainException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class InvoiceController extends Controller
 {
     use HasTenantScope;
+
+    public function __construct(
+        private InvoiceBookingService $invoiceBookingService
+    ) {}
 
     public function index()
     {
@@ -25,25 +33,9 @@ class InvoiceController extends Controller
         return response()->json($invoices);
     }
 
-    public function store(Request $request)
+    public function store(StoreInvoiceRequest $request)
     {
-        $validated = $request->validate([
-            'contact_id' => ['required', new TenantExists('contacts')],
-            'order_id' => ['nullable', new TenantExists('orders')],
-            'invoice_date' => 'required|date',
-            'due_date' => 'required|date',
-            'notes' => 'nullable|string',
-            'intro_text' => 'nullable|string',
-            'payment_terms' => 'nullable|string',
-            'footer_note' => 'nullable|string',
-            'lines' => 'required|array|min:1',
-            'lines.*.product_id' => ['nullable', new TenantExists('products')],
-            'lines.*.description' => 'required|string',
-            'lines.*.quantity' => 'required|numeric|min:0',
-            'lines.*.unit_price' => 'required|integer',
-            'lines.*.tax_rate' => 'required|numeric|min:0',
-            'lines.*.account_id' => ['required', new TenantExists('accounts')],
-        ]);
+        $validated = $request->validated();
 
         // Generate invoice number (RE-2025-0001) - tenant-scoped
         $tenant = $this->getTenantOrFail();
@@ -140,175 +132,61 @@ class InvoiceController extends Controller
     }
 
     /**
-     * Book invoice - creates journal entry (Forderung)
-     * Soll: Debitor (Kundenkonto) - Bruttobetrag
-     * Haben: Erlöse - Nettobetrag (pro Position)
-     * Haben: Umsatzsteuer - Steuerbetrag
+     * Book invoice - creates journal entry (Forderung), dünner Wrapper um
+     * InvoiceBookingService::bookInvoice() (SPEC-04, 4.1/4.4). Die eigentliche
+     * Buchungslogik (Soll/Haben-Zeilen, USt-Konto-Auflösung, Festschreibung,
+     * Lagerabgang) läuft dort transaktional.
      */
     public function book(Invoice $invoice)
     {
+        // Bewusst vor dem Service geprüft, um den bestehenden API-Vertrag (400 statt
+        // 422 bei bereits gebuchter Rechnung) unverändert zu lassen.
+        if ($invoice->status !== 'draft') {
+            return response()->json(['error' => 'Rechnung ist bereits gebucht'], 400);
+        }
+
         try {
-            if ($invoice->status !== 'draft') {
-                return response()->json(['error' => 'Rechnung ist bereits gebucht'], 400);
-            }
-
-            // Load relationships
-            $invoice->load(['contact.account', 'lines.account']);
-
-            // Check if contact exists and has name
-            if (! $invoice->contact) {
-                return response()->json(['error' => 'Kunde nicht gefunden'], 400);
-            }
-
-            // Check if contact has an account
-            if (! $invoice->contact->customer_account_id) {
-                return response()->json(['error' => "Kunde '{$invoice->contact->name}' hat kein Debitorenkonto. Bitte Kunden neu anlegen."], 400);
-            }
-
-            // Create journal entry
-            $journalEntry = \App\Modules\Accounting\Models\JournalEntry::create([
-                'booking_date' => $invoice->invoice_date,
-                'description' => "Rechnung {$invoice->invoice_number} - {$invoice->contact->name}",
-                'contact_id' => $invoice->contact_id,
-                'status' => 'posted',
-            ]);
-
-            // 1. Soll: Debitor (customer account) - Bruttobetrag
-            \App\Modules\Accounting\Models\JournalEntryLine::create([
-                'journal_entry_id' => $journalEntry->id,
-                'account_id' => $invoice->contact->customer_account_id,
-                'type' => 'debit',
-                'amount' => $invoice->total,
-            ]);
-
-            // 2. Haben: Erlöse (per line) - Nettobetrag
-            // Group by account and tax rate
-            $revenueGroups = [];
-            foreach ($invoice->lines as $line) {
-                $key = $line->account_id.'_'.$line->tax_rate;
-                if (! isset($revenueGroups[$key])) {
-                    $revenueGroups[$key] = [
-                        'account_id' => $line->account_id,
-                        'tax_rate' => $line->tax_rate,
-                        'subtotal' => 0,
-                    ];
-                }
-                $revenueGroups[$key]['subtotal'] += $line->line_total;
-            }
-
-            foreach ($revenueGroups as $group) {
-                \App\Modules\Accounting\Models\JournalEntryLine::create([
-                    'journal_entry_id' => $journalEntry->id,
-                    'account_id' => $group['account_id'],
-                    'type' => 'credit',
-                    'amount' => $group['subtotal'],
-                ]);
-            }
-
-            // 3. Haben: Umsatzsteuer (if applicable)
-            if ($invoice->tax_total > 0) {
-                // Find tax account based on tax rate
-                // Assuming account codes: 1776 (19% USt), 1771 (7% USt)
-                $taxAccount = \App\Modules\Accounting\Models\Account::where('code', '1776')->first();
-
-                if (! $taxAccount) {
-                    // Try to find any tax account
-                    $taxAccount = \App\Modules\Accounting\Models\Account::where('code', 'like', '177%')->first();
-                }
-
-                if ($taxAccount) {
-                    \App\Modules\Accounting\Models\JournalEntryLine::create([
-                        'journal_entry_id' => $journalEntry->id,
-                        'account_id' => $taxAccount->id,
-                        'type' => 'credit',
-                        'amount' => $invoice->tax_total,
-                    ]);
-                }
-            }
-
-            // Update invoice with journal entry reference
-            $invoice->update([
-                'status' => 'booked',
-                'journal_entry_id' => $journalEntry->id,
-            ]);
-
-            // Reduce inventory for products with tracking enabled
-            $inventoryService = new InventoryService;
-            foreach ($invoice->lines as $line) {
-                // Check if line has a product_id
-                if (! empty($line->product_id)) {
-                    $product = Product::find($line->product_id);
-                    if ($product) {
-                        $inventoryService->removeStock(
-                            $product,
-                            $line->quantity,
-                            'sale',
-                            "Verkauf via Rechnung {$invoice->invoice_number}",
-                            $invoice
-                        );
-                    }
-                }
-            }
-
-            return response()->json($invoice->load(['contact', 'lines', 'journalEntry']));
-
-        } catch (\Exception $e) {
-            \Log::error('Invoice booking failed', [
+            $this->invoiceBookingService->bookInvoice($invoice);
+        } catch (DomainException $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        } catch (Throwable $e) {
+            Log::error('Invoice booking failed', [
                 'invoice_id' => $invoice->id,
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
             ]);
 
-            return response()->json([
-                'error' => 'Fehler beim Buchen der Rechnung: '.$e->getMessage(),
-            ], 500);
+            return response()->json(['error' => 'Fehler beim Buchen der Rechnung.'], 422);
         }
+
+        return response()->json($invoice->fresh()->load(['contact', 'lines', 'journalEntry']));
     }
 
     /**
-     * Record payment for invoice
-     * Soll: Kasse/Bank - Bruttobetrag
-     * Haben: Debitor - Bruttobetrag
+     * Record payment for invoice - dünner Wrapper um
+     * InvoiceBookingService::recordPayment() (SPEC-04, 4.1/4.4).
      */
-    public function recordPayment(Request $request, Invoice $invoice)
+    public function recordPayment(BookInvoiceRequest $request, Invoice $invoice)
     {
-        $validated = $request->validate([
-            'payment_account_id' => ['required', new TenantExists('accounts')], // Kasse oder Bank
-            'payment_date' => 'required|date',
-        ]);
+        $validated = $request->validated();
 
-        if ($invoice->status !== 'booked' && $invoice->status !== 'sent') {
-            return response()->json(['error' => 'Nur gebuchte/versendete Rechnungen können bezahlt werden'], 400);
+        try {
+            $this->invoiceBookingService->recordPayment(
+                $invoice,
+                (int) $validated['payment_account_id'],
+                $validated['payment_date']
+            );
+        } catch (DomainException $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        } catch (Throwable $e) {
+            Log::error('Invoice payment recording failed', [
+                'invoice_id' => $invoice->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json(['error' => 'Fehler beim Erfassen der Zahlung.'], 422);
         }
 
-        // Create payment journal entry
-        $journalEntry = \App\Modules\Accounting\Models\JournalEntry::create([
-            'booking_date' => $validated['payment_date'],
-            'description' => "Zahlung Rechnung {$invoice->invoice_number} - {$invoice->contact->name}",
-            'contact_id' => $invoice->contact_id,
-            'status' => 'posted',
-        ]);
-
-        // Soll: Kasse/Bank
-        \App\Modules\Accounting\Models\JournalEntryLine::create([
-            'journal_entry_id' => $journalEntry->id,
-            'account_id' => $validated['payment_account_id'],
-            'type' => 'debit',
-            'amount' => $invoice->total,
-        ]);
-
-        // Haben: Debitor
-        \App\Modules\Accounting\Models\JournalEntryLine::create([
-            'journal_entry_id' => $journalEntry->id,
-            'account_id' => $invoice->contact->customer_account_id,
-            'type' => 'credit',
-            'amount' => $invoice->total,
-        ]);
-
-        // Mark invoice as paid
-        $invoice->update(['status' => 'paid']);
-
-        return response()->json($invoice->load(['contact', 'lines']));
+        return response()->json($invoice->fresh()->load(['contact', 'lines']));
     }
 
     /**

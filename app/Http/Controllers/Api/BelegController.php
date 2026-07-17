@@ -6,8 +6,11 @@ use App\Http\Controllers\Concerns\HasTenantScope;
 use App\Http\Controllers\Controller;
 use App\Models\Beleg;
 use App\Models\Product;
+use App\Models\TaxCode;
+use App\Modules\Accounting\Services\BookingService;
 use App\Rules\TenantExists;
 use App\Services\InventoryService;
+use DomainException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -183,212 +186,187 @@ class BelegController extends Controller
         return response()->json(['message' => 'Beleg gelöscht']);
     }
 
+    /**
+     * Bucht einen Beleg (SPEC-04, 4.4/4.5): läuft komplett in EINER DB::transaction(),
+     * jede erzeugte JournalEntry wird über BookingService::lockBooking() sofort
+     * festgeschrieben (GoBD - vorher blieb auch die Beleg-Buchung als 'draft'
+     * ungesperrt, analog zur ehemaligen Lücke in InvoiceController::book()).
+     * Das USt-/Vorsteuerkonto wird nicht mehr mit festen SKR03-Kontocodes hartcodiert,
+     * sondern über TaxCode::resolveOutputTaxAccount()/resolveInputTaxAccount()
+     * aufgelöst - ohne konfiguriertes Konto gibt es keine stille Auslassung mehr,
+     * sondern eine Exception (422).
+     */
     public function book(Request $request, Beleg $beleg)
     {
         if ($beleg->status !== 'draft') {
             return response()->json(['error' => 'Beleg ist bereits verbucht oder storniert'], 400);
         }
 
-        // Logic to create a Journal Entry from the Beleg
-        // This is a simplified version. In a real app, you'd likely have a more complex service.
-
         try {
-            DB::beginTransaction();
+            $beleg = DB::transaction(function () use ($beleg) {
+                $lines = [];
 
-            $lines = [];
+                // 1. Contact Line (Debitor/Kreditor)
+                $beleg->loadMissing('contact');
 
-            // 1. Contact Line (Debitor/Kreditor)
-            if ($beleg->contact_id && (! $beleg->contact || ! $beleg->contact->account_id)) {
-                // Reload contact to be sure
-                $beleg->load('contact');
-            }
+                if (! $beleg->contact) {
+                    throw new DomainException('Kein Kontakt ausgewählt.');
+                }
 
-            if ($beleg->contact) {
                 // Determine account based on document type
-                $accountId = null;
                 if ($beleg->document_type === 'ausgang') {
-                    $accountId = $beleg->contact->customer_account_id ?? $beleg->contact->vendor_account_id;
+                    $contactAccountId = $beleg->contact->customer_account_id ?? $beleg->contact->vendor_account_id;
                 } else {
                     // eingang, offen, sonstige -> treat as incoming/vendor usually
-                    $accountId = $beleg->contact->vendor_account_id ?? $beleg->contact->customer_account_id;
+                    $contactAccountId = $beleg->contact->vendor_account_id ?? $beleg->contact->customer_account_id;
                 }
 
-                if ($accountId) {
-                    $type = ($beleg->document_type === 'ausgang') ? 'debit' : 'credit';
-
-                    $lines[] = [
-                        'account_id' => $accountId,
-                        'type' => $type,
-                        'amount' => $beleg->amount,
-                        'tax_key' => null,
-                        'tax_amount' => 0,
-                    ];
-                } else {
-                    throw new \Exception('Kein passendes Konto für den Kontakt gefunden.');
+                if (! $contactAccountId) {
+                    throw new DomainException('Kein passendes Konto für den Kontakt gefunden.');
                 }
-            } else {
-                // If no contact/account, we can't auto-book fully.
-                throw new \Exception('Kein Kontakt ausgewählt.');
-            }
 
-            // 2. Contra Account (Revenue/Expense) - Use user-selected Sachkonto or fallback
-            $contraAccount = null;
+                $contactLineType = ($beleg->document_type === 'ausgang') ? 'debit' : 'credit';
+                $lines[] = [
+                    'account_id' => $contactAccountId,
+                    'type' => $contactLineType,
+                    'amount' => $beleg->amount,
+                ];
 
-            // First try user-selected category account
-            if ($beleg->category_account_id) {
-                $contraAccount = \App\Modules\Accounting\Models\Account::find($beleg->category_account_id);
-            }
+                // 2. Contra Account (Revenue/Expense) - Use user-selected Sachkonto or fallback
+                $contraAccount = null;
 
-            // Fallback to default accounts if no category selected
-            if (! $contraAccount) {
-                $contraAccountCode = ($beleg->document_type === 'ausgang') ? '8400' : '3400'; // SKR03/04 examples
-                $contraAccount = \App\Modules\Accounting\Models\Account::where('code', $contraAccountCode)->first();
-            }
+                if ($beleg->category_account_id) {
+                    $contraAccount = \App\Modules\Accounting\Models\Account::find($beleg->category_account_id);
+                }
 
-            if (! $contraAccount) {
-                // Fallback to any revenue/expense
-                $type = ($beleg->document_type === 'ausgang') ? 'revenue' : 'expense';
-                $contraAccount = \App\Modules\Accounting\Models\Account::where('type', $type)->first();
-            }
+                if (! $contraAccount) {
+                    $contraAccountType = ($beleg->document_type === 'ausgang') ? 'revenue' : 'expense';
+                    $contraAccount = \App\Modules\Accounting\Models\Account::where('type', $contraAccountType)
+                        ->orderBy('code')
+                        ->first();
+                }
 
-            if (! $contraAccount) {
-                throw new \Exception('Kein Sachkonto (Kategorie) ausgewählt.');
-            }
-            $type = ($beleg->document_type === 'ausgang') ? 'credit' : 'debit';
-            $netAmount = $beleg->amount - $beleg->tax_amount;
+                if (! $contraAccount) {
+                    throw new DomainException('Kein Sachkonto (Kategorie) ausgewählt.');
+                }
 
-            $lines[] = [
-                'account_id' => $contraAccount->id,
-                'type' => $type,
-                'amount' => $netAmount,
-                'tax_key' => null, // Simplified
-                'tax_amount' => 0,
-            ];
+                $contraLineType = ($beleg->document_type === 'ausgang') ? 'credit' : 'debit';
+                $netAmount = $beleg->amount - $beleg->tax_amount;
 
-            // 3. Tax Line
-            if ($beleg->tax_amount > 0) {
-                // Find tax account... simplified
-                // Assuming 19%
-                $taxAccountCode = ($beleg->document_type === 'ausgang') ? '1776' : '1576';
-                $taxAccount = \App\Modules\Accounting\Models\Account::where('code', $taxAccountCode)->first();
+                $lines[] = [
+                    'account_id' => $contraAccount->id,
+                    'type' => $contraLineType,
+                    'amount' => $netAmount,
+                ];
 
-                if ($taxAccount) {
+                // 3. Tax Line - Steuersatz aus Betrag/Nettobetrag ableiten (Beleg hat keinen
+                // eigenen tax_rate-Kopf, nur amount/tax_amount).
+                if ($beleg->tax_amount > 0) {
+                    $rate = $netAmount > 0
+                        ? round(($beleg->tax_amount / $netAmount) * 100)
+                        : 19.0;
+
+                    $taxAccount = ($beleg->document_type === 'ausgang')
+                        ? TaxCode::resolveOutputTaxAccount((float) $rate)
+                        : TaxCode::resolveInputTaxAccount((float) $rate);
+
                     $lines[] = [
                         'account_id' => $taxAccount->id,
-                        'type' => $type, // Same side as revenue/expense usually? No.
-                        // Sales: Revenue Credit, VAT Credit.
-                        // Purchase: Expense Debit, Input Tax Debit.
+                        'type' => $contraLineType,
                         'amount' => $beleg->tax_amount,
-                        'tax_key' => null,
-                        'tax_amount' => 0,
                     ];
                 }
-            }
 
-            $bookingService = app(\App\Modules\Accounting\Services\BookingService::class);
-            $journalEntry = $bookingService->createBooking([
-                'date' => $beleg->document_date->format('Y-m-d'),
-                'description' => $beleg->title,
-                'contact_id' => $beleg->contact_id,
-                'lines' => $lines,
-            ]);
+                $bookingService = app(BookingService::class);
+                $journalEntry = $bookingService->createBooking([
+                    'date' => $beleg->document_date->format('Y-m-d'),
+                    'description' => $beleg->title,
+                    'contact_id' => $beleg->contact_id,
+                    'lines' => $lines,
+                ]);
+                $bookingService->lockBooking($journalEntry->id);
 
-            // If marked as paid, create a payment booking
-            $paymentJournalEntry = null;
-            if ($beleg->is_paid && $beleg->payment_account_id) {
-                $paymentAccount = \App\Modules\Accounting\Models\Account::find($beleg->payment_account_id);
+                // If marked as paid, create a payment booking
+                if ($beleg->is_paid && $beleg->payment_account_id) {
+                    $paymentAccount = \App\Modules\Accounting\Models\Account::find($beleg->payment_account_id);
 
-                if ($paymentAccount && $accountId) {
-                    $paymentLines = [];
-
-                    if ($beleg->document_type === 'ausgang') {
-                        // Outgoing (sales): Bank/Cash debit, Customer credit
-                        $paymentLines[] = [
-                            'account_id' => $beleg->payment_account_id,
-                            'type' => 'debit',
-                            'amount' => $beleg->amount,
-                            'tax_key' => null,
-                            'tax_amount' => 0,
-                        ];
-                        $paymentLines[] = [
-                            'account_id' => $accountId,
-                            'type' => 'credit',
-                            'amount' => $beleg->amount,
-                            'tax_key' => null,
-                            'tax_amount' => 0,
-                        ];
-                    } else {
-                        // Incoming (purchase): Vendor debit, Bank/Cash credit
-                        $paymentLines[] = [
-                            'account_id' => $accountId,
-                            'type' => 'debit',
-                            'amount' => $beleg->amount,
-                            'tax_key' => null,
-                            'tax_amount' => 0,
-                        ];
-                        $paymentLines[] = [
-                            'account_id' => $beleg->payment_account_id,
-                            'type' => 'credit',
-                            'amount' => $beleg->amount,
-                            'tax_key' => null,
-                            'tax_amount' => 0,
-                        ];
-                    }
-
-                    $paymentJournalEntry = $bookingService->createBooking([
-                        'date' => $beleg->document_date->format('Y-m-d'),
-                        'description' => 'Zahlung: '.$beleg->title,
-                        'contact_id' => $beleg->contact_id,
-                        'lines' => $paymentLines,
-                    ]);
-                }
-            }
-
-            $beleg->update([
-                'status' => ($beleg->is_paid && $beleg->payment_account_id) ? 'paid' : 'booked',
-                'journal_entry_id' => $journalEntry->id,
-            ]);
-
-            // Process inventory for product lines
-            $beleg->load('lines.product');
-            $inventoryService = new InventoryService;
-
-            foreach ($beleg->lines as $line) {
-                if (! empty($line->product_id)) {
-                    $product = Product::find($line->product_id);
-                    if ($product && $line->quantity > 0) {
-                        if ($beleg->document_type === 'eingang') {
-                            // Incoming (purchase) - add stock
-                            $inventoryService->addStock(
-                                $product,
-                                $line->quantity,
-                                'purchase',
-                                "Einkauf via Beleg {$beleg->document_number}",
-                                $beleg
-                            );
-                        } elseif ($beleg->document_type === 'ausgang') {
-                            // Outgoing (sale) - remove stock
-                            $inventoryService->removeStock(
-                                $product,
-                                $line->quantity,
-                                'sale',
-                                "Verkauf via Beleg {$beleg->document_number}",
-                                $beleg
-                            );
+                    if ($paymentAccount) {
+                        if ($beleg->document_type === 'ausgang') {
+                            // Outgoing (sales): Bank/Cash debit, Customer credit
+                            $paymentLines = [
+                                ['account_id' => $beleg->payment_account_id, 'type' => 'debit', 'amount' => $beleg->amount],
+                                ['account_id' => $contactAccountId, 'type' => 'credit', 'amount' => $beleg->amount],
+                            ];
+                        } else {
+                            // Incoming (purchase): Vendor debit, Bank/Cash credit
+                            $paymentLines = [
+                                ['account_id' => $contactAccountId, 'type' => 'debit', 'amount' => $beleg->amount],
+                                ['account_id' => $beleg->payment_account_id, 'type' => 'credit', 'amount' => $beleg->amount],
+                            ];
                         }
+
+                        $paymentJournalEntry = $bookingService->createBooking([
+                            'date' => $beleg->document_date->format('Y-m-d'),
+                            'description' => 'Zahlung: '.$beleg->title,
+                            'contact_id' => $beleg->contact_id,
+                            'lines' => $paymentLines,
+                        ]);
+                        $bookingService->lockBooking($paymentJournalEntry->id);
                     }
                 }
-            }
 
-            DB::commit();
+                $beleg->update([
+                    'status' => ($beleg->is_paid && $beleg->payment_account_id) ? 'paid' : 'booked',
+                    'journal_entry_id' => $journalEntry->id,
+                ]);
 
-            return response()->json($beleg->load(['contact', 'journalEntry', 'lines.product']));
+                // Process inventory for product lines (innerhalb derselben Transaktion)
+                $beleg->load('lines.product');
+                $inventoryService = new InventoryService;
 
-        } catch (\Exception $e) {
-            DB::rollBack();
+                foreach ($beleg->lines as $line) {
+                    if (empty($line->product_id) || $line->quantity <= 0) {
+                        continue;
+                    }
 
-            return response()->json(['error' => $e->getMessage()], 500);
+                    $product = Product::find($line->product_id);
+                    if (! $product) {
+                        continue;
+                    }
+
+                    if ($beleg->document_type === 'eingang') {
+                        $inventoryService->addStock(
+                            $product,
+                            $line->quantity,
+                            'purchase',
+                            "Einkauf via Beleg {$beleg->document_number}",
+                            $beleg
+                        );
+                    } elseif ($beleg->document_type === 'ausgang') {
+                        $inventoryService->removeStock(
+                            $product,
+                            $line->quantity,
+                            'sale',
+                            "Verkauf via Beleg {$beleg->document_number}",
+                            $beleg
+                        );
+                    }
+                }
+
+                return $beleg;
+            });
+        } catch (DomainException $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        } catch (\Throwable $e) {
+            \Log::error('Beleg booking failed', [
+                'beleg_id' => $beleg->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json(['error' => 'Fehler beim Buchen des Belegs.'], 422);
         }
+
+        return response()->json($beleg->load(['contact', 'journalEntry', 'lines.product']));
     }
 
     /**

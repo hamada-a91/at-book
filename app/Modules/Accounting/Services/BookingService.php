@@ -13,17 +13,31 @@ class BookingService
     /**
      * Create a new booking batch (Draft).
      *
+     * @param  int|null  $userId  Expliziter Buchungsbenutzer für Aufrufe außerhalb eines
+     *                            HTTP-Requests (Jobs/Commands), wo Auth::id() nicht greift.
+     *                            Ist keiner der beiden vorhanden -> Exception (SPEC-04 4.3:
+     *                            der bisherige "?? 1"-Demo-Fallback ist entfernt, damit
+     *                            Buchungen nie einem falschen/geratenen Benutzer zugeordnet
+     *                            werden).
+     * @param  bool  $autoLock  Wenn true, wird die Buchung im selben Aufruf sofort per
+     *                          lockBooking() festgeschrieben (GoBD).
+     *
      * @throws Exception
      */
-    public function createBooking(array $data): JournalEntry
+    public function createBooking(array $data, ?int $userId = null, bool $autoLock = false): JournalEntry
     {
-        return DB::transaction(function () use ($data) {
-            // 1. Validate Balance (Soll = Haben)
-            $debitSum = collect($data['lines'])->where('type', 'debit')->sum('amount');
-            $creditSum = collect($data['lines'])->where('type', 'credit')->sum('amount');
+        return DB::transaction(function () use ($data, $userId, $autoLock) {
+            // 1. Validate Balance (Soll = Haben) - als Integer-Cents casten, bevor verglichen wird.
+            $debitSum = (int) collect($data['lines'])->where('type', 'debit')->sum('amount');
+            $creditSum = (int) collect($data['lines'])->where('type', 'credit')->sum('amount');
 
             if ($debitSum !== $creditSum) {
                 throw new Exception("Booking is not balanced. Debit: $debitSum, Credit: $creditSum");
+            }
+
+            $resolvedUserId = $userId ?? Auth::id();
+            if (! $resolvedUserId) {
+                throw new Exception('Buchung erfordert einen angemeldeten Benutzer oder einen explizit übergebenen userId-Parameter (z.B. für Jobs).');
             }
 
             // 2. Create Header
@@ -34,7 +48,7 @@ class BookingService
                 'contact_id' => $data['contact_id'] ?? null,
                 'beleg_id' => $data['beleg_id'] ?? null,
                 'status' => 'draft',
-                'user_id' => Auth::id() ?? 1, // Fallback for demo
+                'user_id' => $resolvedUserId,
             ]);
 
             // 3. Create Lines
@@ -54,6 +68,11 @@ class BookingService
                 if ($beleg && $beleg->status === 'draft') {
                     $beleg->update(['status' => 'booked']);
                 }
+            }
+
+            // 5. Optional: sofort festschreiben (GoBD)
+            if ($autoLock) {
+                $entry = $this->lockBooking($entry->id);
             }
 
             return $entry;

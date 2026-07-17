@@ -13,12 +13,13 @@ use Tests\Support\TenantTestDataFactory;
 use Tests\TestCase;
 
 /**
- * GoBD-Regeln: Ist-Zustand testen (SPEC-02, Abschnitt 2.2).
+ * GoBD-Regeln (SPEC-02, Abschnitt 2.2 + SPEC-04, Abschnitt 4.5).
  *
- * WICHTIG (gemäß Aufgabenstellung): Wo eine Durchsetzungslücke gefunden
- * wird, wird HIER KEINE neue Enforcement-Logik implementiert (gehört zu
- * SPEC-04) - stattdessen markTestSkipped() mit Begründung. Alle Lücken
- * sind zusätzlich im Abschlussbericht aufgeführt.
+ * Die beiden zuvor als Durchsetzungslücke markierten Tests (per
+ * markTestSkipped() geparkt) sind seit SPEC-04 aktiv: JournalEntry/
+ * JournalEntryLine sperren festgeschriebene Buchungen gegen Update/Delete
+ * (Ausnahme: der Storno-Statuswechsel durch BookingService::reverseBooking()),
+ * und InvoiceController::book() schreibt über InvoiceBookingService sofort fest.
  */
 class GobdTest extends TestCase
 {
@@ -110,17 +111,16 @@ class GobdTest extends TestCase
     }
 
     /**
-     * DURCHSETZUNGSLÜCKE: Eine festgeschriebene (locked_at gesetzt) Buchung
-     * lässt sich weiterhin per direktem Model-Update ändern - es gibt
-     * weder einen Observer noch eine DB-Constraint, die das verhindert.
-     * BookingService prüft locked_at nur innerhalb von lockBooking()
-     * selbst, nicht bei generischen Model-Updates. Wird in SPEC-04
-     * behoben (siehe docs/specs/SPEC-04-buchungslogik.md).
+     * SPEC-04 (4.5): GoBD-Enforcement jetzt aktiv. Eine festgeschriebene
+     * (locked_at gesetzt) Buchung lässt sich NICHT mehr per direktem
+     * Model-Update ändern - JournalEntry::booted() wirft eine
+     * DomainException im 'updating'-Hook. Die einzige erlaubte Ausnahme ist
+     * der Statuswechsel auf 'cancelled' durch BookingService::reverseBooking()
+     * (separat in BookingServiceTest abgedeckt). Ursprünglich war dies eine
+     * dokumentierte Durchsetzungslücke (siehe CLAUDE.md, "Bekannte Fallen").
      */
     public function test_locked_journal_entry_can_still_be_updated_directly_via_model(): void
     {
-        $this->markTestSkipped('Enforcement fehlt, wird in SPEC-04 umgesetzt: gelockte JournalEntry-Models lassen sich per direktem Model-Update weiterhin ändern (kein Observer/Guard).');
-
         $entry = $this->service->createBooking([
             'date' => '2026-07-01',
             'description' => 'Barverkauf',
@@ -130,25 +130,24 @@ class GobdTest extends TestCase
             ],
         ]);
         $this->service->lockBooking($entry->id);
+        $entry->refresh(); // lockBooking() setzt locked_at auf einer neuen Instanz - lokale Referenz nachziehen
+
+        $this->expectException(\DomainException::class);
+        $this->expectExceptionMessageMatches('/kann nicht geändert werden/i');
 
         $entry->update(['description' => 'Nachträglich geändert']);
-
-        $this->assertSame('Nachträglich geändert', $entry->fresh()->description);
     }
 
     /**
-     * DURCHSETZUNGSLÜCKE: InvoiceController::book() setzt bei der erzeugten
-     * JournalEntry den Status zwar auf 'posted', aber NICHT locked_at (siehe
+     * SPEC-04 (4.1): InvoiceController::book() bucht jetzt über
+     * InvoiceBookingService::bookInvoice(), die die erzeugte JournalEntry
+     * im selben Aufruf per BookingService::lockBooking() festschreibt.
+     * Ursprünglich blieb locked_at trotz status='posted' NULL (siehe
      * CLAUDE.md, "Bekannte Fallen": "InvoiceController::book() bucht ohne
-     * Transaktion und ohne locked_at"). Damit ist eine über die Rechnung
-     * gebuchte Journalbuchung GoBD-technisch NICHT festgeschrieben, obwohl
-     * sie als 'posted' erscheint - inkonsistent zu BookingService::lockBooking().
-     * Wird in SPEC-04 behoben.
+     * Transaktion und ohne locked_at").
      */
     public function test_invoice_booking_leaves_locked_at_null_despite_posted_status(): void
     {
-        $this->markTestSkipped('Enforcement fehlt, wird in SPEC-04 umgesetzt: InvoiceController::book() setzt locked_at nicht, obwohl status=posted gesetzt wird (siehe CLAUDE.md "Bekannte Fallen").');
-
         $data = TenantTestDataFactory::create('gobdinv');
 
         $token = $this->tokenFor($data->user);
@@ -159,6 +158,6 @@ class GobdTest extends TestCase
         $journalEntry = \App\Modules\Accounting\Models\JournalEntry::findOrFail($data->invoice->fresh()->journal_entry_id);
 
         $this->assertSame('posted', $journalEntry->status);
-        $this->assertNull($journalEntry->locked_at, 'Erwartungsgemäß NICHT gesetzt - genau das ist die Lücke.');
+        $this->assertNotNull($journalEntry->locked_at, 'Rechnungsbuchungen müssen ab SPEC-04 sofort festgeschrieben (GoBD) werden.');
     }
 }
