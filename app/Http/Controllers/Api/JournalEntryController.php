@@ -4,8 +4,12 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Concerns\HasTenantScope;
 use App\Http\Controllers\Controller;
+use App\Models\CompanySetting;
+use App\Modules\Accounting\Models\JournalEntry;
 use App\Modules\Accounting\Services\BookingService;
 use App\Rules\TenantExists;
+use Carbon\Carbon;
+use DomainException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -116,5 +120,67 @@ class JournalEntryController extends Controller
             ->findOrFail($id);
 
         return response()->json($entry);
+    }
+
+    /**
+     * SPEC-05 (Teil B): Periodenfestschreibung (Monatsabschluss). Schreibt alle
+     * Draft-Buchungen bis (inklusive) until_date fest. Nur owner/buchhalter
+     * (siehe routes/api.php, role-Middleware).
+     */
+    public function lockPeriod(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'until_date' => 'required|date',
+        ]);
+
+        try {
+            $lockedCount = $this->bookingService->lockPeriod(Carbon::parse($validated['until_date']));
+        } catch (DomainException $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
+
+        $tenant = $this->getTenantOrFail();
+        $settings = CompanySetting::where('tenant_id', $tenant->id)->first();
+
+        return response()->json([
+            'locked_count' => $lockedCount,
+            'books_locked_until' => $settings?->books_locked_until
+                ? Carbon::parse($settings->books_locked_until)->toDateString()
+                : null,
+        ]);
+    }
+
+    /**
+     * SPEC-05 (Teil B): Status für Frontend-Banner/Dialog (JournalList.tsx) -
+     * aktuelle Sperre, Anzahl offener Entwürfe, ältester offener Entwurf und ob
+     * die GoBD-Frist überschritten ist (ältester offener Entwurf liegt vor dem
+     * Vormonat, d.h. mindestens im Vorvormonat oder früher).
+     */
+    public function lockStatus(): JsonResponse
+    {
+        $tenant = $this->getTenantOrFail();
+        $settings = CompanySetting::where('tenant_id', $tenant->id)->first();
+
+        $openDraftsQuery = JournalEntry::where('tenant_id', $tenant->id)->where('status', 'draft');
+        $openDraftsCount = (clone $openDraftsQuery)->count();
+        $oldestOpenDraftDate = (clone $openDraftsQuery)->min('booking_date');
+
+        // "älter als der Vormonat" = vor dem ersten Tag des Vormonats (also
+        // Vorvormonat oder früher) - ein Entwurf INNERHALB des Vormonats gilt noch
+        // als in der Kulanzfrist.
+        $startOfPreviousMonth = Carbon::now()->startOfMonth()->subMonthNoOverflow();
+        $gobdDeadlineExceeded = $oldestOpenDraftDate !== null
+            && Carbon::parse($oldestOpenDraftDate)->lt($startOfPreviousMonth);
+
+        return response()->json([
+            'books_locked_until' => $settings?->books_locked_until
+                ? Carbon::parse($settings->books_locked_until)->toDateString()
+                : null,
+            'open_drafts_count' => $openDraftsCount,
+            'oldest_open_draft_date' => $oldestOpenDraftDate
+                ? Carbon::parse($oldestOpenDraftDate)->toDateString()
+                : null,
+            'gobd_deadline_exceeded' => $gobdDeadlineExceeded,
+        ]);
     }
 }

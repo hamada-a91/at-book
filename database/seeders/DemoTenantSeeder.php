@@ -14,6 +14,7 @@ use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Services\BookingService;
 use App\Modules\Contacts\Models\Contact;
 use App\Services\InventoryService;
+use App\Services\NumberSequenceService;
 use App\Services\Skr03AccountPlanGenerator;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Auth;
@@ -188,11 +189,16 @@ class DemoTenantSeeder extends Seeder
         $bookingService->lockBooking($storniert->id);
         $bookingService->reverseBooking($storniert->id);
 
-        // 8. Rechnungs-Drafts (zum Testen von Buchen/PDF/Versand über die UI)
-        $this->createDraftInvoice('RE-'.date('Y').'-0001', $kunde->id, $revenue->id, [
+        // 8. Rechnungs-Drafts (zum Testen von Buchen/PDF/Versand über die UI).
+        // SPEC-05 (Teil A): Nummern über NumberSequenceService statt fest verdrahtet
+        // (RE-JJJJ-0001/0002) - sonst würde die erste über die UI erstellte Rechnung
+        // (die den Sequence-Service nutzt) mit RE-JJJJ-0001 kollidieren, weil die
+        // Sequenz-Tabelle zum Migrationszeitpunkt noch leer war (keine Bestandsdaten).
+        $numberSequenceService = new NumberSequenceService;
+        $this->createDraftInvoice($numberSequenceService->next('invoice'), $kunde->id, $revenue->id, [
             ['description' => 'IT-Beratung Juni', 'quantity' => 8, 'unit' => 'Stunde', 'unit_price' => 12000],
         ]);
-        $this->createDraftInvoice('RE-'.date('Y').'-0002', $kunde->id, $revenue->id, [
+        $this->createDraftInvoice($numberSequenceService->next('invoice'), $kunde->id, $revenue->id, [
             ['description' => 'Business Laptop 15"', 'quantity' => 2, 'unit' => 'Stück', 'unit_price' => 89900, 'product_id' => $laptop->id],
             ['description' => 'Einrichtung vor Ort', 'quantity' => 3, 'unit' => 'Stunde', 'unit_price' => 12000],
         ]);

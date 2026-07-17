@@ -173,7 +173,11 @@ class BookingServiceTest extends TestCase
         $this->assertNotSame($originalPublicId, $reversal->public_id);
         $this->assertSame('posted', $reversal->status);
         $this->assertNotNull($reversal->locked_at);
-        $this->assertSame('Storno: Fehlbuchung', $reversal->description);
+        // SPEC-05 (Teil B): Beschreibung nennt seit dieser Spec das Originaldatum
+        // (vorher: einfaches "Storno: {description}" ohne Datum).
+        $this->assertSame('Storno zu Buchung vom 01.07.2026: Fehlbuchung', $reversal->description);
+        $this->assertNotNull($reversal->journal_number, 'SPEC-05 (Teil A): Storno bekommt eine eigene journal_number.');
+        $this->assertNotSame($entry->fresh()->journal_number, $reversal->journal_number);
 
         // Seiten vertauscht (Generalumkehr)
         $originalLines = $entry->lines()->orderBy('account_id')->get();

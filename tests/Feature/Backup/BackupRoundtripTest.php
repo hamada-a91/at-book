@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Backup;
 
+use App\Models\CompanySetting;
 use App\Models\Concerns\BelongsToTenant;
 use App\Models\Invoice;
 use App\Models\Tenant;
@@ -10,6 +11,7 @@ use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Models\JournalEntry;
 use App\Modules\Contacts\Models\Contact;
 use App\Services\Backup\Transformers\EntityTransformerRegistry;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -70,10 +72,20 @@ class BackupRoundtripTest extends TestCase
      *   Backup-Moduls selbst, keine Buchhaltungsdaten). Siehe auch den
      *   Kommentar "documents excluded" in EntityTransformerRegistry für ein
      *   analoges, dort bereits vom Projekt getroffenes Beispiel.
+     * - NumberSequence (SPEC-05, Teil A): bewusst NICHT exportiert/importiert
+     *   (siehe docs/specs/SPEC-05-nummernkreise.md, Backup-Impact Punkt 1).
+     *   Ein Export/Import der Sequenz-Tabelle selbst wäre fragil - u.a. bei
+     *   alten Backups (Tabelle existierte noch nicht) oder manuell
+     *   manipulierten last_number-Werten. Stattdessen rekonstruiert
+     *   BackupImportService::reconstructNumberSequences() last_number je
+     *   Typ/Jahr NACH dem Import direkt aus den tatsächlich importierten
+     *   Dokument-/Journalnummern (robuster, kann nicht aus dem Tritt geraten).
+     *   Test: tests/Feature/Backup/NumberSequenceReconstructionTest.php.
      */
     private const REGISTRY_EXCEPTIONS = [
         \App\Models\BackupJob::class,
         \App\Models\BackupAuditLog::class,
+        \App\Models\NumberSequence::class,
     ];
 
     /**
@@ -140,6 +152,10 @@ class BackupRoundtripTest extends TestCase
         // die Beleg-Zeile vor dem Export entfernt. Die Lücke selbst bleibt über
         // test_known_bug_beleg_line_with_price_breaks_import abgesichert.
         $dataA->beleg->lines()->delete();
+
+        // SPEC-05 (Teil B): books_locked_until VOR dem Export setzen, um zu prüfen,
+        // dass die Periodensperre den Roundtrip überlebt (CompanySettingTransformer).
+        $dataA->companySetting->update(['books_locked_until' => now()->subDays(20)->toDateString()]);
 
         // Counts VOR dem Export einfrieren, um später "Tenant A unverändert" zu prüfen.
         $countsBeforeA = $this->tenantModelCounts($tenantA->id);
@@ -271,6 +287,15 @@ class BackupRoundtripTest extends TestCase
         $this->assertNotSame($dataA->journalPosted->public_id, $journalPostedB->public_id);
         $this->assertNotNull($journalPostedB->locked_at, 'locked_at (GoBD-Festschreibung) muss den Roundtrip überleben.');
 
+        // SPEC-05 (Teil A): journal_number (seit lockBooking() vergeben) muss den
+        // Roundtrip überleben (JournalEntryTransformer).
+        $this->assertNotNull($dataA->journalPosted->journal_number, 'Sanity: lockBooking() muss journal_number vergeben haben.');
+        $this->assertSame(
+            $dataA->journalPosted->journal_number,
+            $journalPostedB->journal_number,
+            'SPEC-05: journal_number muss den Roundtrip überleben.'
+        );
+
         // BEKANNTER BUG (siehe Abschlussbericht SPEC-02): JournalEntryTransformer
         // exportiert das Feld 'status' NICHT (siehe
         // app/Services/Backup/Transformers/JournalEntryTransformer.php::transform).
@@ -306,6 +331,16 @@ class BackupRoundtripTest extends TestCase
             ->first();
         $this->assertNotNull($journalCancelledB);
         $this->assertNotNull($journalCancelledB->locked_at);
+
+        // SPEC-05 (Teil B): books_locked_until muss den Roundtrip überleben
+        // (CompanySettingTransformer).
+        $companySettingB = CompanySetting::withoutGlobalScopes()->where('tenant_id', $tenantB->id)->first();
+        $this->assertNotNull($companySettingB);
+        $this->assertNotNull($companySettingB->books_locked_until, 'SPEC-05: books_locked_until muss den Roundtrip überleben.');
+        $this->assertSame(
+            $dataA->companySetting->fresh()->books_locked_until->toDateString(),
+            Carbon::parse($companySettingB->books_locked_until)->toDateString()
+        );
     }
 
     /**

@@ -16,6 +16,11 @@ class JournalEntryTransformer extends BaseTransformer
         return [
             'public_id' => $model->public_id,
             'batch_id' => $model->batch_id,
+            // SPEC-05 (Teil A): journal_number wird erst bei lockBooking() vergeben,
+            // ist also für Drafts null - optional für alte Backups ohne dieses Feld
+            // (Import setzt dann ebenfalls null, siehe BackupImportService-Kommentar
+            // 'prepareForInsert' - unbekannte/fehlende Felder sind bereits Default null).
+            'journal_number' => $model->journal_number,
             'booking_date' => $this->formatDate($model->booking_date),
             'description' => $model->description,
             'reference' => $model->reference,

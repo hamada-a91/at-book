@@ -2,14 +2,14 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use App\Models\Concerns\BelongsToTenant;
 use App\Models\Concerns\HasPublicId;
+use Illuminate\Database\Eloquent\Model;
 
 class CompanySetting extends Model
 {
     use BelongsToTenant, HasPublicId;
-    
+
     protected $fillable = [
         'company_name',
         'street',
@@ -30,6 +30,8 @@ class CompanySetting extends Model
         'account_plan_initialized_at',
         'account_plan_last_updated_at',
         'onboarding_completed',
+        // SPEC-05 (Teil B)
+        'books_locked_until',
     ];
 
     /**
@@ -46,6 +48,7 @@ class CompanySetting extends Model
             'account_plan_initialized_at' => 'datetime',
             'account_plan_last_updated_at' => 'datetime',
             'onboarding_completed' => 'boolean',
+            'books_locked_until' => 'date',
         ];
     }
 }

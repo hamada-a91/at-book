@@ -9,8 +9,10 @@ use App\Http\Requests\StoreInvoiceRequest;
 use App\Models\Invoice;
 use App\Modules\Accounting\Services\InvoiceBookingService;
 use App\Rules\TenantExists;
+use App\Services\NumberSequenceService;
 use DomainException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -19,7 +21,8 @@ class InvoiceController extends Controller
     use HasTenantScope;
 
     public function __construct(
-        private InvoiceBookingService $invoiceBookingService
+        private InvoiceBookingService $invoiceBookingService,
+        private NumberSequenceService $numberSequenceService
     ) {}
 
     public function index()
@@ -37,68 +40,68 @@ class InvoiceController extends Controller
     {
         $validated = $request->validated();
 
-        // Generate invoice number (RE-2025-0001) - tenant-scoped
-        $tenant = $this->getTenantOrFail();
-        $year = date('Y');
-        $lastInvoice = Invoice::where('tenant_id', $tenant->id)
-            ->where('invoice_number', 'like', "RE-$year-%")
-            ->latest('id')
-            ->first();
-        $nextNumber = $lastInvoice ? intval(substr($lastInvoice->invoice_number, -4)) + 1 : 1;
-        $invoiceNumber = sprintf('RE-%s-%04d', $year, $nextNumber);
+        // SPEC-05 (Teil A): Nummernvergabe über NumberSequenceService (lockForUpdate,
+        // race-frei) statt "letzte Nummer + 1" - komplett innerhalb EINER Transaktion,
+        // damit Nummernvergabe und Rechnungserstellung atomar sind (bricht die
+        // Rechnungserstellung ab, bleibt keine "verbrauchte" Nummer zurück).
+        $invoice = DB::transaction(function () use ($validated) {
+            $invoiceNumber = $this->numberSequenceService->next('invoice');
 
-        // Calculate totals
-        $subtotal = 0;
-        $taxTotal = 0;
+            // Calculate totals
+            $subtotal = 0;
+            $taxTotal = 0;
 
-        foreach ($validated['lines'] as $line) {
-            $lineTotal = $line['quantity'] * $line['unit_price'];
-            $lineTax = round($lineTotal * ($line['tax_rate'] / 100));
-            $subtotal += $lineTotal;
-            $taxTotal += $lineTax;
-        }
-
-        $total = $subtotal + $taxTotal;
-
-        // Create invoice
-        $invoice = Invoice::create([
-            'invoice_number' => $invoiceNumber,
-            'contact_id' => $validated['contact_id'],
-            'invoice_date' => $validated['invoice_date'],
-            'due_date' => $validated['due_date'],
-            'subtotal' => $subtotal,
-            'tax_total' => $taxTotal,
-            'total' => $total,
-            'notes' => $validated['notes'] ?? null,
-            'intro_text' => $validated['intro_text'] ?? 'Unsere Lieferungen/Leistungen stellen wir Ihnen wie folgt in Rechnung.',
-            'payment_terms' => $validated['payment_terms'] ?? 'Zahlbar sofort, rein netto',
-            'footer_note' => $validated['footer_note'] ?? 'Vielen Dank für die gute Zusammenarbeit.',
-            'order_id' => $validated['order_id'] ?? null,
-            'status' => 'draft',
-        ]);
-
-        // Create invoice lines
-        foreach ($validated['lines'] as $line) {
-            $lineTotal = $line['quantity'] * $line['unit_price'];
-            $invoice->lines()->create([
-                'product_id' => $line['product_id'] ?? null,
-                'description' => $line['description'],
-                'quantity' => $line['quantity'],
-                'unit' => $line['unit'] ?? 'Stück',
-                'unit_price' => $line['unit_price'],
-                'tax_rate' => $line['tax_rate'],
-                'line_total' => $lineTotal,
-                'account_id' => $line['account_id'],
-            ]);
-        }
-
-        // Update order status if invoice was created from an order
-        if (! empty($validated['order_id'])) {
-            $order = \App\Models\Order::find($validated['order_id']);
-            if ($order) {
-                $order->update(['status' => 'invoiced']);
+            foreach ($validated['lines'] as $line) {
+                $lineTotal = $line['quantity'] * $line['unit_price'];
+                $lineTax = round($lineTotal * ($line['tax_rate'] / 100));
+                $subtotal += $lineTotal;
+                $taxTotal += $lineTax;
             }
-        }
+
+            $total = $subtotal + $taxTotal;
+
+            // Create invoice
+            $invoice = Invoice::create([
+                'invoice_number' => $invoiceNumber,
+                'contact_id' => $validated['contact_id'],
+                'invoice_date' => $validated['invoice_date'],
+                'due_date' => $validated['due_date'],
+                'subtotal' => $subtotal,
+                'tax_total' => $taxTotal,
+                'total' => $total,
+                'notes' => $validated['notes'] ?? null,
+                'intro_text' => $validated['intro_text'] ?? 'Unsere Lieferungen/Leistungen stellen wir Ihnen wie folgt in Rechnung.',
+                'payment_terms' => $validated['payment_terms'] ?? 'Zahlbar sofort, rein netto',
+                'footer_note' => $validated['footer_note'] ?? 'Vielen Dank für die gute Zusammenarbeit.',
+                'order_id' => $validated['order_id'] ?? null,
+                'status' => 'draft',
+            ]);
+
+            // Create invoice lines
+            foreach ($validated['lines'] as $line) {
+                $lineTotal = $line['quantity'] * $line['unit_price'];
+                $invoice->lines()->create([
+                    'product_id' => $line['product_id'] ?? null,
+                    'description' => $line['description'],
+                    'quantity' => $line['quantity'],
+                    'unit' => $line['unit'] ?? 'Stück',
+                    'unit_price' => $line['unit_price'],
+                    'tax_rate' => $line['tax_rate'],
+                    'line_total' => $lineTotal,
+                    'account_id' => $line['account_id'],
+                ]);
+            }
+
+            // Update order status if invoice was created from an order
+            if (! empty($validated['order_id'])) {
+                $order = \App\Models\Order::find($validated['order_id']);
+                if ($order) {
+                    $order->update(['status' => 'invoiced']);
+                }
+            }
+
+            return $invoice;
+        });
 
         return response()->json($invoice->load(['contact', 'lines']), 201);
     }

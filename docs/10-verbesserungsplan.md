@@ -31,7 +31,7 @@ Detaillierte, umsetzbare Spezifikationen liegen in **[specs/](specs/README.md)**
 | Spec | Inhalt |
 |---|---|
 | [SPEC-04](specs/SPEC-04-buchungslogik.md) | Rechnungs-/Beleg-Buchung in Services + `DB::transaction`, Festschreibung (`locked_at`), USt-Konten über `tax_codes` statt hartcodiert |
-| [SPEC-05](specs/SPEC-05-nummernkreise.md) | Tabelle `number_sequences` mit Sperre (`FOR UPDATE`) – lückenlose, race-freie Nummern für Rechnungen/Belege |
+| [SPEC-05](specs/SPEC-05-nummernkreise.md) | Tabelle `number_sequences` mit Sperre (`FOR UPDATE`) – lückenlose, race-freie Nummern für Rechnungen/Belege · **plus Periodenfestschreibung** (Monatsabschluss wie Lexware: Entwürfe bis Datum X festschreiben, Erfassungssperre, GoBD-Frist-Hinweis) |
 | [SPEC-06](specs/SPEC-06-audit-log.md) | Audit-Log aktivieren (Observer für JournalEntry/Invoice/Beleg) |
 | [SPEC-07](specs/SPEC-07-db-haertung.md) | Betragsspalten auf `bigint`, `tenant_id`-Indizes, Onboarding-Cache |
 

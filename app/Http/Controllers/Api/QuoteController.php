@@ -7,11 +7,17 @@ use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\Quote;
 use App\Rules\TenantExists;
+use App\Services\NumberSequenceService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class QuoteController extends Controller
 {
     use HasTenantScope;
+
+    public function __construct(
+        private NumberSequenceService $numberSequenceService
+    ) {}
 
     public function index()
     {
@@ -43,59 +49,56 @@ class QuoteController extends Controller
             'lines.*.tax_rate' => 'required|numeric|min:0',
         ]);
 
-        // Generate quote number (AN-2025-0001) - tenant-scoped (include soft-deleted to avoid duplicates)
-        $tenant = $this->getTenantOrFail();
-        $year = date('Y');
-        $lastQuote = Quote::withTrashed()
-            ->where('tenant_id', $tenant->id)
-            ->where('quote_number', 'like', "AN-$year-%")
-            ->latest('id')
-            ->first();
-        $nextNumber = $lastQuote ? intval(substr($lastQuote->quote_number, -4)) + 1 : 1;
-        $quoteNumber = sprintf('AN-%s-%04d', $year, $nextNumber);
+        // SPEC-05 (Teil A): Nummernvergabe über NumberSequenceService statt "max+1",
+        // komplett innerhalb einer Transaktion.
+        $quote = DB::transaction(function () use ($validated) {
+            $quoteNumber = $this->numberSequenceService->next('quote');
 
-        // Calculate totals
-        $subtotal = 0;
-        $taxTotal = 0;
+            // Calculate totals
+            $subtotal = 0;
+            $taxTotal = 0;
 
-        foreach ($validated['lines'] as $line) {
-            $lineTotal = $line['quantity'] * $line['unit_price'];
-            $lineTax = round($lineTotal * ($line['tax_rate'] / 100));
-            $subtotal += $lineTotal;
-            $taxTotal += $lineTax;
-        }
+            foreach ($validated['lines'] as $line) {
+                $lineTotal = $line['quantity'] * $line['unit_price'];
+                $lineTax = round($lineTotal * ($line['tax_rate'] / 100));
+                $subtotal += $lineTotal;
+                $taxTotal += $lineTax;
+            }
 
-        $total = $subtotal + $taxTotal;
+            $total = $subtotal + $taxTotal;
 
-        // Create quote
-        $quote = Quote::create([
-            'quote_number' => $quoteNumber,
-            'contact_id' => $validated['contact_id'],
-            'quote_date' => $validated['quote_date'],
-            'valid_until' => $validated['valid_until'] ?? null,
-            'subtotal' => $subtotal,
-            'tax_total' => $taxTotal,
-            'total' => $total,
-            'intro_text' => $validated['intro_text'] ?? 'Wir freuen uns, Ihnen folgendes Angebot unterbreiten zu dürfen.',
-            'payment_terms' => $validated['payment_terms'] ?? 'Zahlbar sofort, rein netto',
-            'footer_note' => $validated['footer_note'] ?? 'Wir freuen uns auf Ihre Auftragserteilung.',
-            'notes' => $validated['notes'] ?? null,
-            'status' => 'draft',
-        ]);
-
-        // Create quote lines
-        foreach ($validated['lines'] as $line) {
-            $lineTotal = $line['quantity'] * $line['unit_price'];
-            $quote->lines()->create([
-                'product_id' => $line['product_id'] ?? null,
-                'description' => $line['description'],
-                'quantity' => $line['quantity'],
-                'unit' => $line['unit'] ?? 'Stück',
-                'unit_price' => $line['unit_price'],
-                'tax_rate' => $line['tax_rate'],
-                'line_total' => $lineTotal,
+            // Create quote
+            $quote = Quote::create([
+                'quote_number' => $quoteNumber,
+                'contact_id' => $validated['contact_id'],
+                'quote_date' => $validated['quote_date'],
+                'valid_until' => $validated['valid_until'] ?? null,
+                'subtotal' => $subtotal,
+                'tax_total' => $taxTotal,
+                'total' => $total,
+                'intro_text' => $validated['intro_text'] ?? 'Wir freuen uns, Ihnen folgendes Angebot unterbreiten zu dürfen.',
+                'payment_terms' => $validated['payment_terms'] ?? 'Zahlbar sofort, rein netto',
+                'footer_note' => $validated['footer_note'] ?? 'Wir freuen uns auf Ihre Auftragserteilung.',
+                'notes' => $validated['notes'] ?? null,
+                'status' => 'draft',
             ]);
-        }
+
+            // Create quote lines
+            foreach ($validated['lines'] as $line) {
+                $lineTotal = $line['quantity'] * $line['unit_price'];
+                $quote->lines()->create([
+                    'product_id' => $line['product_id'] ?? null,
+                    'description' => $line['description'],
+                    'quantity' => $line['quantity'],
+                    'unit' => $line['unit'] ?? 'Stück',
+                    'unit_price' => $line['unit_price'],
+                    'tax_rate' => $line['tax_rate'],
+                    'line_total' => $lineTotal,
+                ]);
+            }
+
+            return $quote;
+        });
 
         return response()->json($quote->load(['contact', 'lines']), 201);
     }
@@ -301,53 +304,50 @@ class QuoteController extends Controller
             return response()->json(['error' => 'Angebot muss zuerst akzeptiert werden'], 400);
         }
 
-        // Generate order number (include soft-deleted to avoid duplicates)
-        $tenant = $this->getTenantOrFail();
-        $year = date('Y');
-        $lastOrder = Order::withTrashed()
-            ->where('tenant_id', $tenant->id)
-            ->where('order_number', 'like', "AB-$year-%")
-            ->latest('id')
-            ->first();
-        $nextNumber = $lastOrder ? intval(substr($lastOrder->order_number, -4)) + 1 : 1;
-        $orderNumber = sprintf('AB-%s-%04d', $year, $nextNumber);
+        // SPEC-05 (Teil A): Nummernvergabe über NumberSequenceService statt "max+1",
+        // komplett innerhalb einer Transaktion.
+        $order = DB::transaction(function () use ($quote) {
+            $orderNumber = $this->numberSequenceService->next('order');
 
-        // Create order
-        $order = Order::create([
-            'quote_id' => $quote->id,
-            'contact_id' => $quote->contact_id,
-            'order_number' => $orderNumber,
-            'order_date' => now()->toDateString(),
-            'subtotal' => $quote->subtotal,
-            'tax_total' => $quote->tax_total,
-            'total' => $quote->total,
-            'intro_text' => $quote->intro_text,
-            'payment_terms' => $quote->payment_terms,
-            'footer_note' => $quote->footer_note,
-            'notes' => $quote->notes,
-            'status' => 'open',
-        ]);
-
-        // Copy quote lines to order lines
-        foreach ($quote->lines as $quoteLine) {
-            $order->lines()->create([
-                'product_id' => $quoteLine->product_id,
-                'description' => $quoteLine->description,
-                'quantity' => $quoteLine->quantity,
-                'delivered_quantity' => 0,
-                'invoiced_quantity' => 0,
-                'unit' => $quoteLine->unit,
-                'unit_price' => $quoteLine->unit_price,
-                'tax_rate' => $quoteLine->tax_rate,
-                'line_total' => $quoteLine->line_total,
+            // Create order
+            $order = Order::create([
+                'quote_id' => $quote->id,
+                'contact_id' => $quote->contact_id,
+                'order_number' => $orderNumber,
+                'order_date' => now()->toDateString(),
+                'subtotal' => $quote->subtotal,
+                'tax_total' => $quote->tax_total,
+                'total' => $quote->total,
+                'intro_text' => $quote->intro_text,
+                'payment_terms' => $quote->payment_terms,
+                'footer_note' => $quote->footer_note,
+                'notes' => $quote->notes,
+                'status' => 'open',
             ]);
-        }
 
-        // Update quote status and link to order
-        $quote->update([
-            'status' => 'ordered',
-            'order_id' => $order->id,
-        ]);
+            // Copy quote lines to order lines
+            foreach ($quote->lines as $quoteLine) {
+                $order->lines()->create([
+                    'product_id' => $quoteLine->product_id,
+                    'description' => $quoteLine->description,
+                    'quantity' => $quoteLine->quantity,
+                    'delivered_quantity' => 0,
+                    'invoiced_quantity' => 0,
+                    'unit' => $quoteLine->unit,
+                    'unit_price' => $quoteLine->unit_price,
+                    'tax_rate' => $quoteLine->tax_rate,
+                    'line_total' => $quoteLine->line_total,
+                ]);
+            }
+
+            // Update quote status and link to order
+            $quote->update([
+                'status' => 'ordered',
+                'order_id' => $order->id,
+            ]);
+
+            return $order;
+        });
 
         return response()->json($order->load(['contact', 'lines', 'quote']), 201);
     }

@@ -10,6 +10,7 @@ use App\Models\TaxCode;
 use App\Modules\Accounting\Services\BookingService;
 use App\Rules\TenantExists;
 use App\Services\InventoryService;
+use App\Services\NumberSequenceService;
 use DomainException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +19,10 @@ use Illuminate\Support\Facades\Storage;
 class BelegController extends Controller
 {
     use HasTenantScope;
+
+    public function __construct(
+        private NumberSequenceService $numberSequenceService
+    ) {}
 
     public function index(Request $request)
     {
@@ -80,13 +85,9 @@ class BelegController extends Controller
             'lines.*.account_id' => ['nullable', new TenantExists('accounts')],
         ]);
 
-        // Generate document number (BEL-2025-0001)
-        $year = date('Y');
-        $lastBeleg = Beleg::withTrashed()->where('document_number', 'like', "BEL-$year-%")->latest('id')->first();
-        $nextNumber = $lastBeleg ? intval(substr($lastBeleg->document_number, -4)) + 1 : 1;
-        $documentNumber = sprintf('BEL-%s-%04d', $year, $nextNumber);
-
-        // Handle file upload if present
+        // Handle file upload if present (Dateisystem-Operation, bewusst außerhalb
+        // der DB::transaction() unten - ein Rollback der Buchhaltungsdaten löscht die
+        // hochgeladene Datei nicht automatisch mit, das ist ein bestehendes Verhalten).
         $filePath = null;
         $fileName = null;
         if ($request->hasFile('file')) {
@@ -95,40 +96,48 @@ class BelegController extends Controller
             $filePath = $file->store('belege', 'public');
         }
 
-        $beleg = Beleg::create([
-            'document_number' => $documentNumber,
-            'document_type' => $validated['document_type'],
-            'title' => $validated['title'],
-            'document_date' => $validated['document_date'],
-            'amount' => $validated['amount'],
-            'tax_amount' => $validated['tax_amount'] ?? 0,
-            'contact_id' => $validated['contact_id'] ?? null,
-            'category_account_id' => $validated['category_account_id'] ?? null,
-            'is_paid' => $validated['is_paid'] ?? false,
-            'payment_account_id' => $validated['payment_account_id'] ?? null,
-            'notes' => $validated['notes'] ?? null,
-            'due_date' => $validated['due_date'] ?? null,
-            'file_path' => $filePath,
-            'file_name' => $fileName,
-            'status' => 'draft',
-        ]);
+        // SPEC-05 (Teil A): Nummernvergabe über NumberSequenceService statt "max+1",
+        // komplett innerhalb einer Transaktion.
+        $beleg = DB::transaction(function () use ($validated, $filePath, $fileName) {
+            $documentNumber = $this->numberSequenceService->next('beleg');
 
-        // Create beleg lines if provided
-        if (! empty($validated['lines'])) {
-            foreach ($validated['lines'] as $line) {
-                $lineTotal = ($line['quantity'] ?? 1) * ($line['unit_price'] ?? 0);
-                $beleg->lines()->create([
-                    'product_id' => $line['product_id'] ?? null,
-                    'description' => $line['description'],
-                    'quantity' => $line['quantity'] ?? 1,
-                    'unit' => $line['unit'] ?? 'Stück',
-                    'unit_price' => $line['unit_price'] ?? 0,
-                    'tax_rate' => $line['tax_rate'] ?? 19,
-                    'line_total' => $lineTotal,
-                    'account_id' => $line['account_id'] ?? null,
-                ]);
+            $beleg = Beleg::create([
+                'document_number' => $documentNumber,
+                'document_type' => $validated['document_type'],
+                'title' => $validated['title'],
+                'document_date' => $validated['document_date'],
+                'amount' => $validated['amount'],
+                'tax_amount' => $validated['tax_amount'] ?? 0,
+                'contact_id' => $validated['contact_id'] ?? null,
+                'category_account_id' => $validated['category_account_id'] ?? null,
+                'is_paid' => $validated['is_paid'] ?? false,
+                'payment_account_id' => $validated['payment_account_id'] ?? null,
+                'notes' => $validated['notes'] ?? null,
+                'due_date' => $validated['due_date'] ?? null,
+                'file_path' => $filePath,
+                'file_name' => $fileName,
+                'status' => 'draft',
+            ]);
+
+            // Create beleg lines if provided
+            if (! empty($validated['lines'])) {
+                foreach ($validated['lines'] as $line) {
+                    $lineTotal = ($line['quantity'] ?? 1) * ($line['unit_price'] ?? 0);
+                    $beleg->lines()->create([
+                        'product_id' => $line['product_id'] ?? null,
+                        'description' => $line['description'],
+                        'quantity' => $line['quantity'] ?? 1,
+                        'unit' => $line['unit'] ?? 'Stück',
+                        'unit_price' => $line['unit_price'] ?? 0,
+                        'tax_rate' => $line['tax_rate'] ?? 19,
+                        'line_total' => $lineTotal,
+                        'account_id' => $line['account_id'] ?? null,
+                    ]);
+                }
             }
-        }
+
+            return $beleg;
+        });
 
         // Load relationships and return
         $beleg->load(['contact', 'journalEntry', 'categoryAccount', 'paymentAccount', 'lines.product']);
@@ -204,6 +213,14 @@ class BelegController extends Controller
 
         try {
             $beleg = DB::transaction(function () use ($beleg) {
+                // SPEC-05 (Teil B): Erfassungssperre gilt auch für die automatische
+                // Beleg-Buchung - Belegdatum in einer festgeschriebenen Periode -> 422,
+                // bevor überhaupt Konten aufgelöst/Zeilen aufgebaut werden (fail fast).
+                // createBooking() prüft das ohnehin nochmal (doppelte Absicherung), aber
+                // hier vermeiden wir unnötige Arbeit bei einer von vornherein unbuchbaren
+                // Belegdatum-Kombination.
+                app(BookingService::class)->assertPeriodOpen($beleg->document_date->format('Y-m-d'));
+
                 $lines = [];
 
                 // 1. Contact Line (Debitor/Kreditor)

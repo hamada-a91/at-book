@@ -2,15 +2,21 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Controller;
 use App\Http\Controllers\Concerns\HasTenantScope;
+use App\Http\Controllers\Controller;
 use App\Models\DeliveryNote;
 use App\Models\Invoice;
+use App\Services\NumberSequenceService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class DeliveryNoteController extends Controller
 {
     use HasTenantScope;
+
+    public function __construct(
+        private NumberSequenceService $numberSequenceService
+    ) {}
 
     public function index()
     {
@@ -19,6 +25,7 @@ class DeliveryNoteController extends Controller
             ->with(['contact', 'lines.orderLine', 'order'])
             ->orderBy('id', 'desc')
             ->get();
+
         return response()->json($deliveryNotes);
     }
 
@@ -26,7 +33,7 @@ class DeliveryNoteController extends Controller
     {
         $tenant = $this->getTenantOrFail();
         $deliveryNote = DeliveryNote::where('tenant_id', $tenant->id)->findOrFail($id);
-        
+
         return response()->json($deliveryNote->load(['contact', 'lines.orderLine', 'order']));
     }
 
@@ -44,7 +51,7 @@ class DeliveryNoteController extends Controller
         // Update order status
         $order = $deliveryNote->order;
         $order->load('lines');
-        
+
         $allDelivered = $order->lines->every(function ($line) {
             return $line->delivered_quantity >= $line->quantity;
         });
@@ -62,6 +69,7 @@ class DeliveryNoteController extends Controller
         }
 
         $deliveryNote->delete();
+
         return response()->json(['message' => 'Lieferschein gelöscht']);
     }
 
@@ -79,80 +87,78 @@ class DeliveryNoteController extends Controller
             return response()->json(['error' => 'Dieser Lieferschein wurde bereits in Rechnung gestellt'], 400);
         }
 
-        // Generate invoice number
-        $tenant = $this->getTenantOrFail();
-        $year = date('Y');
-        $lastInvoice = Invoice::where('tenant_id', $tenant->id)
-            ->where('invoice_number', 'like', "RE-$year-%")
-            ->latest('id')
-            ->first();
-        $nextNumber = $lastInvoice ? intval(substr($lastInvoice->invoice_number, -4)) + 1 : 1;
-        $invoiceNumber = sprintf("RE-%s-%04d", $year, $nextNumber);
+        // SPEC-05 (Teil A): Nummernvergabe über NumberSequenceService statt "max+1",
+        // komplett innerhalb einer Transaktion.
+        $invoice = DB::transaction(function () use ($validated, $deliveryNote) {
+            $invoiceNumber = $this->numberSequenceService->next('invoice');
 
-        // Calculate totals from delivery note lines
-        $subtotal = 0;
-        $taxTotal = 0;
+            // Calculate totals from delivery note lines
+            $subtotal = 0;
+            $taxTotal = 0;
 
-        foreach ($deliveryNote->lines as $dnLine) {
-            $orderLine = $dnLine->orderLine;
-            $lineTotal = $dnLine->quantity * $orderLine->unit_price;
-            $lineTax = round($lineTotal * ($orderLine->tax_rate / 100));
-            $subtotal += $lineTotal;
-            $taxTotal += $lineTax;
-        }
+            foreach ($deliveryNote->lines as $dnLine) {
+                $orderLine = $dnLine->orderLine;
+                $lineTotal = $dnLine->quantity * $orderLine->unit_price;
+                $lineTax = round($lineTotal * ($orderLine->tax_rate / 100));
+                $subtotal += $lineTotal;
+                $taxTotal += $lineTax;
+            }
 
-        $total = $subtotal + $taxTotal;
+            $total = $subtotal + $taxTotal;
 
-        // Create invoice
-        $order = $deliveryNote->order;
-        $invoice = Invoice::create([
-            'order_id' => $order->id,
-            'invoice_number' => $invoiceNumber,
-            'contact_id' => $deliveryNote->contact_id,
-            'invoice_date' => $validated['invoice_date'],
-            'due_date' => $validated['due_date'],
-            'subtotal' => $subtotal,
-            'tax_total' => $taxTotal,
-            'total' => $total,
-            'intro_text' => $order->intro_text,
-            'payment_terms' => $order->payment_terms,
-            'footer_note' => $order->footer_note,
-            'status' => 'draft',
-        ]);
-
-        // Create invoice lines from delivery note lines
-        foreach ($deliveryNote->lines as $dnLine) {
-            $orderLine = $dnLine->orderLine;
-            $lineTotal = $dnLine->quantity * $orderLine->unit_price;
-            
-            $invoice->lines()->create([
-                'description' => $dnLine->description,
-                'quantity' => $dnLine->quantity,
-                'unit' => $dnLine->unit,
-                'unit_price' => $orderLine->unit_price,
-                'tax_rate' => $orderLine->tax_rate,
-                'line_total' => $lineTotal,
-                'account_id' => 1, // TODO: Map tax rate to account
+            // Create invoice
+            $order = $deliveryNote->order;
+            $invoice = Invoice::create([
+                'order_id' => $order->id,
+                'invoice_number' => $invoiceNumber,
+                'contact_id' => $deliveryNote->contact_id,
+                'invoice_date' => $validated['invoice_date'],
+                'due_date' => $validated['due_date'],
+                'subtotal' => $subtotal,
+                'tax_total' => $taxTotal,
+                'total' => $total,
+                'intro_text' => $order->intro_text,
+                'payment_terms' => $order->payment_terms,
+                'footer_note' => $order->footer_note,
+                'status' => 'draft',
             ]);
 
-            // Update order line invoiced quantity
-            $orderLine->increment('invoiced_quantity', $dnLine->quantity);
-        }
+            // Create invoice lines from delivery note lines
+            foreach ($deliveryNote->lines as $dnLine) {
+                $orderLine = $dnLine->orderLine;
+                $lineTotal = $dnLine->quantity * $orderLine->unit_price;
 
-        // Update delivery note status
-        $deliveryNote->update(['status' => 'invoiced']);
+                $invoice->lines()->create([
+                    'description' => $dnLine->description,
+                    'quantity' => $dnLine->quantity,
+                    'unit' => $dnLine->unit,
+                    'unit_price' => $orderLine->unit_price,
+                    'tax_rate' => $orderLine->tax_rate,
+                    'line_total' => $lineTotal,
+                    'account_id' => 1, // TODO: Map tax rate to account
+                ]);
 
-        // Update order status
-        $order->load('lines');
-        $allInvoiced = $order->lines->every(function ($line) {
-            return $line->invoiced_quantity >= $line->quantity;
+                // Update order line invoiced quantity
+                $orderLine->increment('invoiced_quantity', $dnLine->quantity);
+            }
+
+            // Update delivery note status
+            $deliveryNote->update(['status' => 'invoiced']);
+
+            // Update order status
+            $order->load('lines');
+            $allInvoiced = $order->lines->every(function ($line) {
+                return $line->invoiced_quantity >= $line->quantity;
+            });
+
+            if ($allInvoiced) {
+                $order->update(['status' => 'invoiced']);
+            } else {
+                $order->update(['status' => 'partial_invoiced']);
+            }
+
+            return $invoice;
         });
-
-        if ($allInvoiced) {
-            $order->update(['status' => 'invoiced']);
-        } else {
-            $order->update(['status' => 'partial_invoiced']);
-        }
 
         return response()->json($invoice->load(['contact', 'lines', 'order']), 201);
     }

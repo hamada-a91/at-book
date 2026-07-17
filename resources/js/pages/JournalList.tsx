@@ -1,20 +1,24 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import axios from '@/lib/axios';
-import { format, startOfMonth, endOfMonth } from 'date-fns';
-import { Plus, Eye, Lock, RotateCcw, CheckCircle2, AlertCircle, FileText, Calendar, Search, Paperclip, Download } from 'lucide-react';
+import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
+import { Plus, Eye, Lock, RotateCcw, CheckCircle2, AlertCircle, FileText, Calendar, Search, Paperclip, Download, CalendarClock, ShieldAlert } from 'lucide-react';
 import { DateRangeSelector } from '@/components/reports/DateRangeSelector';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
     Dialog,
     DialogContent,
     DialogHeader,
     DialogTitle,
+    DialogDescription,
+    DialogFooter,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
     Table,
     TableBody,
@@ -30,6 +34,7 @@ interface JournalEntry {
     description: string;
     status: 'draft' | 'posted' | 'cancelled';
     locked_at: string | null;
+    journal_number?: string | null;
     lines?: JournalEntryLine[];
     beleg?: {
         id: number;
@@ -38,6 +43,13 @@ interface JournalEntry {
         file_path: string | null;
         file_name: string | null;
     };
+}
+
+interface LockStatus {
+    books_locked_until: string | null;
+    open_drafts_count: number;
+    oldest_open_draft_date: string | null;
+    gobd_deadline_exceeded: boolean;
 }
 
 // ... (rest of imports and interfaces)
@@ -79,6 +91,12 @@ export function JournalList() {
     const [selectedBooking, setSelectedBooking] = useState<JournalEntry | null>(null);
     const queryClient = useQueryClient();
 
+    // SPEC-05 (Teil B): Standard-Vorschlag für "Zeitraum festschreiben" ist der
+    // letzte Tag des Vormonats.
+    const defaultLockUntilDate = format(endOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd');
+    const [showLockPeriodDialog, setShowLockPeriodDialog] = useState(false);
+    const [lockUntilDate, setLockUntilDate] = useState(defaultLockUntilDate);
+
     const { data: bookings, isLoading } = useQuery<{ data: JournalEntry[] }>({
         queryKey: ['bookings', statusFilter, searchQuery, dateRange],
         queryFn: async () => {
@@ -90,6 +108,49 @@ export function JournalList() {
 
             const { data } = await axios.get(`/api/bookings?${params.toString()}`);
             return data;
+        },
+    });
+
+    // SPEC-05 (Teil B): Status für Banner + Dialog (books_locked_until, offene
+    // Entwürfe, GoBD-Frist).
+    const { data: lockStatus } = useQuery<LockStatus>({
+        queryKey: ['bookings', 'lock-status'],
+        queryFn: async () => {
+            const { data } = await axios.get('/api/bookings/lock-status');
+            return data;
+        },
+    });
+
+    // Alle offenen Entwürfe (unabhängig vom Datumsfilter der Liste oben) für die
+    // "Anzahl betroffener Entwürfe"-Anzeige im Festschreibungs-Dialog.
+    const { data: allDraftsResponse } = useQuery<{ data: JournalEntry[] }>({
+        queryKey: ['bookings', 'all-drafts-for-lock-period'],
+        queryFn: async () => {
+            const { data } = await axios.get('/api/bookings?status=draft');
+            return data;
+        },
+        enabled: showLockPeriodDialog,
+    });
+
+    const affectedDraftsCount = useMemo(() => {
+        const drafts = allDraftsResponse?.data ?? [];
+        if (!lockUntilDate) return 0;
+        return drafts.filter((d) => d.booking_date <= lockUntilDate).length;
+    }, [allDraftsResponse, lockUntilDate]);
+
+    const lockPeriodMutation = useMutation({
+        mutationFn: async (untilDate: string) => {
+            const { data } = await axios.post('/api/bookings/lock-period', { until_date: untilDate });
+            return data;
+        },
+        onSuccess: (data: { locked_count: number; books_locked_until: string }) => {
+            queryClient.invalidateQueries({ queryKey: ['bookings'] });
+            setShowLockPeriodDialog(false);
+            alert(`✅ Zeitraum bis ${formatDate(data.books_locked_until)} festgeschrieben. ${data.locked_count} Buchung(en) festgeschrieben.`);
+        },
+        onError: (error: any) => {
+            const message = error.response?.data?.error || error.message;
+            alert('❌ Fehler beim Festschreiben: ' + message);
         },
     });
 
@@ -178,13 +239,39 @@ export function JournalList() {
                     <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Journal</h1>
                     <p className="text-slate-500 dark:text-slate-400">Alle Buchungen verwalten (GoBD-konform)</p>
                 </div>
-                <Link to={`/${tenant}/bookings/create`}>
-                    <Button className="shadow-lg shadow-blue-600/20 hover:shadow-blue-600/30 transition-all duration-300 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
-                        <Plus className="w-4 h-4 mr-2" />
-                        Neue Buchung
+                <div className="flex items-center gap-3">
+                    <Button
+                        variant="outline"
+                        onClick={() => {
+                            setLockUntilDate(defaultLockUntilDate);
+                            setShowLockPeriodDialog(true);
+                        }}
+                        className="border-slate-200 dark:border-slate-800"
+                    >
+                        <CalendarClock className="w-4 h-4 mr-2" />
+                        Zeitraum festschreiben
                     </Button>
-                </Link>
+                    <Link to={`/${tenant}/bookings/create`}>
+                        <Button className="shadow-lg shadow-blue-600/20 hover:shadow-blue-600/30 transition-all duration-300 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
+                            <Plus className="w-4 h-4 mr-2" />
+                            Neue Buchung
+                        </Button>
+                    </Link>
+                </div>
             </div>
+
+            {/* SPEC-05 (Teil B): GoBD-Frist-Banner - Entwürfe älter als der Vormonat */}
+            {lockStatus?.gobd_deadline_exceeded && (
+                <Alert variant="destructive" className="bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200">
+                    <ShieldAlert className="h-4 w-4 !text-amber-600 dark:!text-amber-400" />
+                    <AlertTitle>GoBD-Frist beachten</AlertTitle>
+                    <AlertDescription>
+                        {lockStatus.open_drafts_count} Entwürfe sind älter als der Vormonat und noch nicht festgeschrieben
+                        {lockStatus.oldest_open_draft_date && ` (ältester: ${formatDate(lockStatus.oldest_open_draft_date)})`}.
+                        Bitte zeitnah über „Zeitraum festschreiben" abschließen.
+                    </AlertDescription>
+                </Alert>
+            )}
 
             {/* Filters Row */}
             <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-center bg-white dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
@@ -609,6 +696,71 @@ export function JournalList() {
                             </div>
                         </div>
                     )}
+                </DialogContent>
+            </Dialog>
+
+            {/* SPEC-05 (Teil B): Periodenfestschreibung (Monatsabschluss) */}
+            <Dialog open={showLockPeriodDialog} onOpenChange={setShowLockPeriodDialog}>
+                <DialogContent className="max-w-md bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <CalendarClock className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                            Zeitraum festschreiben
+                        </DialogTitle>
+                        <DialogDescription>
+                            Alle Entwürfe mit Buchungsdatum bis einschließlich des gewählten Datums werden GoBD-konform
+                            festgeschrieben und erhalten eine lückenlose Journalnummer.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-4 py-2">
+                        <div>
+                            <Label htmlFor="lock-until-date">Festschreiben bis (einschließlich)</Label>
+                            <Input
+                                id="lock-until-date"
+                                type="date"
+                                value={lockUntilDate}
+                                onChange={(e) => setLockUntilDate(e.target.value)}
+                                className="mt-1.5 bg-white dark:bg-slate-950"
+                            />
+                        </div>
+
+                        <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 p-3 text-sm text-blue-900 dark:text-blue-200">
+                            <strong>{affectedDraftsCount}</strong> {affectedDraftsCount === 1 ? 'Entwurf' : 'Entwürfe'} werden festgeschrieben.
+                            {lockStatus?.books_locked_until && (
+                                <div className="mt-1 text-xs text-blue-700 dark:text-blue-400">
+                                    Aktuell festgeschrieben bis: {formatDate(lockStatus.books_locked_until)}
+                                </div>
+                            )}
+                        </div>
+
+                        <Alert variant="destructive" className="bg-rose-50 dark:bg-rose-950/30 border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200">
+                            <ShieldAlert className="h-4 w-4 !text-rose-600 dark:!text-rose-400" />
+                            <AlertTitle>Unwiderruflich</AlertTitle>
+                            <AlertDescription>
+                                Diese Aktion kann nicht rückgängig gemacht werden. Eine Korrektur festgeschriebener
+                                Buchungen ist danach nur noch per Storno (Gegenbuchung) möglich.
+                            </AlertDescription>
+                        </Alert>
+                    </div>
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setShowLockPeriodDialog(false)}>
+                            Abbrechen
+                        </Button>
+                        <Button
+                            onClick={() => {
+                                if (confirm(`⚠️ Zeitraum bis ${formatDate(lockUntilDate)} unwiderruflich festschreiben?\n\n${affectedDraftsCount} Entwurf/Entwürfe werden festgeschrieben.`)) {
+                                    lockPeriodMutation.mutate(lockUntilDate);
+                                }
+                            }}
+                            disabled={lockPeriodMutation.isPending || !lockUntilDate}
+                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                            <Lock className="w-4 h-4 mr-2" />
+                            {lockPeriodMutation.isPending ? 'Wird festgeschrieben...' : 'Festschreiben'}
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </div>

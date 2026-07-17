@@ -86,6 +86,10 @@ Route::middleware(['api', 'auth:api', \App\Http\Middleware\SetTenantFromUser::cl
 
         // Journal Entries
         Route::get('/bookings', [JournalEntryController::class, 'index']);
+        // SPEC-05 (Teil B): vor /bookings/{id} registriert, sonst würde die
+        // {id}-Route "lock-status" als ID interpretieren.
+        Route::get('/bookings/lock-status', [JournalEntryController::class, 'lockStatus']);
+        Route::post('/bookings/lock-period', [JournalEntryController::class, 'lockPeriod'])->middleware('role:owner|buchhalter,api');
         Route::get('/bookings/{id}', [JournalEntryController::class, 'show']);
         Route::post('/bookings', [JournalEntryController::class, 'store']);
         Route::post('/bookings/{id}/lock', [JournalEntryController::class, 'lock']);

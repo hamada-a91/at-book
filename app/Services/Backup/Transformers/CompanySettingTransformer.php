@@ -33,6 +33,10 @@ class CompanySettingTransformer extends BaseTransformer
             'account_plan_initialized_at' => $this->formatDate($model->account_plan_initialized_at),
             'account_plan_last_updated_at' => $this->formatDate($model->account_plan_last_updated_at),
             'onboarding_completed' => $model->onboarding_completed,
+            // SPEC-05 (Teil B): optional für alte Backups - fehlt das Feld beim Import
+            // (Alt-Backup ohne diese Spalte), bleibt books_locked_until null, d.h. der
+            // importierte Tenant hat KEINE Periodensperre (dokumentiertes Verhalten).
+            'books_locked_until' => $this->formatDate($model->books_locked_until),
             'created_at' => $this->formatDate($model->created_at),
             'updated_at' => $this->formatDate($model->updated_at),
         ];

@@ -2,14 +2,27 @@
 
 namespace App\Modules\Accounting\Services;
 
+use App\Models\CompanySetting;
 use App\Modules\Accounting\Models\JournalEntry;
+use App\Services\NumberSequenceService;
 use Carbon\Carbon;
+use DomainException;
 use Exception;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class BookingService
 {
+    public function __construct(
+        private ?NumberSequenceService $numberSequenceService = null
+    ) {
+        // Optionaler Konstruktor-Parameter (statt Pflicht-Injection): BookingService
+        // wird an mehreren Stellen per `new BookingService` außerhalb des Containers
+        // instanziiert (DemoTenantSeeder, TenantTestDataFactory) - das bleibt gültig.
+        $this->numberSequenceService ??= new NumberSequenceService;
+    }
+
     /**
      * Create a new booking batch (Draft).
      *
@@ -27,6 +40,13 @@ class BookingService
     public function createBooking(array $data, ?int $userId = null, bool $autoLock = false): JournalEntry
     {
         return DB::transaction(function () use ($data, $userId, $autoLock) {
+            // 0. SPEC-05 (Teil B): Erfassungssperre - kein NEUER Buchungsentwurf mit
+            // Datum in einer bereits festgeschriebenen Periode. Gilt für jeden Aufrufer
+            // (manuelle Buchung, Rechnungs-/Belegbuchung), da alle über createBooking()
+            // laufen. Das Festschreiben BESTEHENDER Drafts (lockBooking(), auch aus
+            // lockPeriod() selbst) ist davon bewusst NICHT betroffen.
+            $this->assertPeriodOpen((string) $data['date']);
+
             // 1. Validate Balance (Soll = Haben) - als Integer-Cents casten, bevor verglichen wird.
             $debitSum = (int) collect($data['lines'])->where('type', 'debit')->sum('amount');
             $creditSum = (int) collect($data['lines'])->where('type', 'credit')->sum('amount');
@@ -42,7 +62,7 @@ class BookingService
 
             // 2. Create Header
             $entry = JournalEntry::create([
-                'batch_id' => (string) \Illuminate\Support\Str::uuid(),
+                'batch_id' => (string) Str::uuid(),
                 'booking_date' => $data['date'],
                 'description' => $data['description'],
                 'contact_id' => $data['contact_id'] ?? null,
@@ -83,6 +103,16 @@ class BookingService
      * GoBD: Lock a booking to make it immutable.
      * Once locked, it cannot be edited, only reversed (storniert).
      *
+     * SPEC-05 (Teil A): vergibt dabei die lückenlose journal_number (year=0,
+     * jahresunabhängig fortlaufend) - erst hier, nicht bei createBooking(), damit
+     * verworfene Drafts keine Lücke in der Journalnummer-Folge hinterlassen.
+     *
+     * SPEC-05 (Teil B): bewusst KEINE Prüfung gegen books_locked_until hier -
+     * lockPeriod() muss bestehende Drafts INNERHALB der gesperrten Periode
+     * festschreiben können (das ist ja gerade sein Zweck), und ein manuelles
+     * Festschreiben eines älteren Drafts über die UI muss ebenfalls möglich
+     * bleiben. Die Erfassungssperre gilt nur für NEUE Buchungen (createBooking()).
+     *
      * @throws Exception
      */
     public function lockBooking(int $journalEntryId): JournalEntry
@@ -101,12 +131,10 @@ class BookingService
             throw new Exception('Booking is already locked/posted.');
         }
 
-        // In a real system, we might assign a sequential 'Journal Number' here
-        // which must be gapless (Lückenlos).
-
         $entry->update([
             'status' => 'posted',
             'locked_at' => Carbon::now(),
+            'journal_number' => $this->numberSequenceService->next('journal', 0),
         ]);
 
         // Trigger audit log (handled by observer usually, but explicit here for clarity)
@@ -116,7 +144,119 @@ class BookingService
     }
 
     /**
+     * SPEC-05 (Teil B): Periodenfestschreibung (Monatsabschluss). Schreibt alle
+     * Draft-Buchungen des Tenants bis (inklusive) $untilDate fest, vergibt dabei
+     * lückenlos journal_number in Datums-/ID-Reihenfolge (natürliche Verzahnung
+     * mit Teil A über lockBooking()) und setzt anschließend
+     * company_settings.books_locked_until.
+     *
+     * @return int Anzahl der festgeschriebenen Buchungen.
+     *
+     * @throws DomainException wenn $untilDate nicht monoton nach dem bisherigen
+     *                         books_locked_until liegt, oder ohne Mandanten-Kontext.
+     */
+    public function lockPeriod(Carbon $untilDate): int
+    {
+        return DB::transaction(function () use ($untilDate) {
+            $tenant = tenant();
+            if (! $tenant) {
+                throw new DomainException('Periodenfestschreibung erfordert einen Mandanten-Kontext.');
+            }
+
+            // lockForUpdate: verhindert, dass zwei gleichzeitige lockPeriod()-Aufrufe
+            // desselben Tenants den Monoton-Guard gegeneinander umgehen (TOCTOU).
+            $settings = CompanySetting::where('tenant_id', $tenant->id)->lockForUpdate()->first();
+            if (! $settings) {
+                throw new DomainException('Firmeneinstellungen für diesen Mandanten nicht gefunden.');
+            }
+
+            $currentLockedUntil = $settings->books_locked_until
+                ? Carbon::parse($settings->books_locked_until)->startOfDay()
+                : null;
+            $untilDateNormalized = $untilDate->copy()->startOfDay();
+
+            if ($currentLockedUntil && $untilDateNormalized->lte($currentLockedUntil)) {
+                throw new DomainException('Zeitraum ist bereits festgeschrieben.');
+            }
+
+            $drafts = JournalEntry::where('tenant_id', $tenant->id)
+                ->where('status', 'draft')
+                ->whereDate('booking_date', '<=', $untilDateNormalized->toDateString())
+                ->orderBy('booking_date')
+                ->orderBy('id')
+                ->get();
+
+            $count = 0;
+            foreach ($drafts as $draft) {
+                $this->lockBooking($draft->id);
+                $count++;
+            }
+
+            $settings->update(['books_locked_until' => $untilDateNormalized->toDateString()]);
+
+            return $count;
+        });
+    }
+
+    /**
+     * SPEC-05 (Teil B): wirft eine DomainException, wenn $date in einer bereits
+     * festgeschriebenen Periode liegt (booking_date <= books_locked_until).
+     * Öffentlich, damit Aufrufer, die VOR createBooking() bereits aufwendige
+     * Vorarbeit leisten (z.B. InvoiceBookingService::assertBookable() vor dem
+     * Aufbau der Buchungszeilen, BelegController::book() vor der Kontenauflösung),
+     * früh und mit klarer Fehlermeldung abbrechen können. createBooking() ruft
+     * diese Methode ohnehin selbst auf - doppelte Absicherung, kein Umgehen möglich.
+     *
+     * @throws DomainException
+     */
+    public function assertPeriodOpen(string $date): void
+    {
+        $lockedUntil = $this->currentLockedUntilDate();
+        if (! $lockedUntil) {
+            return;
+        }
+
+        if (Carbon::parse($date)->startOfDay()->lte($lockedUntil)) {
+            throw new DomainException(sprintf(
+                'Der Zeitraum bis %s ist festgeschrieben – Buchung im offenen Zeitraum erfassen.',
+                $lockedUntil->format('d.m.Y')
+            ));
+        }
+    }
+
+    /**
+     * Liefert books_locked_until des aktuellen Mandanten oder null (keine Sperre /
+     * kein Mandanten-Kontext, z.B. in Jobs/Commands ohne explizit gesetzten Tenant -
+     * dort greift auch der BelongsToTenant-Scope nicht, siehe CLAUDE.md Regel 6).
+     */
+    private function currentLockedUntilDate(): ?Carbon
+    {
+        $tenant = tenant();
+        if (! $tenant) {
+            return null;
+        }
+
+        $settings = CompanySetting::where('tenant_id', $tenant->id)->first();
+        if (! $settings || ! $settings->books_locked_until) {
+            return null;
+        }
+
+        return Carbon::parse($settings->books_locked_until)->startOfDay();
+    }
+
+    /**
      * Reverse a booking (Generalumkehr/Storno).
+     *
+     * SPEC-05 (Teil B) Storno-Sonderfall: Ein Storno auf eine Buchung in einer
+     * bereits festgeschriebenen Periode ist erlaubt (GoBD-konform - die Sperre
+     * betrifft nur NEUE Erfassung, siehe assertPeriodOpen()), aber die
+     * Storno-Buchung selbst bekommt als booking_date max(Originaldatum, erster
+     * offener Tag nach books_locked_until) - wie in DATEV wird im offenen
+     * Zeitraum storniert, die gesperrte Periode bleibt unangetastet. Das
+     * Originaldatum wird stattdessen im Beschreibungstext genannt.
+     *
+     * SPEC-05 (Teil A): die Storno-Buchung bekommt eine eigene, neue
+     * journal_number (nicht die des Originals).
      */
     public function reverseBooking(int $journalEntryId): JournalEntry
     {
@@ -134,12 +274,27 @@ class BookingService
                 throw new Exception('This booking has already been reversed.');
             }
 
-            // Create Reversal Header
-            $reversal = $original->replicate();
-            $reversal->batch_id = (string) \Illuminate\Support\Str::uuid();
-            $reversal->description = 'Storno: '.$original->description;
+            $originalDate = Carbon::parse($original->booking_date)->startOfDay();
+            $lockedUntil = $this->currentLockedUntilDate();
+            $firstOpenDay = $lockedUntil ? $lockedUntil->copy()->addDay() : null;
+            $reversalDate = $firstOpenDay && $originalDate->lte($firstOpenDay)
+                ? $firstOpenDay
+                : $originalDate;
+
+            // Create Reversal Header (journal_number/public_id werden NICHT übernommen -
+            // die Storno-Buchung braucht eine eigene, neue Nummer/ID, siehe Docblock oben
+            // bzw. HasPublicId::bootHasPublicId()).
+            $reversal = $original->replicate(['journal_number']);
+            $reversal->batch_id = (string) Str::uuid();
+            $reversal->booking_date = $reversalDate;
+            $reversal->description = sprintf(
+                'Storno zu Buchung vom %s: %s',
+                $originalDate->format('d.m.Y'),
+                $original->description
+            );
             $reversal->status = 'posted'; // Reversals are immediately effective
             $reversal->locked_at = Carbon::now();
+            $reversal->journal_number = $this->numberSequenceService->next('journal', 0);
             $reversal->push();
 
             // Create Reversal Lines (Swap Debit/Credit)

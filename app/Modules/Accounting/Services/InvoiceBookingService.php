@@ -121,6 +121,12 @@ class InvoiceBookingService
             throw new DomainException('Rechnung ist bereits gebucht.');
         }
 
+        // SPEC-05 (Teil B): Erfassungssperre gilt auch für die automatische
+        // Rechnungsbuchung - Rechnungsdatum in einer festgeschriebenen Periode ->
+        // DomainException (Controller macht daraus 422), bevor Zeilen aufgebaut
+        // werden. createBooking() prüft das ohnehin nochmal (doppelte Absicherung).
+        $this->bookingService->assertPeriodOpen($invoice->invoice_date->format('Y-m-d'));
+
         if (! $invoice->contact) {
             throw new DomainException('Kunde nicht gefunden.');
         }

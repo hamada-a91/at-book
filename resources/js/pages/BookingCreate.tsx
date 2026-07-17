@@ -36,6 +36,13 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 
+interface LockStatus {
+    books_locked_until: string | null;
+    open_drafts_count: number;
+    oldest_open_draft_date: string | null;
+    gobd_deadline_exceeded: boolean;
+}
+
 interface Account {
     id: number;
     code: string;
@@ -128,6 +135,16 @@ export function BookingCreate() {
         queryKey: ['belege'],
         queryFn: async () => {
             const { data } = await axios.get('/api/belege');
+            return data;
+        },
+    });
+
+    // SPEC-05 (Teil B): books_locked_until für die client-seitige Datumsvalidierung
+    // (Server bleibt die Autorität - siehe createMutation.onError unten).
+    const { data: lockStatus } = useQuery<LockStatus>({
+        queryKey: ['bookings', 'lock-status'],
+        queryFn: async () => {
+            const { data } = await axios.get('/api/bookings/lock-status');
             return data;
         },
     });
@@ -269,6 +286,15 @@ export function BookingCreate() {
     const debitSum = form.watch('lines').filter((l) => l.type === 'debit').reduce((sum, l) => sum + (parseFloat(String(l.amount)) || 0), 0);
     const creditSum = form.watch('lines').filter((l) => l.type === 'credit').reduce((sum, l) => sum + (parseFloat(String(l.amount)) || 0), 0);
     const isBalanced = Math.abs(debitSum - creditSum) < 0.01 && debitSum > 0;
+
+    // SPEC-05 (Teil B): Datum client-seitig gegen books_locked_until prüfen (Server
+    // bleibt die Autorität - siehe createMutation.onError, das die 422-Meldung
+    // vom Server unverändert anzeigt, falls diese Prüfung z.B. durch einen
+    // zwischenzeitlich gesperrten Zeitraum umgangen wurde).
+    const watchedDate = form.watch('date');
+    const isDateLocked = Boolean(
+        lockStatus?.books_locked_until && watchedDate && watchedDate <= lockStatus.books_locked_until
+    );
 
     // Quick Entry Handler with All Improvements
     const handleQuickEntry = () => {
@@ -1068,8 +1094,17 @@ export function BookingCreate() {
                                                     <FormItem>
                                                         <FormLabel className="text-slate-700 dark:text-slate-300">Datum *</FormLabel>
                                                         <FormControl>
-                                                            <Input type="date" {...field} className="bg-white dark:bg-slate-950" />
+                                                            <Input
+                                                                type="date"
+                                                                {...field}
+                                                                className={`bg-white dark:bg-slate-950 ${isDateLocked ? 'border-rose-400 focus-visible:ring-rose-400' : ''}`}
+                                                            />
                                                         </FormControl>
+                                                        {isDateLocked && lockStatus?.books_locked_until && (
+                                                            <p className="text-xs font-medium text-rose-600 dark:text-rose-400">
+                                                                Der Zeitraum bis {new Date(lockStatus.books_locked_until).toLocaleDateString('de-DE')} ist bereits festgeschrieben - bitte ein Datum im offenen Zeitraum wählen.
+                                                            </p>
+                                                        )}
                                                         <FormMessage />
                                                     </FormItem>
                                                 )}
@@ -1226,7 +1261,11 @@ export function BookingCreate() {
                                                 <Button type="button" variant="outline" onClick={() => navigate(`/${tenant}/bookings`)} className="flex-1 md:flex-none">
                                                     Abbrechen
                                                 </Button>
-                                                <Button type="submit" disabled={!isBalanced || createMutation.isPending} className="flex-1 md:flex-none min-w-[140px]">
+                                                <Button
+                                                    type="submit"
+                                                    disabled={!isBalanced || isDateLocked || createMutation.isPending}
+                                                    className="flex-1 md:flex-none min-w-[140px]"
+                                                >
                                                     {createMutation.isPending ? 'Speichert...' : 'Buchung speichern'}
                                                 </Button>
                                             </div>

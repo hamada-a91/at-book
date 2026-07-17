@@ -8,7 +8,6 @@ use App\Models\Tenant;
 use App\Models\User;
 use App\Services\Backup\DTO\ImportIdMapping;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use ZipArchive;
 
@@ -43,7 +42,9 @@ class BackupImportService
     ];
 
     protected string $disk = 'public';
+
     protected string $uploadPath = 'backup_uploads';
+
     protected BackupExportService $exportService;
 
     public function __construct(BackupExportService $exportService)
@@ -61,7 +62,7 @@ class BackupImportService
             $tenant->public_id,
             now()->format('Y-m-d_His')
         );
-        
+
         $path = "{$this->uploadPath}/{$tenant->id}/{$filename}";
         Storage::disk($this->disk)->put($path, file_get_contents($file->getRealPath()));
 
@@ -95,11 +96,11 @@ class BackupImportService
         $zipPath = Storage::disk($this->disk)->path($job->file_path);
 
         // Check if file exists
-        if (!file_exists($zipPath)) {
+        if (! file_exists($zipPath)) {
             return ['valid' => false, 'errors' => ['Backup-Datei nicht gefunden']];
         }
 
-        $zip = new ZipArchive();
+        $zip = new ZipArchive;
         if ($zip->open($zipPath) !== true) {
             return ['valid' => false, 'errors' => ['ZIP-Datei konnte nicht geöffnet werden']];
         }
@@ -110,7 +111,7 @@ class BackupImportService
             $errors[] = 'metadata.json fehlt im Backup';
         } else {
             $metadata = json_decode($metadataContent, true);
-            if (!$metadata) {
+            if (! $metadata) {
                 $errors[] = 'metadata.json ist ungültig';
             } else {
                 $info['backup_version'] = $metadata['backup_version'] ?? 'unknown';
@@ -190,7 +191,7 @@ class BackupImportService
     public function processImport(BackupJob $job, string $mode = 'replace'): void
     {
         $extractDir = null;
-        
+
         try {
             $job->markAsProcessing('Initializing import...');
             $job->update(['options' => ['import_mode' => $mode]]);
@@ -212,10 +213,10 @@ class BackupImportService
             // Load manifest and metadata
             $manifest = json_decode(file_get_contents("{$extractDir}/manifest.json"), true);
             $metadata = json_decode(file_get_contents("{$extractDir}/metadata.json"), true);
-            
+
             // Update progress before transaction starts
             $job->updateProgress(15, 'Starting data import (atomic transaction)...');
-            
+
             // ============================================================
             // START TRANSACTION - Delete + Import must be atomic!
             // If import fails, rollback to preserve original data.
@@ -224,16 +225,16 @@ class BackupImportService
             // Get the user who initiated the import - this is the user we need to preserve
             $importingUser = $job->user;
             $importingUserId = $job->user_id;
-            
+
             // Detect cross-tenant import from METADATA (not manifest - metadata has tenant info)
             $isCrossTenant = false;
             if (isset($metadata['tenant_public_id']) && $metadata['tenant_public_id'] !== $tenant->public_id) {
                 $isCrossTenant = true;
                 \Log::info("Import: CROSS-TENANT import detected. Source tenant: {$metadata['tenant_public_id']}, Target tenant: {$tenant->public_id}");
             }
-            
+
             $stats = DB::transaction(function () use ($tenant, $extractDir, $mode, $importingUser, $importingUserId, $isCrossTenant) {
-                $idMapping = new ImportIdMapping();
+                $idMapping = new ImportIdMapping;
                 $stats = [];
 
                 if ($mode === 'replace') {
@@ -256,7 +257,16 @@ class BackupImportService
             // ============================================================
             // END TRANSACTION - At this point, all changes are committed
             // ============================================================
-            
+
+            // SPEC-05 (Teil A, Backup-Impact Punkt 1): number_sequences wird bewusst
+            // NICHT exportiert/importiert (siehe EntityTransformerRegistry - kein
+            // Eintrag) - stattdessen last_number je Typ/Jahr aus den soeben
+            // importierten Dokument-/Journalnummern rekonstruieren, damit die nächste
+            // über NumberSequenceService vergebene Nummer nahtlos anschließt (kein
+            // Duplikat). Bewusst NACH der Transaktion (liest bereits committete Daten,
+            // muss mit ihr nicht atomar sein).
+            $this->reconstructNumberSequences($tenant);
+
             // Update progress after successful transaction
             $job->updateProgress(80, 'Data imported successfully. Restoring files...');
 
@@ -287,7 +297,7 @@ class BackupImportService
             if ($extractDir && is_dir($extractDir)) {
                 $this->removeTempDirectory($extractDir);
             }
-            
+
             $job->markAsFailed($e->getMessage(), [
                 'exception' => get_class($e),
                 'trace' => $e->getTraceAsString(),
@@ -325,9 +335,9 @@ class BackupImportService
      * Delete all existing data for the tenant.
      * Note: Some "line" tables don't have tenant_id - they rely on their parent tables.
      * IMPORTANT: This method is called inside a transaction, so don't create a nested transaction.
-     * 
-     * @param Tenant $tenant The tenant to delete data for
-     * @param int|null $preserveUserId The user ID to preserve (the importing user)
+     *
+     * @param  Tenant  $tenant  The tenant to delete data for
+     * @param  int|null  $preserveUserId  The user ID to preserve (the importing user)
      */
     protected function deleteExistingData(Tenant $tenant, ?int $preserveUserId = null): void
     {
@@ -337,7 +347,7 @@ class BackupImportService
             'contacts', 'bank_accounts', 'company_settings', 'quotes', 'orders',
             'delivery_notes', 'invoices', 'belege', 'journal_entries', 'inventory_transactions',
         ];
-        
+
         // Child tables that need to be deleted via their parent relationship
         $childTables = [
             'quote_lines' => ['parent_table' => 'quotes', 'foreign_key' => 'quote_id'],
@@ -352,12 +362,12 @@ class BackupImportService
         foreach ($childTables as $childTable => $config) {
             $parentTable = $config['parent_table'];
             $foreignKey = $config['foreign_key'];
-            
+
             // Get parent IDs for this tenant, then delete child records
             $parentIds = DB::table($parentTable)
                 ->where('tenant_id', $tenant->id)
                 ->pluck('id');
-            
+
             if ($parentIds->isNotEmpty()) {
                 DB::table($childTable)->whereIn($foreignKey, $parentIds)->delete();
             }
@@ -375,10 +385,10 @@ class BackupImportService
                 try {
                     // Get the table name from the model
                     $tableName = (new $modelClass)->getTable();
-                    
+
                     // Build the delete query
                     $deleteQuery = DB::table($tableName)->where('tenant_id', $tenant->id);
-                    
+
                     // Don't delete the current user - they need to stay logged in
                     if ($entityType === 'users' && $currentUserId) {
                         $deleteQuery = $deleteQuery->where('id', '!=', $currentUserId);
@@ -387,11 +397,11 @@ class BackupImportService
                     // Use raw DB delete to permanently remove ALL records including soft-deleted ones
                     // This bypasses soft-delete and ensures no duplicate public_id conflicts during import
                     $deleted = $deleteQuery->delete();
-                    
+
                     \Log::info("Delete before import: {$entityType} - {$deleted} records permanently deleted");
                 } catch (\Exception $e) {
                     // Log but continue - some tables might have FK constraints
-                    \Log::warning("Could not delete {$entityType}: " . $e->getMessage());
+                    \Log::warning("Could not delete {$entityType}: ".$e->getMessage());
                 }
             }
         }
@@ -402,13 +412,13 @@ class BackupImportService
      */
     protected function extractZip(string $zipPath, BackupJob $job): string
     {
-        $extractDir = sys_get_temp_dir() . '/at-book-import-' . $job->public_id;
+        $extractDir = sys_get_temp_dir().'/at-book-import-'.$job->public_id;
 
-        if (!is_dir($extractDir)) {
+        if (! is_dir($extractDir)) {
             mkdir($extractDir, 0755, true);
         }
 
-        $zip = new ZipArchive();
+        $zip = new ZipArchive;
         if ($zip->open($zipPath) !== true) {
             throw new \RuntimeException('Could not open ZIP file');
         }
@@ -421,13 +431,13 @@ class BackupImportService
 
     /**
      * Import a single entity type from NDJSON.
-     * 
-     * @param string $entityType The entity type to import
-     * @param string $ndjsonPath Path to the NDJSON file
-     * @param Tenant $tenant The tenant to import into
-     * @param ImportIdMapping $idMapping The ID mapping object
-     * @param User|null $importingUser The user who initiated the import (to preserve them)
-     * @param bool $isCrossTenant Whether this is a cross-tenant import (generates new public_ids)
+     *
+     * @param  string  $entityType  The entity type to import
+     * @param  string  $ndjsonPath  Path to the NDJSON file
+     * @param  Tenant  $tenant  The tenant to import into
+     * @param  ImportIdMapping  $idMapping  The ID mapping object
+     * @param  User|null  $importingUser  The user who initiated the import (to preserve them)
+     * @param  bool  $isCrossTenant  Whether this is a cross-tenant import (generates new public_ids)
      */
     protected function importEntityType(
         string $entityType,
@@ -448,12 +458,14 @@ class BackupImportService
                 }
             }
             fclose($handle);
+
             return 1; // Count as imported for stats
         }
-        
+
         $modelClass = $this->getModelClass($entityType);
-        if (!$modelClass || !class_exists($modelClass)) {
+        if (! $modelClass || ! class_exists($modelClass)) {
             \Log::warning("Import: No model class for {$entityType}");
+
             return 0;
         }
 
@@ -469,10 +481,14 @@ class BackupImportService
 
         while (($line = fgets($handle)) !== false) {
             $line = trim($line);
-            if (empty($line)) continue;
+            if (empty($line)) {
+                continue;
+            }
 
             $data = json_decode($line, true);
-            if (!$data) continue;
+            if (! $data) {
+                continue;
+            }
 
             $publicId = $data['public_id'] ?? null;
             unset($data['public_id']);
@@ -481,13 +497,13 @@ class BackupImportService
             $data = $this->mapForeignKeys($entityType, $data, $idMapping);
 
             // Add tenant_id only for tables that have it
-            if (!$isChildTable) {
+            if (! $isChildTable) {
                 $data['tenant_id'] = $tenant->id;
             }
 
             // Handle special cases
             $data = $this->prepareForInsert($entityType, $data);
-            
+
             // Set public_id in the data array BEFORE creating model
             // For SAME-TENANT imports: preserve the original public_id
             // For CROSS-TENANT imports: let the model generate a new UUID (avoids unique constraint violations)
@@ -500,9 +516,9 @@ class BackupImportService
             } catch (\Exception $e) {
                 // Assume it has public_id if we can't check
             }
-            
+
             if ($tableHasPublicId) {
-                if ($publicId && !$isCrossTenant) {
+                if ($publicId && ! $isCrossTenant) {
                     $data['public_id'] = $publicId;
                 } elseif ($isCrossTenant) {
                     // For cross-tenant, generate a new UUID
@@ -516,16 +532,17 @@ class BackupImportService
                 // Use the importing user (from job) instead of auth()->user() which may be null in job context
                 $currentUser = $importingUser ?? auth()->user();
                 $currentUserId = $currentUser?->id ?? auth()->id();
-                
+
                 // If this is the importing user (the one performing the restore), skip entirely but map their ID
                 if ($currentUser && isset($data['email']) && $data['email'] === $currentUser->email) {
                     if ($publicId) {
                         $idMapping->set($entityType, $publicId, $currentUserId);
                     }
                     \Log::info("Import: Skipping importing user {$currentUser->email} to preserve session and permissions");
+
                     continue;
                 }
-                
+
                 // Check if user with this email already exists
                 if (isset($data['email'])) {
                     $existingUser = \App\Models\User::where('email', $data['email'])->first();
@@ -535,6 +552,7 @@ class BackupImportService
                             $idMapping->set($entityType, $publicId, $existingUser->id);
                         }
                         \Log::info("Import: Skipping existing user {$data['email']}");
+
                         continue; // Skip creating/modifying this user
                     }
                 }
@@ -545,45 +563,46 @@ class BackupImportService
                 $model = $modelClass::withoutEvents(function () use ($modelClass, $data, $publicId, $entityType, $isChildTable, $tenant, $importingUser, $isCrossTenant) {
                     // Temporarily disable mass assignment protection
                     $modelClass::unguard();
-                    
+
                     $model = null;
-                    
+
                     // For CROSS-TENANT imports: always create new records (skip lookup)
                     // For SAME-TENANT imports: check if a record with this public_id already exists
-                    if (!$isCrossTenant && $publicId) {
+                    if (! $isCrossTenant && $publicId) {
                         // Check if a record with this public_id already exists in THIS TENANT (including soft-deleted)
                         $query = $modelClass::withoutGlobalScopes();
                         if (method_exists($modelClass, 'withTrashed')) {
                             $query = $modelClass::withTrashed()->withoutGlobalScopes();
                         }
                         $query = $query->where('public_id', $publicId);
-                        
+
                         // Filter by tenant_id for non-child tables
-                        if (!$isChildTable) {
+                        if (! $isChildTable) {
                             $query = $query->where('tenant_id', $tenant->id);
                         }
-                        
+
                         $model = $query->first();
                     }
-                    
+
                     // SAFETY: Never modify the importing user
                     $importingUserId = $importingUser?->id ?? auth()->id();
                     if ($entityType === 'users' && $model && $model->id === $importingUserId) {
-                        \Log::info("Import: Skipping modification of importing user (safety check)");
+                        \Log::info('Import: Skipping modification of importing user (safety check)');
                         $modelClass::reguard();
+
                         return $model;
                     }
-                    
+
                     if ($model) {
                         // Update existing record (restore if soft-deleted)
                         $model->fill($data);
-                        
+
                         // Only set deleted_at if the table supports soft deletes
                         $table = $model->getTable();
                         if (\Schema::hasColumn($table, 'deleted_at') && array_key_exists('deleted_at', $data)) {
                             $model->deleted_at = $data['deleted_at'];
                         }
-                        
+
                         $model->save();
                         \Log::debug("Import: Updated existing {$entityType} with public_id {$publicId}");
                     } else {
@@ -591,10 +610,10 @@ class BackupImportService
                         $model = new $modelClass($data);
                         $model->save();
                     }
-                    
+
                     // Re-enable mass assignment protection
                     $modelClass::reguard();
-                    
+
                     return $model;
                 });
 
@@ -607,7 +626,7 @@ class BackupImportService
                 $count++;
             } catch (\Exception $e) {
                 $errorMessage = $e->getMessage();
-                
+
                 // Check if this is a critical error that should stop the import
                 $criticalErrors = [
                     '42703', // Undefined column
@@ -615,7 +634,7 @@ class BackupImportService
                     '23505', // Duplicate key
                     '42704', // Undefined object
                 ];
-                
+
                 $isCritical = false;
                 foreach ($criticalErrors as $errorCode) {
                     if (strpos($errorMessage, $errorCode) !== false) {
@@ -623,30 +642,30 @@ class BackupImportService
                         break;
                     }
                 }
-                
+
                 // Also check for "transaction is aborted" which means a previous error occurred
                 if (strpos($errorMessage, '25P02') !== false || strpos($errorMessage, 'transaction is aborted') !== false) {
                     // Transaction already aborted by previous error - re-throw to fail import
-                    \Log::error("Import: Transaction aborted - failing import. Error: " . $errorMessage);
-                    throw new \RuntimeException("Import fehlgeschlagen: Transaktion wurde durch einen vorherigen Fehler abgebrochen. Bitte prüfen Sie die Logs.");
+                    \Log::error('Import: Transaction aborted - failing import. Error: '.$errorMessage);
+                    throw new \RuntimeException('Import fehlgeschlagen: Transaktion wurde durch einen vorherigen Fehler abgebrochen. Bitte prüfen Sie die Logs.');
                 }
-                
+
                 if ($isCritical) {
                     // Re-throw critical errors to fail the import
-                    \Log::error("Import: Critical error in {$entityType} - failing import. Error: " . $errorMessage);
-                    throw new \RuntimeException("Import fehlgeschlagen bei {$entityType}: " . $errorMessage);
+                    \Log::error("Import: Critical error in {$entityType} - failing import. Error: ".$errorMessage);
+                    throw new \RuntimeException("Import fehlgeschlagen bei {$entityType}: ".$errorMessage);
                 }
-                
+
                 // Log non-critical errors but continue with other records
-                \Log::warning("Could not import {$entityType} record: " . $errorMessage);
+                \Log::warning("Could not import {$entityType} record: ".$errorMessage);
             }
         }
 
         fclose($handle);
-        
+
         // Log import result
         \Log::info("Import: {$entityType} - {$count} records imported");
-        
+
         return $count;
     }
 
@@ -731,8 +750,7 @@ class BackupImportService
             ],
         ];
 
-
-        if (!isset($mappings[$entityType])) {
+        if (! isset($mappings[$entityType])) {
             return $data;
         }
 
@@ -740,11 +758,11 @@ class BackupImportService
             if (isset($data[$publicIdField])) {
                 $refPublicId = $data[$publicIdField];
                 unset($data[$publicIdField]);
-                
+
                 if ($refPublicId) {
                     $mappedId = $idMapping->get($refEntityType, $refPublicId);
                     $data[$idField] = $mappedId;
-                    
+
                     // Debug logging for foreign key mapping issues
                     if ($mappedId === null) {
                         \Log::warning("Import: FK mapping failed for {$entityType}.{$idField} - could not find {$refEntityType} with public_id {$refPublicId}");
@@ -755,7 +773,7 @@ class BackupImportService
                 }
             }
         }
-        
+
         // Clean up any remaining *_public_id fields that weren't mapped
         // This prevents PostgreSQL errors for non-existent columns
         foreach (array_keys($data) as $key) {
@@ -776,13 +794,13 @@ class BackupImportService
         // Remove created_at and updated_at - let timestamps be handled automatically
         // BUT keep deleted_at to preserve soft-deleted records!
         unset($data['created_at'], $data['updated_at']);
-        
+
         // Handle deleted_at field properly
         if (array_key_exists('deleted_at', $data)) {
             if ($data['deleted_at'] === null || $data['deleted_at'] === '' || $data['deleted_at'] === 'null') {
                 // Explicitly set to null for non-deleted records
                 $data['deleted_at'] = null;
-            } elseif (is_string($data['deleted_at']) && !empty($data['deleted_at'])) {
+            } elseif (is_string($data['deleted_at']) && ! empty($data['deleted_at'])) {
                 // Parse date string for soft-deleted records
                 $data['deleted_at'] = \Carbon\Carbon::parse($data['deleted_at']);
             }
@@ -814,7 +832,7 @@ class BackupImportService
             'journal_entry_lines' => ['amount', 'tax_amount'],
             'products' => ['purchase_price', 'selling_price'],
         ];
-        
+
         if (isset($moneyFields[$entityType])) {
             foreach ($moneyFields[$entityType] as $field) {
                 if (isset($data[$field]) && is_string($data[$field])) {
@@ -832,9 +850,9 @@ class BackupImportService
                 $instance = new $modelClass;
                 $table = $instance->getTable();
                 $validColumns = \Schema::getColumnListing($table);
-                
+
                 foreach (array_keys($data) as $column) {
-                    if (!in_array($column, $validColumns)) {
+                    if (! in_array($column, $validColumns)) {
                         \Log::debug("Import: Removing unknown column '{$column}' from {$entityType} (not in schema)");
                         unset($data[$column]);
                     }
@@ -854,26 +872,28 @@ class BackupImportService
     {
         $restoredCount = 0;
         $failedCount = 0;
-        
+
         foreach ($fileManifest as $fileInfo) {
             try {
                 $sourcePath = str_replace('files/', '', $fileInfo['path']);
                 $sourceFullPath = "{$filesDir}/{$sourcePath}";
-                
-                if (!file_exists($sourceFullPath)) {
+
+                if (! file_exists($sourceFullPath)) {
                     \Log::warning("Import: File not found in backup: {$sourcePath}");
                     $failedCount++;
+
                     continue;
                 }
-                
-                if (!isset($fileInfo['original_path'])) {
+
+                if (! isset($fileInfo['original_path'])) {
                     \Log::warning("Import: Missing original_path for file: {$sourcePath}");
                     $failedCount++;
+
                     continue;
                 }
-                
+
                 $content = file_get_contents($sourceFullPath);
-                
+
                 // Verify checksum if available
                 if (isset($fileInfo['checksum'])) {
                     $expectedChecksum = str_replace('sha256:', '', $fileInfo['checksum']);
@@ -881,28 +901,138 @@ class BackupImportService
                     if ($expectedChecksum !== $actualChecksum) {
                         \Log::error("Import: Checksum mismatch for file: {$sourcePath}");
                         $failedCount++;
+
                         continue;
                     }
                 }
-                
+
                 // Use disk from manifest, fallback to 'public' for legacy backups
                 $disk = $fileInfo['disk'] ?? 'public';
-                
+
                 // Store the file
                 Storage::disk($disk)->put($fileInfo['original_path'], $content);
                 $restoredCount++;
-                
+
                 \Log::info("Import: Restored file {$fileInfo['original_path']} to disk '{$disk}'");
-                
+
             } catch (\Exception $e) {
-                \Log::error("Import: Failed to restore file {$sourcePath}: " . $e->getMessage());
+                \Log::error("Import: Failed to restore file {$sourcePath}: ".$e->getMessage());
                 $failedCount++;
             }
         }
-        
+
         \Log::info("Import: Files restored - Success: {$restoredCount}, Failed: {$failedCount}");
-        
+
         return $restoredCount;
+    }
+
+    /**
+     * SPEC-05 (Teil A, Backup-Impact Punkt 1): rekonstruiert number_sequences.last_number
+     * je Tenant/Typ/Jahr aus den soeben importierten Dokument-/Journalnummern - die
+     * Sequenz-Tabelle selbst wird bewusst nicht ex-/importiert (siehe
+     * EntityTransformerRegistry), das ist robuster gegen alte oder manuell
+     * manipulierte Backups, die die Tabelle gar nicht kennen. Nach dem Import muss
+     * NumberSequenceService::next() für jeden Typ nahtlos an den importierten
+     * Bestand anschließen (keine Kollision/kein Duplikat mit einer bereits
+     * vorhandenen Nummer).
+     *
+     * Formate/Präfixe identisch zu NumberSequenceService::DEFAULT_FORMATS und der
+     * Datenmigration 2026_07_17_000004_backfill_number_sequences.php - bewusst nicht
+     * geteilt (Migrationen dürfen nicht von zur Laufzeit veränderlichem
+     * Anwendungscode abhängen), aber inhaltlich identisch gehalten.
+     */
+    protected function reconstructNumberSequences(Tenant $tenant): void
+    {
+        $documentTypes = [
+            'invoice' => ['table' => 'invoices', 'column' => 'invoice_number', 'prefix' => 'RE', 'format' => 'RE-{YYYY}-{NNNN}'],
+            'quote' => ['table' => 'quotes', 'column' => 'quote_number', 'prefix' => 'AN', 'format' => 'AN-{YYYY}-{NNNN}'],
+            'order' => ['table' => 'orders', 'column' => 'order_number', 'prefix' => 'AB', 'format' => 'AB-{YYYY}-{NNNN}'],
+            'delivery_note' => ['table' => 'delivery_notes', 'column' => 'delivery_note_number', 'prefix' => 'LS', 'format' => 'LS-{YYYY}-{NNNN}'],
+            'beleg' => ['table' => 'belege', 'column' => 'document_number', 'prefix' => 'BEL', 'format' => 'BEL-{YYYY}-{NNNN}'],
+        ];
+
+        foreach ($documentTypes as $type => $config) {
+            if (! \Schema::hasTable($config['table'])) {
+                continue;
+            }
+
+            $rows = DB::table($config['table'])
+                ->where('tenant_id', $tenant->id)
+                ->pluck($config['column']);
+
+            $pattern = '/^'.preg_quote($config['prefix'], '/').'-(\d{4})-(\d+)$/';
+            $maxByYear = [];
+
+            foreach ($rows as $number) {
+                if (! $number || ! preg_match($pattern, $number, $matches)) {
+                    continue;
+                }
+
+                $year = (int) $matches[1];
+                $seq = (int) $matches[2];
+                $maxByYear[$year] = max($maxByYear[$year] ?? 0, $seq);
+            }
+
+            foreach ($maxByYear as $year => $lastNumber) {
+                $this->upsertNumberSequence($tenant->id, $type, $year, $lastNumber, $config['format']);
+            }
+        }
+
+        // Journal: year=0 (jahresunabhängig, siehe NumberSequenceService), Format 'J-{NNNNNN}'.
+        if (\Schema::hasTable('journal_entries') && \Schema::hasColumn('journal_entries', 'journal_number')) {
+            $journalNumbers = DB::table('journal_entries')
+                ->where('tenant_id', $tenant->id)
+                ->whereNotNull('journal_number')
+                ->pluck('journal_number');
+
+            $maxJournal = 0;
+            foreach ($journalNumbers as $number) {
+                if (preg_match('/^J-(\d+)$/', $number, $matches)) {
+                    $maxJournal = max($maxJournal, (int) $matches[1]);
+                }
+            }
+
+            if ($maxJournal > 0) {
+                $this->upsertNumberSequence($tenant->id, 'journal', 0, $maxJournal, 'J-{NNNNNN}');
+            }
+        }
+    }
+
+    /**
+     * Setzt last_number einer Sequenz auf $lastNumber, außer die Sequenz ist
+     * bereits weiter (Reimport eines älteren Backups in einen bereits genutzten
+     * Tenant darf last_number nie zurückdrehen - sonst wären künftige Nummern
+     * wieder Duplikate).
+     */
+    private function upsertNumberSequence(int $tenantId, string $type, int $year, int $lastNumber, string $format): void
+    {
+        $existing = DB::table('number_sequences')
+            ->where('tenant_id', $tenantId)
+            ->where('type', $type)
+            ->where('year', $year)
+            ->first();
+
+        if ($existing) {
+            if ($lastNumber > $existing->last_number) {
+                DB::table('number_sequences')->where('id', $existing->id)->update([
+                    'last_number' => $lastNumber,
+                    'updated_at' => now(),
+                ]);
+            }
+
+            return;
+        }
+
+        DB::table('number_sequences')->insert([
+            'public_id' => (string) \Illuminate\Support\Str::uuid(),
+            'tenant_id' => $tenantId,
+            'type' => $type,
+            'year' => $year,
+            'last_number' => $lastNumber,
+            'format' => $format,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 
     /**
@@ -947,9 +1077,9 @@ class BackupImportService
         $migrationPath = database_path('migrations');
         $migrations = glob("{$migrationPath}/*.php");
         sort($migrations);
-        
+
         $migrationNames = array_map('basename', $migrations);
-        
+
         return substr(md5(implode(',', $migrationNames)), 0, 12);
     }
 
@@ -958,7 +1088,7 @@ class BackupImportService
      */
     protected function removeTempDirectory(string $tempDir): void
     {
-        if (!is_dir($tempDir)) {
+        if (! is_dir($tempDir)) {
             return;
         }
 
