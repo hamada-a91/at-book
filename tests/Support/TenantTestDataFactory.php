@@ -17,7 +17,11 @@ use App\Models\User;
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Services\BookingService;
 use App\Modules\Contacts\Models\Contact;
+use App\Modules\Projects\Models\CostCenter;
+use App\Modules\Projects\Models\CostObject;
+use App\Modules\Projects\Models\Project;
 use App\Services\InventoryService;
+use App\Services\NumberSequenceService;
 use App\Services\Skr03AccountPlanGenerator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -327,6 +331,53 @@ class TenantTestDataFactory
             $journalReversal = $bookingService->reverseBooking($journalCancelled->id);
             $journalCancelled->refresh();
 
+            // 11. SPEC-08 (Teil A): Kostenstelle + Kundenprojekt (mit eigenem,
+            // automatisch angelegtem Kostenträger, analog zu
+            // ProjectController::store()) + eine projekt-dimensionierte,
+            // festgeschriebene Kostenbuchung - deckt den Backup-Roundtrip für die
+            // 3 neuen Entities + die neuen *_public_id-Felder auf den Zeilen ab.
+            $costCenter = CostCenter::create([
+                'code' => "CC-{$suffix}",
+                'name' => 'Verwaltung',
+                'active' => true,
+            ]);
+
+            $projectNumber = (new NumberSequenceService)->next('project');
+            $projectCostObject = CostObject::create([
+                'code' => $projectNumber,
+                'name' => 'Website Relaunch',
+                'active' => true,
+            ]);
+            $project = Project::create([
+                'number' => $projectNumber,
+                'name' => 'Website Relaunch',
+                'contact_id' => $customer->id,
+                'cost_object_id' => $projectCostObject->id,
+                'budget_amount' => 500000,
+                'starts_on' => now()->subDays(30)->toDateString(),
+                'status' => 'active',
+            ]);
+
+            // Kostenbuchung dimensioniert auf Kostenstelle + Projekt-Kostenträger -
+            // netto/USt/brutto-Annotation analog zur Durchreich-Logik in
+            // InvoiceBookingService::buildLines()/BelegController::book() (siehe
+            // ProjectReportService-Docblock).
+            $journalProjectCost = $bookingService->createBooking([
+                'date' => now()->subDays(4)->toDateString(),
+                'description' => 'Fremdleistung für Projekt (dimensioniert)',
+                'contact_id' => $vendor->id,
+                'lines' => [
+                    [
+                        'account_id' => $accountExpense->id, 'type' => 'debit', 'amount' => 10000,
+                        'tax_amount' => 1900, 'cost_center_id' => $costCenter->id, 'cost_object_id' => $projectCostObject->id,
+                    ],
+                    ['account_id' => $accountTax->id, 'type' => 'debit', 'amount' => 1900],
+                    ['account_id' => $accountBank->id, 'type' => 'credit', 'amount' => 11900],
+                ],
+            ]);
+            $bookingService->lockBooking($journalProjectCost->id);
+            $journalProjectCost->refresh();
+
             return new TenantTestData(
                 tenant: $tenant,
                 user: $owner,
@@ -353,6 +404,10 @@ class TenantTestDataFactory
                 journalPosted: $journalPosted,
                 journalCancelled: $journalCancelled,
                 journalReversal: $journalReversal,
+                costCenter: $costCenter,
+                project: $project,
+                projectCostObject: $projectCostObject,
+                journalProjectCost: $journalProjectCost,
             );
         });
     }

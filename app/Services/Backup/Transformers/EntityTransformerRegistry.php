@@ -32,6 +32,12 @@ class EntityTransformerRegistry
             'contacts' => ContactTransformer::class,
             'bank_accounts' => BankAccountTransformer::class,
             'company_settings' => CompanySettingTransformer::class,
+            // SPEC-08 (Teil A): Dimensionen VOR den Belegketten registrieren
+            // (quotes/orders/invoices/belege/journal_entries referenzieren sie über
+            // project_public_id/cost_center_public_id/cost_object_public_id).
+            'cost_centers' => CostCenterTransformer::class,
+            'cost_objects' => CostObjectTransformer::class,
+            'projects' => ProjectTransformer::class,
             'quotes' => QuoteTransformer::class,
             'quote_lines' => QuoteLineTransformer::class,
             'orders' => OrderTransformer::class,

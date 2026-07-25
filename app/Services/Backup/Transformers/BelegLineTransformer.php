@@ -2,6 +2,8 @@
 
 namespace App\Services\Backup\Transformers;
 
+use App\Models\Tenant;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 class BelegLineTransformer extends BaseTransformer
@@ -11,6 +13,15 @@ class BelegLineTransformer extends BaseTransformer
         return \App\Models\BelegLine::class;
     }
 
+    public function getQuery(Tenant $tenant): Builder
+    {
+        // beleg_lines hat keine tenant_id – ohne Parent-Scoping würden Zeilen
+        // ALLER Tenants exportiert (Cross-Tenant-Leck).
+        return $this->getModelClass()::query()
+            ->whereHas('beleg', fn ($q) => $q->withTrashed()->where('tenant_id', $tenant->id))
+            ->orderBy('id');
+    }
+
     public function transform(Model $model): array
     {
         return [
@@ -18,6 +29,10 @@ class BelegLineTransformer extends BaseTransformer
             'beleg_public_id' => $this->getRelatedPublicId($model->beleg),
             'product_public_id' => $this->getRelatedPublicId($model->product),
             'account_public_id' => $this->getRelatedPublicId($model->account),
+            // SPEC-08 (Teil A): optionale Dimensionen, überschreiben beim Buchen
+            // den Dokument-Default (belege.project_id).
+            'cost_center_public_id' => $this->getRelatedPublicId($model->costCenter),
+            'cost_object_public_id' => $this->getRelatedPublicId($model->costObject),
             'description' => $model->description,
             'quantity' => $this->formatDecimal($model->quantity),
             'unit' => $model->unit,

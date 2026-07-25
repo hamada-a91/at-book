@@ -2,12 +2,13 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use App\Models\Concerns\HasPublicId;
+use Illuminate\Database\Eloquent\Model;
 
 class OrderLine extends Model
 {
     use HasPublicId;
+
     protected $fillable = [
         'order_id',
         'product_id',
@@ -19,6 +20,8 @@ class OrderLine extends Model
         'unit_price',
         'tax_rate',
         'line_total',
+        'cost_center_id',
+        'cost_object_id',
     ];
 
     public function order()
@@ -35,5 +38,14 @@ class OrderLine extends Model
     {
         return $this->hasMany(DeliveryNoteLine::class);
     }
-}
 
+    public function costCenter()
+    {
+        return $this->belongsTo(\App\Modules\Projects\Models\CostCenter::class);
+    }
+
+    public function costObject()
+    {
+        return $this->belongsTo(\App\Modules\Projects\Models\CostObject::class);
+    }
+}

@@ -16,6 +16,7 @@ class OrderTransformer extends BaseTransformer
         return [
             'public_id' => $model->public_id,
             'contact_public_id' => $this->getRelatedPublicId($model->contact),
+            'project_public_id' => $this->getRelatedPublicId($model->project),
             'quote_public_id' => $this->getRelatedPublicId($model->quote),
             'order_number' => $model->order_number,
             'order_date' => $this->formatDate($model->order_date),

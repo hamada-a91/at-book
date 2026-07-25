@@ -37,7 +37,7 @@ Alternativ existieren die Skripte `fresh-install.sh` und `setup-multi-tenant.sh`
 ```bash
 sail artisan migrate               # Migrationen
 sail artisan db:seed               # Seeder (Accounts, Rollen, Admin-User, CompanySettings)
-sail artisan queue:work            # Queue-Worker (nötig für Backups!)
+sail artisan queue:work --queue=backups,default   # Queue-Worker (nötig für Backups! Ohne --queue-Flag läuft nur "default")
 sail artisan tinker                # REPL (Achtung: tenant() ist hier null!)
 sail artisan onboarding:reset      # Onboarding zurücksetzen (Custom Command)
 sail composer dev                  # Server + Queue + Logs + Vite parallel

@@ -6,6 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Models\JournalEntry;
 use App\Modules\Accounting\Models\JournalEntryLine;
+use App\Modules\Projects\Models\CostCenter;
+use App\Modules\Projects\Models\Project;
+use App\Modules\Projects\Services\ProjectReportService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -406,6 +409,76 @@ class ReportsController extends Controller
             'period' => ['from' => $fromDate, 'to' => $toDate],
             'tax_summary' => $grouped,
             'total_tax_amount' => $taxLines->sum('tax_amount'),
+        ]);
+    }
+
+    /**
+     * SPEC-08 (Teil A): GET /reports/projects/{project}/profitability - dünner
+     * Wrapper um ProjectReportService::summary() unter dem /reports-Namespace
+     * (Spec sieht sowohl /projects/{id}/summary als auch diesen Endpunkt vor;
+     * beide liefern dieselben Daten, siehe ProjectController::summary()).
+     */
+    public function projectProfitability(Project $project, ProjectReportService $projectReportService): JsonResponse
+    {
+        return response()->json($projectReportService->summary($project));
+    }
+
+    /**
+     * SPEC-08 (Teil A): GET /reports/cost-centers?from&to - Summen je
+     * Kostenstelle (BAB-light: Erlöse, Kosten, Saldo je KOST1 im Zeitraum).
+     * Reports-Prinzip: posted+cancelled einbeziehen, Storno-Paare
+     * neutralisieren sich (siehe Klassen-Docblock).
+     */
+    public function costCenters(Request $request): JsonResponse
+    {
+        $fromDate = $request->input('from', $request->input('from_date'));
+        $toDate = $request->input('to', $request->input('to_date'));
+
+        $costCenters = CostCenter::where('active', true)->orderBy('code')->get();
+
+        $data = $costCenters->map(function (CostCenter $costCenter) use ($fromDate, $toDate) {
+            $lines = JournalEntryLine::with('account')
+                ->where('cost_center_id', $costCenter->id)
+                ->whereHas('journalEntry', function ($q) use ($fromDate, $toDate) {
+                    $q->whereIn('status', ['posted', 'cancelled']);
+                    if ($fromDate) {
+                        $q->whereDate('booking_date', '>=', $fromDate);
+                    }
+                    if ($toDate) {
+                        $q->whereDate('booking_date', '<=', $toDate);
+                    }
+                })
+                ->get();
+
+            $revenue = 0;
+            $cost = 0;
+            foreach ($lines as $line) {
+                $accountType = $line->account?->type;
+                if ($accountType === 'revenue') {
+                    $revenue += ($line->type === 'credit' ? $line->amount : -$line->amount);
+                } elseif ($accountType === 'expense') {
+                    $cost += ($line->type === 'debit' ? $line->amount : -$line->amount);
+                }
+            }
+
+            return [
+                'cost_center_id' => $costCenter->id,
+                'code' => $costCenter->code,
+                'name' => $costCenter->name,
+                'revenue' => $revenue,
+                'cost' => $cost,
+                'balance' => $revenue - $cost,
+            ];
+        })->filter(fn (array $row) => $row['revenue'] !== 0 || $row['cost'] !== 0)->values();
+
+        return response()->json([
+            'period' => ['from' => $fromDate, 'to' => $toDate],
+            'data' => $data,
+            'totals' => [
+                'revenue' => $data->sum('revenue'),
+                'cost' => $data->sum('cost'),
+                'balance' => $data->sum('balance'),
+            ],
         ]);
     }
 }

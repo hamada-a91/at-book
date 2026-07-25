@@ -39,6 +39,10 @@ class NumberSequenceService
         'delivery_note' => 'LS-{YYYY}-{NNNN}',
         'beleg' => 'BEL-{YYYY}-{NNNN}',
         'journal' => 'J-{NNNNNN}',
+        // SPEC-08 (Teil A): jahresbezogen wie die übrigen Dokumenttypen (nicht wie
+        // 'journal' jahresunabhängig) - ein Projekt ist ein Dokument, keine
+        // fortlaufende Journal-Nummerierung.
+        'project' => 'PRJ-{YYYY}-{NNNN}',
     ];
 
     /**

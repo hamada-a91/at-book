@@ -55,4 +55,23 @@ class JournalEntryLine extends Model
         // Assuming Account model is in the same namespace for simplicity
         return $this->belongsTo(Account::class);
     }
+
+    /**
+     * SPEC-08 (Teil A): Kostenstelle (KOST1) - optional, siehe
+     * docs/specs/SPEC-08-projekte-kostenstellen.md.
+     */
+    public function costCenter(): BelongsTo
+    {
+        return $this->belongsTo(\App\Modules\Projects\Models\CostCenter::class);
+    }
+
+    /**
+     * SPEC-08 (Teil A): Kostenträger (KOST2) - optional, i.d.R. aus
+     * project_id des Dokuments abgeleitet (Durchreich-Logik in
+     * InvoiceBookingService/BelegController::book()/BookingService::createBooking()).
+     */
+    public function costObject(): BelongsTo
+    {
+        return $this->belongsTo(\App\Modules\Projects\Models\CostObject::class);
+    }
 }

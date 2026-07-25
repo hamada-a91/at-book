@@ -37,6 +37,11 @@ class JournalEntryController extends Controller
             'lines.*.amount' => 'required|integer|min:1',
             'lines.*.tax_key' => 'nullable|string',
             'lines.*.tax_amount' => 'nullable|integer',
+            // SPEC-08 (Teil A): manuelle Buchungen können pro Zeile optional eine
+            // Kostenstelle/einen Kostenträger tragen (kein Dokument-Default, da
+            // manuelle Buchungen keinen project_id-Kopf haben).
+            'lines.*.cost_center_id' => ['nullable', new TenantExists('cost_centers')],
+            'lines.*.cost_object_id' => ['nullable', new TenantExists('cost_objects')],
         ]);
 
         try {

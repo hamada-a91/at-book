@@ -73,6 +73,13 @@ class BookingService
             ]);
 
             // 3. Create Lines
+            // SPEC-08 (Teil A): cost_center_id/cost_object_id werden 1:1
+            // durchgereicht - Auflösung (Dokument-Default project_id ->
+            // cost_object_id vs. Zeilen-Override) ist bereits Sache des
+            // Aufrufers (InvoiceBookingService::buildLines(),
+            // BelegController::book()); für manuelle Buchungen
+            // (JournalEntryController::store()) übergibt der Aufrufer die
+            // Werte direkt pro Zeile (TenantExists-validiert im Controller).
             foreach ($data['lines'] as $line) {
                 $entry->lines()->create([
                     'account_id' => $line['account_id'],
@@ -80,6 +87,8 @@ class BookingService
                     'amount' => $line['amount'],
                     'tax_key' => $line['tax_key'] ?? null,
                     'tax_amount' => $line['tax_amount'] ?? 0,
+                    'cost_center_id' => $line['cost_center_id'] ?? null,
+                    'cost_object_id' => $line['cost_object_id'] ?? null,
                 ]);
             }
 
@@ -326,6 +335,13 @@ class BookingService
             $reversal->push();
 
             // Create Reversal Lines (Swap Debit/Credit)
+            // SPEC-08 (Teil A): cost_center_id/cost_object_id MÜSSEN mit auf die
+            // Storno-Zeile übernommen werden - sonst würde die Generalumkehr in
+            // ProjectReportService (Filter auf cost_object_id) gar nicht erst
+            // gefunden und die Original-Kostenbuchung bliebe fälschlich ungetilgt
+            // im Kosten-Nachweis/Projekt-Summary stehen (Reports-Prinzip:
+            // Storno-Paare müssen sich neutralisieren, dafür müssen BEIDE Zeilen
+            // dieselbe Dimension tragen).
             foreach ($original->lines as $line) {
                 $reversal->lines()->create([
                     'account_id' => $line->account_id,
@@ -333,6 +349,8 @@ class BookingService
                     'amount' => $line->amount,
                     'tax_key' => $line->tax_key,
                     'tax_amount' => $line->tax_amount,
+                    'cost_center_id' => $line->cost_center_id,
+                    'cost_object_id' => $line->cost_object_id,
                 ]);
             }
 

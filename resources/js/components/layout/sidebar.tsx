@@ -22,6 +22,7 @@ import {
     UserCog,
     Bug,
     Shield,
+    History,
 } from "lucide-react"
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
@@ -70,6 +71,8 @@ export function Sidebar({ className, onItemClick }: SidebarProps) {
     });
 
     const isAdmin = currentUser?.roles?.some((role: any) => role.name === 'admin') || false;
+    // Audit-Log ist nur für owner/buchhalter zugänglich (API liefert sonst 403)
+    const canSeeAuditLog = currentUser?.roles?.some((role: any) => ['owner', 'buchhalter'].includes(role.name)) || false;
 
 
     // Routes grouped by category
@@ -122,6 +125,12 @@ export function Sidebar({ className, onItemClick }: SidebarProps) {
             href: tenantUrl("/bug-reports"),
             active: isActive("/bug-reports"),
         },
+        ...(canSeeAuditLog ? [{
+            label: "Audit-Log",
+            icon: History,
+            href: tenantUrl("/audit-log"),
+            active: isActive("/audit-log"),
+        }] : []),
         // Admin Link - Only visible if user has admin role (need to check role)
         // For now, we'll verify checking userService or similar, but simplified:
         {

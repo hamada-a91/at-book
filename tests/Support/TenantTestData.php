@@ -17,6 +17,9 @@ use App\Models\User;
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Models\JournalEntry;
 use App\Modules\Contacts\Models\Contact;
+use App\Modules\Projects\Models\CostCenter;
+use App\Modules\Projects\Models\CostObject;
+use App\Modules\Projects\Models\Project;
 
 /**
  * Value object returned by TenantTestDataFactory::create().
@@ -52,5 +55,10 @@ class TenantTestData
         public JournalEntry $journalPosted,
         public JournalEntry $journalCancelled,
         public JournalEntry $journalReversal,
+        // SPEC-08 (Teil A)
+        public CostCenter $costCenter,
+        public Project $project,
+        public CostObject $projectCostObject,
+        public JournalEntry $journalProjectCost,
     ) {}
 }

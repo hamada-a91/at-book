@@ -16,8 +16,13 @@ cd /home/ahmed/LaravelProjects/at-book
 # 3. Frontend-Dev-Server (Vite, Port 5173)
 ./vendor/bin/sail npm run dev
 
-# Optional: Queue-Worker (nötig für Backups)
-./vendor/bin/sail artisan queue:work
+# Optional: Queue-Worker (nötig für Backups!)
+# WICHTIG 1: Backup-Jobs laufen auf der Queue "backups" – ohne --queue-Flag
+#   verarbeitet der Worker nur "default" und Backups bleiben auf "wartend".
+# WICHTIG 2: In der ENTWICKLUNG queue:listen verwenden – queue:work ist ein
+#   Daemon, der Code-Änderungen erst nach einem Neustart sieht (Strg+C + neu
+#   starten bzw. `sail artisan queue:restart`). queue:listen lädt jeden Job frisch.
+./vendor/bin/sail artisan queue:listen --queue=backups,default
 ```
 
 **App öffnen:** http://localhost
@@ -51,7 +56,8 @@ Nach Änderung der `.env`: `./vendor/bin/sail artisan config:clear`.
 | `SQLSTATE … Connection refused` | PostgreSQL-Container fehlt → `./vendor/bin/sail up -d`, dann `./vendor/bin/sail ps` prüfen (es müssen **2** Container laufen: `laravel.test` + `pgsql`) |
 | Port belegt | `APP_PORT=8080 ./vendor/bin/sail up -d` oder Vite: `sail npm run dev -- --port 5174` |
 | Login schlägt fehl / Rollen fehlen | `./vendor/bin/sail artisan db:seed` (Rollen + Admin + Demo-Tenant, idempotent) |
-| Backups bleiben „pending“ | Queue-Worker starten: `./vendor/bin/sail artisan queue:work` |
+| Backups bleiben „wartend/pending“ | Queue-Worker **mit Queue-Flag** starten: `./vendor/bin/sail artisan queue:listen --queue=backups,default` (ohne Flag wird nur `default` verarbeitet!) |
+| Backup/Import verhält sich wie „alter Code“ | Laufender `queue:work`-Daemon sieht Code-Änderungen nicht → Worker neu starten (`Strg+C` + neu starten oder `sail artisan queue:restart`); in Dev besser `queue:listen` |
 | Kompletter Reset | `./vendor/bin/sail artisan migrate:fresh --seed` ⚠️ **löscht alle Daten!** |
 
 ## Tests & Code-Style

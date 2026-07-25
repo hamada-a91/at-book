@@ -11,6 +11,7 @@ use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Models\JournalEntry;
 use App\Modules\Accounting\Observers\AuditObserver;
 use App\Modules\Contacts\Models\Contact;
+use App\Modules\Projects\Models\Project;
 use App\Services\Backup\BackupExportService;
 use App\Services\Backup\BackupImportService;
 use App\Services\Backup\Transformers\EntityTransformerRegistry;
@@ -76,6 +77,8 @@ class AppServiceProvider extends ServiceProvider
             BankAccount::class,
             Contact::class,
             User::class,
+            // SPEC-08 (Teil A)
+            Project::class,
         ] as $auditedModel) {
             $auditedModel::observe(AuditObserver::class);
         }

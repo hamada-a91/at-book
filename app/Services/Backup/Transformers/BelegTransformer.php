@@ -22,6 +22,7 @@ class BelegTransformer extends BaseTransformer
             'amount' => $this->formatDecimal($model->amount),
             'tax_amount' => $this->formatDecimal($model->tax_amount),
             'contact_public_id' => $this->getRelatedPublicId($model->contact),
+            'project_public_id' => $this->getRelatedPublicId($model->project),
             'category_account_public_id' => $this->getRelatedPublicId($model->categoryAccount),
             'journal_entry_public_id' => $this->getRelatedPublicId($model->journalEntry),
             'payment_account_public_id' => $this->getRelatedPublicId($model->paymentAccount),

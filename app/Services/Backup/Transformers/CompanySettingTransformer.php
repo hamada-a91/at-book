@@ -37,6 +37,10 @@ class CompanySettingTransformer extends BaseTransformer
             // (Alt-Backup ohne diese Spalte), bleibt books_locked_until null, d.h. der
             // importierte Tenant hat KEINE Periodensperre (dokumentiertes Verhalten).
             'books_locked_until' => $this->formatDate($model->books_locked_until),
+            // SPEC-08 (Teil A): optional für alte Backups - fehlt das Feld, bleibt
+            // das Modul beim importierten Tenant deaktiviert (DB-Default false).
+            'module_projects_enabled' => $model->module_projects_enabled,
+            'module_cost_centers_enabled' => $model->module_cost_centers_enabled,
             'created_at' => $this->formatDate($model->created_at),
             'updated_at' => $this->formatDate($model->updated_at),
         ];

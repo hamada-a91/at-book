@@ -27,7 +27,7 @@ abstract class BaseTransformer
     public function getQuery(Tenant $tenant): Builder
     {
         $modelClass = $this->getModelClass();
-        
+
         // Start with withTrashed if available to include soft-deleted records
         if (method_exists($modelClass, 'withTrashed')) {
             $query = $modelClass::withTrashed();
@@ -41,7 +41,7 @@ abstract class BaseTransformer
         // Check if the model's table has tenant_id column
         $instance = new $modelClass;
         $table = $instance->getTable();
-        
+
         // Use schema to check if tenant_id exists
         if (\Schema::hasColumn($table, 'tenant_id')) {
             $query->where('tenant_id', $tenant->id);
@@ -63,7 +63,7 @@ abstract class BaseTransformer
      */
     protected function formatDate($date): ?string
     {
-        if (!$date) {
+        if (! $date) {
             return null;
         }
 

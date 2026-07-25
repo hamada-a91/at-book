@@ -13,6 +13,9 @@ use App\Models\User;
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Services\BookingService;
 use App\Modules\Contacts\Models\Contact;
+use App\Modules\Projects\Models\CostCenter;
+use App\Modules\Projects\Models\CostObject;
+use App\Modules\Projects\Models\Project;
 use App\Services\InventoryService;
 use App\Services\NumberSequenceService;
 use App\Services\Skr03AccountPlanGenerator;
@@ -97,6 +100,10 @@ class DemoTenantSeeder extends Seeder
             'onboarding_completed' => true,
         ]);
         $settings->module_inventory_enabled = true; // nicht im $fillable
+        // SPEC-08 (Teil A): Projekte/Kostenstellen im Demo-Tenant aktiviert, damit
+        // das Feature (nach Teil B: Frontend) direkt sichtbar/nutzbar ist.
+        $settings->module_projects_enabled = true;
+        $settings->module_cost_centers_enabled = true;
         $settings->save();
 
         // 3. SKR03-Kontenplan
@@ -214,6 +221,70 @@ class DemoTenantSeeder extends Seeder
             'status' => 'draft',
             'due_date' => now()->addDays(12)->toDateString(),
         ]);
+
+        // 10. Projekte & Kostenstellen (SPEC-08, Teil A): ein internes Projekt
+        // (contact_id null - eigenes Produkt "BieneB") und ein Kundenprojekt
+        // (mit Kontakt), je mit ein paar dimensionierten Kosten-/Erlösbuchungen.
+        // Anlage mimikt ProjectController::store() (Nummer + dedizierter
+        // Kostenträger in einer Transaktion).
+        $verwaltung = CostCenter::create(['code' => 'CC-VERW', 'name' => 'Verwaltung', 'active' => true]);
+        $entwicklung = CostCenter::create(['code' => 'CC-ENTW', 'name' => 'Entwicklung', 'active' => true]);
+
+        $bieneBNumber = $numberSequenceService->next('project');
+        $bieneBCostObject = CostObject::create(['code' => $bieneBNumber, 'name' => 'BieneB', 'active' => true]);
+        $bieneB = Project::create([
+            'number' => $bieneBNumber,
+            'name' => 'BieneB',
+            'contact_id' => null, // internes Projekt, kein Kunde
+            'cost_object_id' => $bieneBCostObject->id,
+            'budget_amount' => 1000000,
+            'starts_on' => now()->subMonths(2)->toDateString(),
+            'status' => 'active',
+            'notes' => 'Internes Produktprojekt ohne Kundenbezug.',
+        ]);
+
+        $websiteNumber = $numberSequenceService->next('project');
+        $websiteCostObject = CostObject::create(['code' => $websiteNumber, 'name' => 'Website Relaunch Muster GmbH', 'active' => true]);
+        $websiteProjekt = Project::create([
+            'number' => $websiteNumber,
+            'name' => 'Website Relaunch Muster GmbH',
+            'contact_id' => $kunde->id,
+            'cost_object_id' => $websiteCostObject->id,
+            'budget_amount' => 800000,
+            'starts_on' => now()->subMonth()->toDateString(),
+            'status' => 'active',
+        ]);
+
+        // Dimensionierte Kostenbuchung für BieneB (interne Entwicklung).
+        $bieneBCost = $bookingService->createBooking([
+            'date' => now()->subDays(6)->toDateString(),
+            'description' => 'Fremdleistung BieneB (dimensioniert)',
+            'contact_id' => $lieferant->id,
+            'lines' => [
+                [
+                    'account_id' => $expense->id, 'type' => 'debit', 'amount' => 20000,
+                    'tax_amount' => 3800, 'cost_center_id' => $entwicklung->id, 'cost_object_id' => $bieneBCostObject->id,
+                ],
+                ['account_id' => $this->account('1576', 'asset')->id, 'type' => 'debit', 'amount' => 3800],
+                ['account_id' => $bank->id, 'type' => 'credit', 'amount' => 23800],
+            ],
+        ]);
+        $bookingService->lockBooking($bieneBCost->id);
+
+        // Dimensionierte Erlösbuchung für das Kundenprojekt (Barverkauf/Akonto).
+        $websiteErloes = $bookingService->createBooking([
+            'date' => now()->subDays(3)->toDateString(),
+            'description' => 'Akonto Website Relaunch (dimensioniert)',
+            'contact_id' => $kunde->id,
+            'lines' => [
+                ['account_id' => $bank->id, 'type' => 'debit', 'amount' => 250000],
+                [
+                    'account_id' => $revenue->id, 'type' => 'credit', 'amount' => 250000,
+                    'cost_center_id' => $verwaltung->id, 'cost_object_id' => $websiteCostObject->id,
+                ],
+            ],
+        ]);
+        $bookingService->lockBooking($websiteErloes->id);
 
         $this->command->info('✅ Demo-Tenant angelegt: '.$tenant->name.' (/'.$tenant->slug.')');
         $this->command->line('   Login: '.self::DEMO_EMAIL.' / password');

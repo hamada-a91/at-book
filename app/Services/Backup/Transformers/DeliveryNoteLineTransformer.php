@@ -2,6 +2,8 @@
 
 namespace App\Services\Backup\Transformers;
 
+use App\Models\Tenant;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 class DeliveryNoteLineTransformer extends BaseTransformer
@@ -9,6 +11,15 @@ class DeliveryNoteLineTransformer extends BaseTransformer
     public function getModelClass(): string
     {
         return \App\Models\DeliveryNoteLine::class;
+    }
+
+    public function getQuery(Tenant $tenant): Builder
+    {
+        // delivery_note_lines hat keine tenant_id – ohne Parent-Scoping würden
+        // Zeilen ALLER Tenants exportiert (Cross-Tenant-Leck).
+        return $this->getModelClass()::query()
+            ->whereHas('deliveryNote', fn ($q) => $q->withTrashed()->where('tenant_id', $tenant->id))
+            ->orderBy('id');
     }
 
     public function transform(Model $model): array

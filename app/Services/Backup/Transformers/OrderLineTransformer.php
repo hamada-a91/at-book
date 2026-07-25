@@ -2,6 +2,8 @@
 
 namespace App\Services\Backup\Transformers;
 
+use App\Models\Tenant;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 class OrderLineTransformer extends BaseTransformer
@@ -11,12 +13,25 @@ class OrderLineTransformer extends BaseTransformer
         return \App\Models\OrderLine::class;
     }
 
+    public function getQuery(Tenant $tenant): Builder
+    {
+        // order_lines hat keine tenant_id – ohne Parent-Scoping würden Zeilen
+        // ALLER Tenants exportiert (Cross-Tenant-Leck).
+        return $this->getModelClass()::query()
+            ->whereHas('order', fn ($q) => $q->withTrashed()->where('tenant_id', $tenant->id))
+            ->orderBy('id');
+    }
+
     public function transform(Model $model): array
     {
         return [
             'public_id' => $model->public_id,
             'order_public_id' => $this->getRelatedPublicId($model->order),
             'product_public_id' => $this->getRelatedPublicId($model->product),
+            // SPEC-08 (Teil A): optionale Dimensionen, überschreiben beim Buchen
+            // den Dokument-Default (orders.project_id).
+            'cost_center_public_id' => $this->getRelatedPublicId($model->costCenter),
+            'cost_object_public_id' => $this->getRelatedPublicId($model->costObject),
             'description' => $model->description,
             'quantity' => $this->formatDecimal($model->quantity),
             'delivered_quantity' => $this->formatDecimal($model->delivered_quantity),

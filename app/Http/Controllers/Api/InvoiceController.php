@@ -52,8 +52,11 @@ class InvoiceController extends Controller
             $taxTotal = 0;
 
             foreach ($validated['lines'] as $line) {
-                $lineTotal = $line['quantity'] * $line['unit_price'];
-                $lineTax = round($lineTotal * ($line['tax_rate'] / 100));
+                // SPEC-07 (7.1): quantity ist numeric/decimal - quantity * unit_price
+                // kann einen Float liefern. Sofort auf Cent-Integer festziehen, damit
+                // niemals ein Float in eine Integer/Bigint-Betragsspalte fließt.
+                $lineTotal = (int) round($line['quantity'] * $line['unit_price']);
+                $lineTax = (int) round($lineTotal * ($line['tax_rate'] / 100));
                 $subtotal += $lineTotal;
                 $taxTotal += $lineTax;
             }
@@ -64,6 +67,7 @@ class InvoiceController extends Controller
             $invoice = Invoice::create([
                 'invoice_number' => $invoiceNumber,
                 'contact_id' => $validated['contact_id'],
+                'project_id' => $validated['project_id'] ?? null,
                 'invoice_date' => $validated['invoice_date'],
                 'due_date' => $validated['due_date'],
                 'subtotal' => $subtotal,
@@ -79,7 +83,7 @@ class InvoiceController extends Controller
 
             // Create invoice lines
             foreach ($validated['lines'] as $line) {
-                $lineTotal = $line['quantity'] * $line['unit_price'];
+                $lineTotal = (int) round($line['quantity'] * $line['unit_price']);
                 $invoice->lines()->create([
                     'product_id' => $line['product_id'] ?? null,
                     'description' => $line['description'],
@@ -89,6 +93,8 @@ class InvoiceController extends Controller
                     'tax_rate' => $line['tax_rate'],
                     'line_total' => $lineTotal,
                     'account_id' => $line['account_id'],
+                    'cost_center_id' => $line['cost_center_id'] ?? null,
+                    'cost_object_id' => $line['cost_object_id'] ?? null,
                 ]);
             }
 
@@ -204,6 +210,7 @@ class InvoiceController extends Controller
 
         $validated = $request->validate([
             'contact_id' => ['required', new TenantExists('contacts')],
+            'project_id' => ['nullable', new TenantExists('projects')],
             'invoice_date' => 'required|date',
             'due_date' => 'required|date',
             'intro_text' => 'nullable|string',
@@ -217,14 +224,18 @@ class InvoiceController extends Controller
             'lines.*.unit_price' => 'required|integer',
             'lines.*.tax_rate' => 'required|numeric|min:0',
             'lines.*.account_id' => ['required', new TenantExists('accounts')],
+            'lines.*.cost_center_id' => ['nullable', new TenantExists('cost_centers')],
+            'lines.*.cost_object_id' => ['nullable', new TenantExists('cost_objects')],
         ]);
 
         // Calculate totals
+        // SPEC-07 (7.1): siehe store() - Float-Zwischenwerte sofort auf Cent-Integer
+        // festziehen, damit niemals ein Float in eine Integer/Bigint-Spalte fließt.
         $subtotal = 0;
         $taxTotal = 0;
         foreach ($validated['lines'] as $line) {
-            $lineTotal = $line['quantity'] * $line['unit_price'];
-            $lineTax = $lineTotal * ($line['tax_rate'] / 100);
+            $lineTotal = (int) round($line['quantity'] * $line['unit_price']);
+            $lineTax = (int) round($lineTotal * ($line['tax_rate'] / 100));
             $subtotal += $lineTotal;
             $taxTotal += $lineTax;
         }
@@ -233,6 +244,7 @@ class InvoiceController extends Controller
         // Update invoice
         $invoice->update([
             'contact_id' => $validated['contact_id'],
+            'project_id' => $validated['project_id'] ?? null,
             'invoice_date' => $validated['invoice_date'],
             'due_date' => $validated['due_date'],
             'subtotal' => $subtotal,
@@ -247,7 +259,7 @@ class InvoiceController extends Controller
         $invoice->lines()->delete();
 
         foreach ($validated['lines'] as $line) {
-            $lineTotal = $line['quantity'] * $line['unit_price'];
+            $lineTotal = (int) round($line['quantity'] * $line['unit_price']);
             $invoice->lines()->create([
                 'product_id' => $line['product_id'] ?? null,
                 'description' => $line['description'],
@@ -257,6 +269,8 @@ class InvoiceController extends Controller
                 'tax_rate' => $line['tax_rate'],
                 'line_total' => $lineTotal,
                 'account_id' => $line['account_id'],
+                'cost_center_id' => $line['cost_center_id'] ?? null,
+                'cost_object_id' => $line['cost_object_id'] ?? null,
             ]);
         }
 

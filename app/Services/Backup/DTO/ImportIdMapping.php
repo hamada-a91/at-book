@@ -34,7 +34,7 @@ class ImportIdMapping
     public function getOrFail(string $entityType, string $publicId): int
     {
         $id = $this->get($entityType, $publicId);
-        
+
         if ($id === null) {
             throw new \RuntimeException("No mapping found for {$entityType}:{$publicId}");
         }

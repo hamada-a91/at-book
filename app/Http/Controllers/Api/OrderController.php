@@ -35,6 +35,7 @@ class OrderController extends Controller
     {
         $validated = $request->validate([
             'contact_id' => ['required', new TenantExists('contacts')],
+            'project_id' => ['nullable', new TenantExists('projects')],
             'order_date' => 'required|date',
             'delivery_date' => 'nullable|date',
             'intro_text' => 'nullable|string',
@@ -48,6 +49,8 @@ class OrderController extends Controller
             'lines.*.unit' => 'nullable|string',
             'lines.*.unit_price' => 'required|integer',
             'lines.*.tax_rate' => 'required|numeric|min:0',
+            'lines.*.cost_center_id' => ['nullable', new TenantExists('cost_centers')],
+            'lines.*.cost_object_id' => ['nullable', new TenantExists('cost_objects')],
         ]);
 
         // SPEC-05 (Teil A): Nummernvergabe über NumberSequenceService statt "max+1",
@@ -72,6 +75,7 @@ class OrderController extends Controller
             $order = Order::create([
                 'order_number' => $orderNumber,
                 'contact_id' => $validated['contact_id'],
+                'project_id' => $validated['project_id'] ?? null,
                 'order_date' => $validated['order_date'],
                 'delivery_date' => $validated['delivery_date'] ?? null,
                 'subtotal' => $subtotal,
@@ -97,6 +101,8 @@ class OrderController extends Controller
                     'unit_price' => $line['unit_price'],
                     'tax_rate' => $line['tax_rate'],
                     'line_total' => $lineTotal,
+                    'cost_center_id' => $line['cost_center_id'] ?? null,
+                    'cost_object_id' => $line['cost_object_id'] ?? null,
                 ]);
             }
 
@@ -330,6 +336,8 @@ class OrderController extends Controller
                 'order_id' => $order->id,
                 'invoice_number' => $invoiceNumber,
                 'contact_id' => $order->contact_id,
+                // SPEC-08 (Teil A): Projekt-Zuordnung entlang der Belegkette übernehmen.
+                'project_id' => $order->project_id,
                 'invoice_date' => $validated['invoice_date'],
                 'due_date' => $validated['due_date'],
                 'subtotal' => $subtotal,
@@ -355,6 +363,8 @@ class OrderController extends Controller
                     'tax_rate' => $orderLine->tax_rate,
                     'line_total' => $lineTotal,
                     'account_id' => 1, // TODO: Map tax rate to account
+                    'cost_center_id' => $orderLine->cost_center_id,
+                    'cost_object_id' => $orderLine->cost_object_id,
                 ]);
 
                 // Update order line invoiced quantity

@@ -2,6 +2,8 @@
 
 namespace App\Services\Backup\Transformers;
 
+use App\Models\Tenant;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 class InvoiceLineTransformer extends BaseTransformer
@@ -11,6 +13,15 @@ class InvoiceLineTransformer extends BaseTransformer
         return \App\Models\InvoiceLine::class;
     }
 
+    public function getQuery(Tenant $tenant): Builder
+    {
+        // invoice_lines hat keine tenant_id – ohne Parent-Scoping würden Zeilen
+        // ALLER Tenants exportiert (Cross-Tenant-Leck). Invoice hat keine SoftDeletes.
+        return $this->getModelClass()::query()
+            ->whereHas('invoice', fn ($q) => $q->where('tenant_id', $tenant->id))
+            ->orderBy('id');
+    }
+
     public function transform(Model $model): array
     {
         return [
@@ -18,6 +29,10 @@ class InvoiceLineTransformer extends BaseTransformer
             'invoice_public_id' => $this->getRelatedPublicId($model->invoice),
             'product_public_id' => $this->getRelatedPublicId($model->product),
             'account_public_id' => $this->getRelatedPublicId($model->account),
+            // SPEC-08 (Teil A): optionale Dimensionen, überschreiben beim Buchen
+            // den Dokument-Default (invoices.project_id).
+            'cost_center_public_id' => $this->getRelatedPublicId($model->costCenter),
+            'cost_object_public_id' => $this->getRelatedPublicId($model->costObject),
             'description' => $model->description,
             'quantity' => $this->formatDecimal($model->quantity),
             'unit' => $model->unit,

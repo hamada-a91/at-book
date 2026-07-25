@@ -25,6 +25,11 @@ class BackupExportService
         'contacts',
         'bank_accounts',
         'company_settings',
+        // SPEC-08 (Teil A): Dimensionen vor den Belegketten (siehe
+        // EntityTransformerRegistry für die Begründung).
+        'cost_centers',
+        'cost_objects',
+        'projects',
         'quotes',
         'quote_lines',
         'orders',

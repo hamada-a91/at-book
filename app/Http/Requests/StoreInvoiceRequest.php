@@ -20,6 +20,8 @@ class StoreInvoiceRequest extends FormRequest
     {
         return [
             'contact_id' => ['required', new TenantExists('contacts')],
+            // SPEC-08 (Teil A): Default-Kostenträger-Zuordnung fürs ganze Dokument.
+            'project_id' => ['nullable', new TenantExists('projects')],
             'order_id' => ['nullable', new TenantExists('orders')],
             'invoice_date' => 'required|date',
             'due_date' => 'required|date',
@@ -34,6 +36,9 @@ class StoreInvoiceRequest extends FormRequest
             'lines.*.unit_price' => 'required|integer',
             'lines.*.tax_rate' => 'required|numeric|min:0',
             'lines.*.account_id' => ['required', new TenantExists('accounts')],
+            // SPEC-08 (Teil A): Zeilen-Override der Dokument-Dimension.
+            'lines.*.cost_center_id' => ['nullable', new TenantExists('cost_centers')],
+            'lines.*.cost_object_id' => ['nullable', new TenantExists('cost_objects')],
         ];
     }
 }

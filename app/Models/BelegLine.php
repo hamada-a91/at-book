@@ -2,12 +2,13 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use App\Models\Concerns\HasPublicId;
+use Illuminate\Database\Eloquent\Model;
 
 class BelegLine extends Model
 {
     use HasPublicId;
+
     protected $fillable = [
         'beleg_id',
         'product_id',
@@ -18,6 +19,8 @@ class BelegLine extends Model
         'tax_rate',
         'line_total',
         'account_id',
+        'cost_center_id',
+        'cost_object_id',
     ];
 
     protected $casts = [
@@ -40,5 +43,19 @@ class BelegLine extends Model
     public function account()
     {
         return $this->belongsTo(\App\Modules\Accounting\Models\Account::class);
+    }
+
+    /**
+     * SPEC-08 (Teil A): überschreibt beim Buchen den Dokument-Default
+     * (belege.project_id -> dessen cost_object_id), falls gesetzt.
+     */
+    public function costCenter()
+    {
+        return $this->belongsTo(\App\Modules\Projects\Models\CostCenter::class);
+    }
+
+    public function costObject()
+    {
+        return $this->belongsTo(\App\Modules\Projects\Models\CostObject::class);
     }
 }

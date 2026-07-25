@@ -27,6 +27,12 @@ class BackupImportService
         'contacts',
         'bank_accounts',
         'company_settings',
+        // SPEC-08 (Teil A): Dimensionen vor den Belegketten importieren (quotes/
+        // orders/invoices/belege/journal_entries referenzieren sie über
+        // project_public_id/cost_center_public_id/cost_object_public_id).
+        'cost_centers',
+        'cost_objects',
+        'projects',
         'quotes',
         'quote_lines',
         'orders',
@@ -64,6 +70,8 @@ class BackupImportService
         'contact' => 'contacts',
         'user' => 'users',
         'company_setting' => 'company_settings',
+        // SPEC-08 (Teil A)
+        'project' => 'projects',
     ];
 
     protected string $disk = 'public';
@@ -387,7 +395,16 @@ class BackupImportService
         // Define which entity types have direct tenant_id and which are child tables
         $directTenantTables = [
             'users', 'accounts', 'tax_codes', 'product_categories', 'products',
-            'contacts', 'bank_accounts', 'company_settings', 'quotes', 'orders',
+            'contacts', 'bank_accounts', 'company_settings',
+            // SPEC-08 (Teil A): 'projects' referenziert 'cost_objects' per
+            // restrictOnDelete (projects.cost_object_id) - muss daher VOR
+            // cost_objects in dieser Liste stehen, damit die (unten per
+            // array_reverse() gebildete) Löschreihenfolge projects zuerst löscht.
+            // 'cost_centers' hat keine eingehenden FKs von anderen direkten
+            // Tenant-Tabellen (nur von den bereits vorher gelöschten Child-Tables
+            // journal_entry_lines/invoice_lines/etc.), Position daher unkritisch.
+            'cost_centers', 'cost_objects', 'projects',
+            'quotes', 'orders',
             'delivery_notes', 'invoices', 'belege', 'journal_entries', 'inventory_transactions',
             // SPEC-06: audit_logs hat eine eigene tenant_id-Spalte (kein Child-Table) und
             // keine eingehenden FK-Constraints von anderen Tabellen - Reihenfolge relativ
@@ -609,60 +626,64 @@ class BackupImportService
             // Create or update the model without events and without mass assignment protection
             try {
                 $model = $modelClass::withoutEvents(function () use ($modelClass, $data, $publicId, $entityType, $isChildTable, $tenant, $importingUser, $isCrossTenant) {
-                    // Temporarily disable mass assignment protection
+                    // Temporarily disable mass assignment protection.
+                    // try/finally ist PFLICHT: Model::$unguarded ist eine globale
+                    // static Property – ohne garantiertes reguard() bliebe der
+                    // Mass-Assignment-Schutz nach einer Insert-Exception für den
+                    // gesamten PHP-Prozess (alle Requests des Workers!) deaktiviert.
                     $modelClass::unguard();
 
-                    $model = null;
+                    try {
+                        $model = null;
 
-                    // For CROSS-TENANT imports: always create new records (skip lookup)
-                    // For SAME-TENANT imports: check if a record with this public_id already exists
-                    if (! $isCrossTenant && $publicId) {
-                        // Check if a record with this public_id already exists in THIS TENANT (including soft-deleted)
-                        $query = $modelClass::withoutGlobalScopes();
-                        if (method_exists($modelClass, 'withTrashed')) {
-                            $query = $modelClass::withTrashed()->withoutGlobalScopes();
+                        // For CROSS-TENANT imports: always create new records (skip lookup)
+                        // For SAME-TENANT imports: check if a record with this public_id already exists
+                        if (! $isCrossTenant && $publicId) {
+                            // Check if a record with this public_id already exists in THIS TENANT (including soft-deleted)
+                            $query = $modelClass::withoutGlobalScopes();
+                            if (method_exists($modelClass, 'withTrashed')) {
+                                $query = $modelClass::withTrashed()->withoutGlobalScopes();
+                            }
+                            $query = $query->where('public_id', $publicId);
+
+                            // Filter by tenant_id for non-child tables
+                            if (! $isChildTable) {
+                                $query = $query->where('tenant_id', $tenant->id);
+                            }
+
+                            $model = $query->first();
                         }
-                        $query = $query->where('public_id', $publicId);
 
-                        // Filter by tenant_id for non-child tables
-                        if (! $isChildTable) {
-                            $query = $query->where('tenant_id', $tenant->id);
+                        // SAFETY: Never modify the importing user
+                        $importingUserId = $importingUser?->id ?? auth()->id();
+                        if ($entityType === 'users' && $model && $model->id === $importingUserId) {
+                            \Log::info('Import: Skipping modification of importing user (safety check)');
+
+                            return $model;
                         }
 
-                        $model = $query->first();
-                    }
+                        if ($model) {
+                            // Update existing record (restore if soft-deleted)
+                            $model->fill($data);
 
-                    // SAFETY: Never modify the importing user
-                    $importingUserId = $importingUser?->id ?? auth()->id();
-                    if ($entityType === 'users' && $model && $model->id === $importingUserId) {
-                        \Log::info('Import: Skipping modification of importing user (safety check)');
-                        $modelClass::reguard();
+                            // Only set deleted_at if the table supports soft deletes
+                            $table = $model->getTable();
+                            if (\Schema::hasColumn($table, 'deleted_at') && array_key_exists('deleted_at', $data)) {
+                                $model->deleted_at = $data['deleted_at'];
+                            }
+
+                            $model->save();
+                            \Log::debug("Import: Updated existing {$entityType} with public_id {$publicId}");
+                        } else {
+                            // Create new record
+                            $model = new $modelClass($data);
+                            $model->save();
+                        }
 
                         return $model;
+                    } finally {
+                        $modelClass::reguard();
                     }
-
-                    if ($model) {
-                        // Update existing record (restore if soft-deleted)
-                        $model->fill($data);
-
-                        // Only set deleted_at if the table supports soft deletes
-                        $table = $model->getTable();
-                        if (\Schema::hasColumn($table, 'deleted_at') && array_key_exists('deleted_at', $data)) {
-                            $model->deleted_at = $data['deleted_at'];
-                        }
-
-                        $model->save();
-                        \Log::debug("Import: Updated existing {$entityType} with public_id {$publicId}");
-                    } else {
-                        // Create new record
-                        $model = new $modelClass($data);
-                        $model->save();
-                    }
-
-                    // Re-enable mass assignment protection
-                    $modelClass::reguard();
-
-                    return $model;
                 });
 
                 // Store mapping
@@ -736,6 +757,7 @@ class BackupImportService
         $mappings = [
             'invoices' => [
                 'contact_public_id' => ['contacts', 'contact_id'],
+                'project_public_id' => ['projects', 'project_id'],
                 'order_public_id' => ['orders', 'order_id'],
                 'journal_entry_public_id' => ['journal_entries', 'journal_entry_id'],
             ],
@@ -743,22 +765,30 @@ class BackupImportService
                 'invoice_public_id' => ['invoices', 'invoice_id'],
                 'product_public_id' => ['products', 'product_id'],
                 'account_public_id' => ['accounts', 'account_id'],
+                'cost_center_public_id' => ['cost_centers', 'cost_center_id'],
+                'cost_object_public_id' => ['cost_objects', 'cost_object_id'],
             ],
             'quotes' => [
                 'contact_public_id' => ['contacts', 'contact_id'],
+                'project_public_id' => ['projects', 'project_id'],
                 'order_public_id' => ['orders', 'order_id'],
             ],
             'quote_lines' => [
                 'quote_public_id' => ['quotes', 'quote_id'],
                 'product_public_id' => ['products', 'product_id'],
+                'cost_center_public_id' => ['cost_centers', 'cost_center_id'],
+                'cost_object_public_id' => ['cost_objects', 'cost_object_id'],
             ],
             'orders' => [
                 'contact_public_id' => ['contacts', 'contact_id'],
+                'project_public_id' => ['projects', 'project_id'],
                 'quote_public_id' => ['quotes', 'quote_id'],
             ],
             'order_lines' => [
                 'order_public_id' => ['orders', 'order_id'],
                 'product_public_id' => ['products', 'product_id'],
+                'cost_center_public_id' => ['cost_centers', 'cost_center_id'],
+                'cost_object_public_id' => ['cost_objects', 'cost_object_id'],
             ],
             'delivery_notes' => [
                 'contact_public_id' => ['contacts', 'contact_id'],
@@ -770,6 +800,7 @@ class BackupImportService
             ],
             'belege' => [
                 'contact_public_id' => ['contacts', 'contact_id'],
+                'project_public_id' => ['projects', 'project_id'],
                 'category_account_public_id' => ['accounts', 'category_account_id'],
                 'payment_account_public_id' => ['accounts', 'payment_account_id'],
                 'journal_entry_public_id' => ['journal_entries', 'journal_entry_id'],
@@ -778,6 +809,8 @@ class BackupImportService
                 'beleg_public_id' => ['belege', 'beleg_id'],
                 'product_public_id' => ['products', 'product_id'],
                 'account_public_id' => ['accounts', 'account_id'],
+                'cost_center_public_id' => ['cost_centers', 'cost_center_id'],
+                'cost_object_public_id' => ['cost_objects', 'cost_object_id'],
             ],
             'products' => [
                 'account_public_id' => ['accounts', 'account_id'],
@@ -802,9 +835,16 @@ class BackupImportService
             'journal_entry_lines' => [
                 'journal_entry_public_id' => ['journal_entries', 'journal_entry_id'],
                 'account_public_id' => ['accounts', 'account_id'],
+                'cost_center_public_id' => ['cost_centers', 'cost_center_id'],
+                'cost_object_public_id' => ['cost_objects', 'cost_object_id'],
             ],
             'inventory_transactions' => [
                 'product_public_id' => ['products', 'product_id'],
+            ],
+            // SPEC-08 (Teil A)
+            'projects' => [
+                'contact_public_id' => ['contacts', 'contact_id'],
+                'cost_object_public_id' => ['cost_objects', 'cost_object_id'],
             ],
         ];
 
@@ -915,6 +955,17 @@ class BackupImportService
             unset($data['created_at']);
         }
 
+        // Kompatibilität: Backups vor dem status-Fix im JournalEntryTransformer
+        // enthalten kein status-Feld. Ohne Ableitung fielen alle Buchungen auf
+        // den DB-Default 'draft' zurück, obwohl locked_at gesetzt ist (GoBD-
+        // inkonsistent, Dashboard/Reports zählen sie nicht mehr). Ableitung:
+        // locked_at gesetzt -> 'posted', sonst 'draft'. Ein 'cancelled' lässt
+        // sich aus Alt-Backups nicht rekonstruieren (Storno-Paare neutralisieren
+        // sich in Summen aber ohnehin, nur das Label fehlt).
+        if ($entityType === 'journal_entries' && ! array_key_exists('status', $data)) {
+            $data['status'] = ! empty($data['locked_at']) ? 'posted' : 'draft';
+        }
+
         // Handle deleted_at field properly
         if (array_key_exists('deleted_at', $data)) {
             if ($data['deleted_at'] === null || $data['deleted_at'] === '' || $data['deleted_at'] === 'null') {
@@ -949,8 +1000,13 @@ class BackupImportService
             'delivery_notes' => ['subtotal', 'tax_total', 'total'],
             'delivery_note_lines' => ['unit_price', 'line_total'],
             'belege' => ['amount', 'tax_amount'],
+            'beleg_lines' => ['unit_price', 'line_total'],
             'journal_entry_lines' => ['amount', 'tax_amount'],
             'products' => ['purchase_price', 'selling_price'],
+            // SPEC-08 (Teil A): budget_amount ist nullable - der Cast unten läuft
+            // nur, wenn isset() zutrifft (kein "0.00" für ein eigentlich nulles
+            // Budget), siehe die bestehende isset()-Prüfung in der Schleife unten.
+            'projects' => ['budget_amount'],
         ];
 
         if (isset($moneyFields[$entityType])) {
@@ -1170,6 +1226,10 @@ class BackupImportService
             'contacts' => \App\Modules\Contacts\Models\Contact::class,
             'bank_accounts' => \App\Models\BankAccount::class,
             'company_settings' => \App\Models\CompanySetting::class,
+            // SPEC-08 (Teil A)
+            'cost_centers' => \App\Modules\Projects\Models\CostCenter::class,
+            'cost_objects' => \App\Modules\Projects\Models\CostObject::class,
+            'projects' => \App\Modules\Projects\Models\Project::class,
             'quotes' => \App\Models\Quote::class,
             'quote_lines' => \App\Models\QuoteLine::class,
             'orders' => \App\Models\Order::class,

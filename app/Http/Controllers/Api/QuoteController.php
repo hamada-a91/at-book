@@ -34,6 +34,7 @@ class QuoteController extends Controller
     {
         $validated = $request->validate([
             'contact_id' => ['required', new TenantExists('contacts')],
+            'project_id' => ['nullable', new TenantExists('projects')],
             'quote_date' => 'required|date',
             'valid_until' => 'nullable|date',
             'intro_text' => 'nullable|string',
@@ -47,6 +48,8 @@ class QuoteController extends Controller
             'lines.*.unit' => 'nullable|string',
             'lines.*.unit_price' => 'required|integer',
             'lines.*.tax_rate' => 'required|numeric|min:0',
+            'lines.*.cost_center_id' => ['nullable', new TenantExists('cost_centers')],
+            'lines.*.cost_object_id' => ['nullable', new TenantExists('cost_objects')],
         ]);
 
         // SPEC-05 (Teil A): Nummernvergabe über NumberSequenceService statt "max+1",
@@ -71,6 +74,7 @@ class QuoteController extends Controller
             $quote = Quote::create([
                 'quote_number' => $quoteNumber,
                 'contact_id' => $validated['contact_id'],
+                'project_id' => $validated['project_id'] ?? null,
                 'quote_date' => $validated['quote_date'],
                 'valid_until' => $validated['valid_until'] ?? null,
                 'subtotal' => $subtotal,
@@ -94,6 +98,8 @@ class QuoteController extends Controller
                     'unit_price' => $line['unit_price'],
                     'tax_rate' => $line['tax_rate'],
                     'line_total' => $lineTotal,
+                    'cost_center_id' => $line['cost_center_id'] ?? null,
+                    'cost_object_id' => $line['cost_object_id'] ?? null,
                 ]);
             }
 
@@ -313,6 +319,8 @@ class QuoteController extends Controller
             $order = Order::create([
                 'quote_id' => $quote->id,
                 'contact_id' => $quote->contact_id,
+                // SPEC-08 (Teil A): Projekt-Zuordnung entlang der Belegkette übernehmen.
+                'project_id' => $quote->project_id,
                 'order_number' => $orderNumber,
                 'order_date' => now()->toDateString(),
                 'subtotal' => $quote->subtotal,
@@ -337,6 +345,8 @@ class QuoteController extends Controller
                     'unit_price' => $quoteLine->unit_price,
                     'tax_rate' => $quoteLine->tax_rate,
                     'line_total' => $quoteLine->line_total,
+                    'cost_center_id' => $quoteLine->cost_center_id,
+                    'cost_object_id' => $quoteLine->cost_object_id,
                 ]);
             }
 

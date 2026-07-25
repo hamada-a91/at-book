@@ -68,7 +68,37 @@ Route::middleware(['api', 'auth:api', \App\Http\Middleware\SetTenantFromUser::cl
             Route::get('/journal-export', [ReportsController::class, 'journalExport']);
             Route::get('/account-movements', [ReportsController::class, 'accountMovements']);
             Route::get('/tax-report', [ReportsController::class, 'taxReport']);
+            // SPEC-08 (Teil A)
+            Route::get('/cost-centers', [ReportsController::class, 'costCenters']);
+            Route::get('/projects/{project}/profitability', [ReportsController::class, 'projectProfitability']);
         });
+
+        // Projekte, Kostenstellen & Kostenträger (SPEC-08, Teil A)
+        // index/show offen für alle angemeldeten Rollen (u.a. für die
+        // Projekt-Auswahl beim Erfassen von Belegen/Rechnungen); Schreib-Routen
+        // (store/update/destroy) auf owner|manager|buchhalter beschränkt -
+        // analog zum bestehenden Muster bei /bookings/lock-period und
+        // /audit-logs oben.
+        Route::apiResource('cost-centers', \App\Http\Controllers\Api\CostCenterController::class)->only(['index', 'show']);
+        Route::apiResource('cost-centers', \App\Http\Controllers\Api\CostCenterController::class)
+            ->only(['store', 'update', 'destroy'])
+            ->middleware('role:owner|manager|buchhalter,api');
+
+        Route::apiResource('cost-objects', \App\Http\Controllers\Api\CostObjectController::class)->only(['index', 'show']);
+        Route::apiResource('cost-objects', \App\Http\Controllers\Api\CostObjectController::class)
+            ->only(['store', 'update', 'destroy'])
+            ->middleware('role:owner|manager|buchhalter,api');
+
+        Route::apiResource('projects', \App\Http\Controllers\Api\ProjectController::class)->only(['index', 'show']);
+        Route::apiResource('projects', \App\Http\Controllers\Api\ProjectController::class)
+            ->only(['store', 'update', 'destroy'])
+            ->middleware('role:owner|manager|buchhalter,api');
+
+        Route::get('/projects/{project}/summary', [\App\Http\Controllers\Api\ProjectController::class, 'summary']);
+        Route::get('/projects/{project}/entries', [\App\Http\Controllers\Api\ProjectController::class, 'entries']);
+        Route::get('/projects/{project}/cost-report', [\App\Http\Controllers\Api\ProjectController::class, 'costReport']);
+        // TODO(Teil B): GET /projects/{project}/cost-report/pdf (dompdf, Muster invoices.pdf)
+        // TODO(Teil B): POST /projects/{project}/cost-report/send (SendDocumentMail, Muster InvoiceController::send)
 
         // Invoices
         Route::apiResource('invoices', \App\Http\Controllers\Api\InvoiceController::class);

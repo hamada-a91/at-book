@@ -21,6 +21,10 @@ class JournalEntryTransformer extends BaseTransformer
             // (Import setzt dann ebenfalls null, siehe BackupImportService-Kommentar
             // 'prepareForInsert' - unbekannte/fehlende Felder sind bereits Default null).
             'journal_number' => $model->journal_number,
+            // status (draft|posted|cancelled) MUSS exportiert werden – ohne ihn
+            // fallen alle Buchungen beim Import auf den DB-Default 'draft' zurück
+            // (während locked_at erhalten bleibt → inkonsistenter Zustand).
+            'status' => $model->status,
             'booking_date' => $this->formatDate($model->booking_date),
             'description' => $model->description,
             'reference' => $model->reference,

@@ -19,7 +19,7 @@ Vollständige Doku in **`docs/`** (auf Deutsch): [docs/README.md](docs/README.md
 ./vendor/bin/sail artisan migrate --seed
 ./vendor/bin/sail npm run dev          # Vite (Port 5173)
 ./vendor/bin/sail artisan test         # PHPUnit
-./vendor/bin/sail artisan queue:work   # nötig für Backups
+./vendor/bin/sail artisan queue:work --queue=backups,default   # nötig für Backups (Queue "backups"!)
 vendor/bin/pint                        # Code-Style
 ```
 

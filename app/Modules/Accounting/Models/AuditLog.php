@@ -72,6 +72,8 @@ class AuditLog extends Model
         'contact' => Contact::class,
         'user' => User::class,
         'company_setting' => CompanySetting::class,
+        // SPEC-08 (Teil A)
+        'project' => \App\Modules\Projects\Models\Project::class,
     ];
 
     public static function shortNameForClass(string $class): ?string

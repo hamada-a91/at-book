@@ -40,7 +40,10 @@ class InvoiceBookingService
     public function bookInvoice(Invoice $invoice): JournalEntry
     {
         return DB::transaction(function () use ($invoice) {
-            $invoice->load(['contact', 'lines']);
+            // SPEC-08 (Teil A): 'project' geladen für die Durchreich-Logik in
+            // buildLines() (project_id -> dessen cost_object_id als Default für
+            // alle erzeugten Zeilen).
+            $invoice->load(['contact', 'lines', 'project']);
 
             $this->assertBookable($invoice);
 
@@ -183,37 +186,74 @@ class InvoiceBookingService
     {
         $lines = [];
 
+        // SPEC-08 (Teil A, Durchreich-Logik): Dokument.project_id -> dessen
+        // cost_object_id ist der Default für ALLE erzeugten Zeilen dieser
+        // Rechnung (auch Debitor-/USt-Sammelzeile, die keinen eigenen
+        // invoice_line-Ursprung haben und daher kein Line-Override kennen
+        // können). Ein cost_center_id-Default auf Dokumentebene gibt es
+        // bewusst NICHT (siehe SPEC-08, "UI-Leitprinzip: Projekt-zentriert" -
+        // Kostenstellen sitzen ausschließlich an der Zeile).
+        $projectCostObjectId = $invoice->project?->cost_object_id;
+
         // 1. Soll: Debitor (Kundenkonto) - Bruttobetrag
         $lines[] = [
             'account_id' => $invoice->contact->customer_account_id,
             'type' => 'debit',
             'amount' => (int) $invoice->total,
+            'cost_object_id' => $projectCostObjectId,
         ];
 
-        // 2. Haben: Erlöse je (Konto, Steuersatz)
+        // 2. Haben: Erlöse je (Konto, Steuersatz, Kostenstelle, Kostenträger) - die
+        // Gruppierung berücksichtigt SPEC-08 die aufgelösten Dimensionen mit, damit
+        // zwei invoice_lines mit gleichem Konto/Steuersatz, aber UNTERSCHIEDLICHER
+        // Zeilen-Dimension, nicht fälschlich in eine Buchungszeile zusammengefasst
+        // werden (eine Buchungszeile hat genau EINE Dimension).
         $revenueGroups = [];
         foreach ($invoice->lines as $line) {
-            $key = $line->account_id.'_'.$line->tax_rate;
+            $lineCostCenterId = $line->cost_center_id;
+            // Zeilen-eigene cost_object_id überschreibt den Dokument-Default (Regel
+            // aus SPEC-08, "Durchreich-Logik").
+            $lineCostObjectId = $line->cost_object_id ?? $projectCostObjectId;
+
+            $key = implode('_', [$line->account_id, $line->tax_rate, $lineCostCenterId, $lineCostObjectId]);
             if (! isset($revenueGroups[$key])) {
                 $revenueGroups[$key] = [
                     'account_id' => $line->account_id,
                     'tax_rate' => (float) $line->tax_rate,
                     'net_total' => 0,
+                    'cost_center_id' => $lineCostCenterId,
+                    'cost_object_id' => $lineCostObjectId,
                 ];
             }
             $revenueGroups[$key]['net_total'] += (int) $line->line_total;
         }
 
         foreach ($revenueGroups as $group) {
+            // SPEC-08 (Teil A, Kosten-Nachweis-Ableitung): tax_amount wird HIER,
+            // zusätzlich zur separaten USt-Sammelzeile unten (SPEC-04, 4.2 -
+            // Trial-Balance-Korrektheit je Steuersatz), informativ auf der
+            // Erlöszeile selbst annotiert (amount bleibt netto, tax_amount ist
+            // eine reine Zusatzangabe, beeinflusst NICHT die Soll=Haben-Prüfung).
+            // Grund: ProjectReportService::costReport()/ein künftiges Pendant für
+            // Erlöse liest Netto/USt/Brutto direkt von der (dimensionierten)
+            // Erlös-/Aufwandszeile selbst, statt USt-Konto-Zeilen über den
+            // gesamten Beleg hinweg fachlich eindeutig zurückzuordnen - siehe
+            // Docblock von App\Modules\Projects\Services\ProjectReportService.
             $lines[] = [
                 'account_id' => $group['account_id'],
                 'type' => 'credit',
                 'amount' => $group['net_total'],
+                'tax_amount' => (int) round($group['net_total'] * $group['tax_rate'] / 100),
+                'cost_center_id' => $group['cost_center_id'],
+                'cost_object_id' => $group['cost_object_id'],
             ];
         }
 
         // 3. Haben: Umsatzsteuer je Steuersatz-Gruppe (nicht mehr pauschal tax_total auf
-        // ein hartcodiertes Konto - siehe CLAUDE.md "Bekannte Fallen").
+        // ein hartcodiertes Konto - siehe CLAUDE.md "Bekannte Fallen"). Bewusst NICHT
+        // weiter nach Dimension aufgesplittet (USt-Konten sind KOST-neutral) - bekommt
+        // trotzdem den Dokument-Default, damit "für alle Zeilen" (SPEC-08) konsistent
+        // eingehalten wird.
         $taxByRate = [];
         foreach ($revenueGroups as $group) {
             if ($group['tax_rate'] <= 0) {
@@ -235,6 +275,7 @@ class InvoiceBookingService
                     'account_id' => $taxAccount->id,
                     'type' => 'credit',
                     'amount' => $taxAmount,
+                    'cost_object_id' => $projectCostObjectId,
                 ];
             }
         }

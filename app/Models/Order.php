@@ -2,17 +2,18 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use App\Models\Concerns\BelongsToTenant;
 use App\Models\Concerns\HasPublicId;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Order extends Model
 {
-    use BelongsToTenant, SoftDeletes, HasPublicId;
-    
+    use BelongsToTenant, HasPublicId, SoftDeletes;
+
     protected $fillable = [
         'contact_id',
+        'project_id',
         'quote_id',
         'order_number',
         'order_date',
@@ -55,5 +56,10 @@ class Order extends Model
     public function invoices()
     {
         return $this->hasMany(Invoice::class);
+    }
+
+    public function project()
+    {
+        return $this->belongsTo(\App\Modules\Projects\Models\Project::class);
     }
 }

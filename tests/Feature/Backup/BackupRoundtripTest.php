@@ -36,8 +36,9 @@ class BackupRoundtripTest extends TestCase
     use RefreshDatabase;
 
     /**
-     * KRITISCHER BUG (drittes Fundstück in diesem Test, siehe Abschlussbericht
-     * SPEC-02): BackupImportService::importEntityType() ruft
+     * GEFIXT (unguard ist jetzt in try/finally gekapselt) – der defensive
+     * Teardown bleibt trotzdem als Sicherheitsnetz bestehen.
+     * Historie: BackupImportService::importEntityType() rief
      * $modelClass::unguard() vor dem Insert und $modelClass::reguard() danach
      * auf - OHNE try/finally. Wirft der Insert eine Exception (z.B. genau der
      * beleg_lines-Bug oben), wird reguard() NIE erreicht. Da Model::$unguarded
@@ -134,24 +135,6 @@ class BackupRoundtripTest extends TestCase
         $dataA = TenantTestDataFactory::create('rtA');
         $tenantA = $dataA->tenant;
         $userA = $dataA->user;
-
-        // KRITISCHER BEKANNTER BUG (siehe test_known_bug_beleg_line_with_price_breaks_import
-        // unten für die minimale Reproduktion): BelegLineTransformer exportiert
-        // unit_price/line_total als Dezimal-String ("15000.00"), aber
-        // BackupImportService::prepareForInsert() fehlt 'beleg_lines' in der
-        // $moneyFields-Whitelist (im Gegensatz zu invoice_lines/quote_lines/
-        // order_lines/delivery_note_lines, die dort korrekt gelistet sind).
-        // Postgres lehnt den String für die integer-Spalte ab, die Transaktion
-        // wird "aborted" und JEDER nachfolgende Insert (inkl. journal_entries!)
-        // schlägt fehl -> der GESAMTE Import bricht ab, sobald irgendeine
-        // BelegLine existiert. Das betrifft jeden echten Tenant mit Belegen,
-        // die Positionszeilen haben, und ist damit ein Datenverlust-Risiko beim
-        // Restore. Gemäß Hard-Rule "keine Änderungen an app/Services/Backup/"
-        // wird das hier NICHT gefixt. Damit der Rest des Roundtrips (alle
-        // anderen 20 Entity-Typen) trotzdem sinnvoll geprüft werden kann, wird
-        // die Beleg-Zeile vor dem Export entfernt. Die Lücke selbst bleibt über
-        // test_known_bug_beleg_line_with_price_breaks_import abgesichert.
-        $dataA->beleg->lines()->delete();
 
         // SPEC-05 (Teil B): books_locked_until VOR dem Export setzen, um zu prüfen,
         // dass die Periodensperre den Roundtrip überlebt (CompanySettingTransformer).
@@ -339,18 +322,12 @@ class BackupRoundtripTest extends TestCase
         // BEKANNTER BUG (siehe Abschlussbericht SPEC-02): JournalEntryTransformer
         // exportiert das Feld 'status' NICHT (siehe
         // app/Services/Backup/Transformers/JournalEntryTransformer.php::transform).
-        // Nach dem Import landen daher ALLE Journalbuchungen auf dem Spalten-Default
-        // 'draft' - unabhängig vom ursprünglichen Status (posted/cancelled). Gemäß
-        // Hard-Rule "keine Änderungen an app/Services/Backup/" wird das hier NICHT
-        // gefixt, sondern bewusst dokumentiert statt stillschweigend weggelassen.
-        // GoBD-relevant ist ohnehin in erster Linie locked_at (oben geprüft), nicht
-        // das status-Feld.
-        $this->assertSame(
-            'draft',
-            $journalPostedB->status,
-            'Dokumentiert bekannten Bug: status wird beim Backup-Roundtrip NICHT mitgenommen (siehe Kommentar). '
-            .'Falls dieser Assert künftig fehlschlägt, wurde der Bug behoben - dann bitte auf assertSame("posted", ...) ändern.'
-        );
+        // Regression (gefixt): JournalEntryTransformer exportierte 'status' früher
+        // nicht -> alle Buchungen fielen beim Import auf 'draft' zurück, obwohl
+        // locked_at erhalten blieb (Dashboard/Reports zählten sie nicht mehr,
+        // erneutes Festschreiben schlug mit 422 fehl). Seit dem Fix MUSS der
+        // Status den Roundtrip überleben.
+        $this->assertSame('posted', $journalPostedB->status, 'status (posted) muss den Backup-Roundtrip überleben.');
 
         // Journalzeile -> Konto-Verknüpfung korrekt neu gemappt (stabiler Schlüssel: Kontocode)
         $lineB = $journalPostedB->lines()->first();
@@ -362,8 +339,9 @@ class BackupRoundtripTest extends TestCase
         $originalAccount = Account::withoutGlobalScopes()->find($originalLine->account_id);
         $this->assertSame($originalAccount->code, $accountB->code, 'JournalEntryLine->Account muss auf das korrekt remappte Konto (gleicher Kontocode) zeigen.');
 
-        // Stornierte Buchung: Original bleibt 'cancelled' (Status wird zwar generell
-        // nicht exportiert - s.o. -, hier zusätzlich zur Doku der Vollständigkeit halber).
+        // Stornierte Buchung: Original muss auch nach dem Roundtrip 'cancelled' sein
+        // (sonst würden Storno-Paare in Reports doppelt als posted erscheinen bzw.
+        // das Storno-Label verloren gehen).
         $journalCancelledB = JournalEntry::withoutGlobalScopes()
             ->where('tenant_id', $tenantB->id)
             ->where('description', $dataA->journalCancelled->description)
@@ -371,6 +349,7 @@ class BackupRoundtripTest extends TestCase
             ->first();
         $this->assertNotNull($journalCancelledB);
         $this->assertNotNull($journalCancelledB->locked_at);
+        $this->assertSame('cancelled', $journalCancelledB->status, 'status (cancelled) muss den Backup-Roundtrip überleben.');
 
         // SPEC-05 (Teil B): books_locked_until muss den Roundtrip überleben
         // (CompanySettingTransformer).
@@ -384,64 +363,68 @@ class BackupRoundtripTest extends TestCase
     }
 
     /**
-     * KRITISCHER BUG - minimale Reproduktion: Line-Transformer ohne eigenen
-     * getQuery()-Override (quote_lines, order_lines, delivery_note_lines,
-     * invoice_lines, beleg_lines) filtern NICHT nach Tenant, weil
-     * BaseTransformer::getQuery() nur filtert, wenn die Tabelle eine
-     * tenant_id-Spalte hat - diese "Line"-Tabellen haben bewusst keine (sie
-     * hängen am Parent). Ergebnis: Der Export eines Tenants enthält die
-     * Positionszeilen ALLER Tenants der Instanz, nicht nur die eigenen -
-     * ein Cross-Tenant-Datenleck (Artikel, Preise, Beschreibungen anderer
-     * Mandanten landen im eigenen Backup).
-     *
-     * Fundstelle für den Fix (nicht Teil von SPEC-02, siehe Abschlussbericht):
-     * jeweils app/Services/Backup/Transformers/{Quote,Order,DeliveryNote,Invoice,Beleg}LineTransformer.php
-     * braucht (wie JournalEntryLineTransformer bereits vorgemacht) einen
-     * getQuery()-Override mit whereHas($parent, fn($q) => $q->where('tenant_id', $tenant->id)).
-     *
-     * Dieser Test hält den Ist-Zustand bewusst als ROTEN Regressionsanker fest.
+     * Regression für das (gefixte) Cross-Tenant-Leck der Line-Transformer:
+     * Die "Line"-Tabellen (quote_lines, order_lines, delivery_note_lines,
+     * invoice_lines, beleg_lines) haben bewusst keine tenant_id – BaseTransformer
+     * exportierte sie daher UNGEFILTERT über alle Tenants. Seit dem Fix scopen
+     * alle Line-Transformer über ihren Parent (whereHas + withTrashed, Muster:
+     * JournalEntryLineTransformer). Dieser Test beweist die Isolation.
      */
-    public function test_known_bug_line_transformers_leak_across_tenants(): void
+    public function test_line_transformers_do_not_leak_across_tenants(): void
     {
         $dataA = TenantTestDataFactory::create('leakA');
+
+        // Eindeutige Markierung: Die Factory erzeugt in beiden Tenants identische
+        // Texte – für den Leck-Nachweis braucht Tenant A einen unverwechselbaren.
+        $leakMarker = 'LEAK-MARKER-A-'.uniqid();
+        $dataA->quote->lines()->first()->update(['description' => $leakMarker]);
+
         $dataB = TenantTestDataFactory::create('leakB');
 
-        // Export von Tenant B (dem "Opfer") - currentTenant/Auth zeigen nach der
+        // Export von Tenant B - currentTenant/Auth zeigen nach der
         // zweiten Factory-Erstellung bereits auf B.
         $exportB = BackupTestHelper::exportToArray($dataB->tenant, $dataB->user);
 
         $quoteLineDescriptions = array_column($exportB['data']['quote_lines'] ?? [], 'description');
-
-        $leakedDescription = $dataA->quote->lines()->first()->description;
-        $this->assertContains(
-            $leakedDescription,
+        $this->assertNotContains(
+            $leakMarker,
             $quoteLineDescriptions,
-            "Cross-Tenant-Leck bestätigt: Tenant B's Export enthält eine quote_line von Tenant A ('{$leakedDescription}')."
+            "Cross-Tenant-Leck: Tenant B's Export enthält eine quote_line von Tenant A ('{$leakMarker}')."
         );
+
+        // Alle fünf Line-Typen: Export von B enthält exakt B's eigene Zeilen.
+        $lineParents = [
+            'quote_lines' => [\App\Models\QuoteLine::class, 'quote'],
+            'order_lines' => [\App\Models\OrderLine::class, 'order'],
+            'delivery_note_lines' => [\App\Models\DeliveryNoteLine::class, 'deliveryNote'],
+            'invoice_lines' => [\App\Models\InvoiceLine::class, 'invoice'],
+            'beleg_lines' => [\App\Models\BelegLine::class, 'beleg'],
+        ];
+        foreach ($lineParents as $entityType => [$modelClass, $parentRelation]) {
+            $ownCount = $modelClass::query()
+                ->whereHas($parentRelation, function ($q) use ($dataB) {
+                    if (method_exists($q->getModel(), 'trashed')) {
+                        $q->withTrashed();
+                    }
+                    $q->where('tenant_id', $dataB->tenant->id);
+                })
+                ->count();
+            $this->assertCount(
+                $ownCount,
+                $exportB['data'][$entityType] ?? [],
+                "{$entityType}: Export von Tenant B muss exakt dessen eigene Zeilen enthalten."
+            );
+        }
     }
 
     /**
-     * KRITISCHER BUG - minimale Reproduktion (siehe ausführlichen Kommentar in
-     * test_roundtrip_preserves_entity_counts_and_relations): Sobald ein Beleg
-     * eine Zeile mit unit_price/line_total hat (Normalfall!), bricht der
-     * komplette Import ab, weil BackupImportService::prepareForInsert() die
-     * Dezimal-Strings für 'beleg_lines' nicht zurück in Integer-Cents
-     * konvertiert (fehlender Eintrag in der $moneyFields-Map, im Unterschied
-     * zu invoice_lines/quote_lines/order_lines/delivery_note_lines).
-     *
-     * Dieser Test hält den Ist-Zustand bewusst als ROTEN Regressionsanker fest
-     * (erwartet die Exception). Wird der Bug künftig im Backup-Modul gefixt,
-     * schlägt DIESER Test fehl ("expected exception not thrown") - das ist
-     * dann das Signal, ihn anzupassen (Assertion auf Erfolg drehen) und den
-     * Workaround in test_roundtrip_preserves_entity_counts_and_relations
-     * (das lines()->delete()) zu entfernen.
-     *
-     * Fundstelle für den Fix (nicht Teil von SPEC-02, siehe Abschlussbericht):
-     * app/Services/Backup/BackupImportService.php, Methode prepareForInsert(),
-     * Array $moneyFields -> 'beleg_lines' => ['unit_price', 'line_total']
-     * ergänzen.
+     * Regression für den (gefixten) beleg_lines-Import-Bug: prepareForInsert()
+     * fehlte 'beleg_lines' in der $moneyFields-Map, wodurch die als
+     * Dezimal-String exportierten unit_price/line_total den kompletten Import
+     * abbrechen ließen. Seit dem Fix muss ein Beleg mit bepreister Zeile den
+     * Roundtrip unversehrt überstehen.
      */
-    public function test_known_bug_beleg_line_with_price_breaks_import(): void
+    public function test_beleg_line_with_price_survives_import(): void
     {
         $dataA = TenantTestDataFactory::create('belegbug');
 
@@ -459,10 +442,15 @@ class BackupRoundtripTest extends TestCase
             'tenant_id' => $tenantB->id,
         ]);
 
-        $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Import fehlgeschlagen: Transaktion wurde durch einen vorherigen Fehler abgebrochen');
-
         BackupTestHelper::importZip($export['zip_path'], $tenantB, $userB);
+
+        app()->instance('currentTenant', $tenantB);
+        $importedLine = \App\Models\BelegLine::query()->first();
+        $originalLine = $dataA->beleg->lines()->first();
+
+        $this->assertNotNull($importedLine, 'BelegLine muss den Import überleben');
+        $this->assertSame((int) $originalLine->unit_price, (int) $importedLine->unit_price);
+        $this->assertSame((int) $originalLine->line_total, (int) $importedLine->line_total);
     }
 
     /**
@@ -483,16 +471,6 @@ class BackupRoundtripTest extends TestCase
 
         $data = TenantTestDataFactory::create('fixture');
 
-        // Siehe test_known_bug_beleg_line_with_price_breaks_import: eine BelegLine
-        // mit unit_price bricht den Import wegen eines bestehenden Bugs in
-        // BackupImportService IMMER ab. Die Referenz-Fixture soll aber ein
-        // gültiger, dauerhaft importierbarer Kompatibilitätsvertrag sein (das ist
-        // ihr einziger Zweck - siehe BackupFixtureCompatibilityTest) und keine
-        // zusätzliche Kopie des ohnehin schon dedizierten Bug-Tests. Deshalb wird
-        // die Beleg-Zeile hier bewusst entfernt (der Beleg-Header selbst bleibt
-        // Teil der Fixture).
-        $data->beleg->lines()->delete();
-
         $export = BackupTestHelper::exportToArray($data->tenant, $data->user);
 
         unset($export['job'], $export['zip_path']);
@@ -503,6 +481,75 @@ class BackupRoundtripTest extends TestCase
         );
 
         $this->assertFileExists(base_path('tests/Fixtures/backup-v1.0-referenz.json'));
+    }
+
+    /**
+     * SPEC-07 (7.1, Backup-Impact Punkt 1): Betragsspalten wurden von
+     * `integer` auf `bigint` angehoben, weil `integer` bei ~21,4 Mio. EUR
+     * (2^31-1 Cents) überläuft. Dieser Test stellt sicher, dass ein Betrag
+     * JENSEITS dieser alten Integer-Grenze (hier: 25 Mio. EUR) den kompletten
+     * Backup-Roundtrip (Export -> Import in frischen Tenant) unversehrt
+     * übersteht - sowohl auf Kopf- (invoices) als auch auf Positionsebene
+     * (invoice_lines), da InvoiceTransformer/InvoiceLineTransformer Beträge
+     * als Dezimal-String exportieren und BackupImportService sie beim Import
+     * wieder in Integer-Cents zurückwandelt (siehe prepareForInsert()).
+     */
+    public function test_roundtrip_preserves_amount_beyond_former_int32_limit(): void
+    {
+        $dataA = TenantTestDataFactory::create('bigamt');
+
+        // 25.000.000,00 EUR = 2.500.000.000 Cents > 2^31-1 (2.147.483.647) -
+        // das alte `integer`-Limit. tax_total/total liegen ebenfalls darüber.
+        $largeUnitPrice = 2_500_000_000;
+        $largeSubtotal = 2_500_000_000;
+        $largeTaxTotal = (int) round($largeSubtotal * 0.19);
+        $largeTotal = $largeSubtotal + $largeTaxTotal;
+
+        $invoiceA = $dataA->invoice;
+        $invoiceA->update([
+            'subtotal' => $largeSubtotal,
+            'tax_total' => $largeTaxTotal,
+            'total' => $largeTotal,
+        ]);
+
+        $firstLine = $invoiceA->lines()->first();
+        $firstLine->update([
+            'unit_price' => $largeUnitPrice,
+            'line_total' => $largeUnitPrice,
+        ]);
+
+        // Sanity: die Werte müssen tatsächlich die alte int32-Grenze sprengen,
+        // sonst wäre der Test kein echter Regressionsanker für 7.1.
+        $this->assertGreaterThan(2147483647, $invoiceA->fresh()->total);
+        $this->assertGreaterThan(2147483647, $firstLine->fresh()->unit_price);
+
+        $export = BackupTestHelper::exportToArray($dataA->tenant, $dataA->user);
+
+        $tenantB = Tenant::create(['name' => 'Bigamt Ziel-Tenant', 'slug' => 'bigamt-ziel-'.uniqid()]);
+        $userB = User::create([
+            'name' => 'Bigamt Importeur',
+            'email' => 'bigamt-'.uniqid().'@at-book.test',
+            'password' => Hash::make('password'),
+            'tenant_id' => $tenantB->id,
+        ]);
+
+        BackupTestHelper::importZip($export['zip_path'], $tenantB, $userB);
+
+        app()->instance('currentTenant', $tenantB);
+
+        $invoiceB = Invoice::withoutGlobalScopes()
+            ->where('tenant_id', $tenantB->id)
+            ->where('invoice_number', $invoiceA->invoice_number)
+            ->first();
+        $this->assertNotNull($invoiceB, 'Rechnung mit Betrag > 2^31 Cents muss den Roundtrip überstehen.');
+        $this->assertSame($largeSubtotal, $invoiceB->subtotal);
+        $this->assertSame($largeTaxTotal, $invoiceB->tax_total);
+        $this->assertSame($largeTotal, $invoiceB->total);
+
+        $lineB = $invoiceB->lines()->where('description', $firstLine->description)->first();
+        $this->assertNotNull($lineB);
+        $this->assertSame($largeUnitPrice, $lineB->unit_price);
+        $this->assertSame($largeUnitPrice, $lineB->line_total);
     }
 
     /**

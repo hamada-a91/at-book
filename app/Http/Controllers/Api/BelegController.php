@@ -69,6 +69,8 @@ class BelegController extends Controller
             'amount' => 'required|integer|min:0',
             'tax_amount' => 'nullable|integer|min:0',
             'contact_id' => ['nullable', new TenantExists('contacts')],
+            // SPEC-08 (Teil A): Default-Kostenträger-Zuordnung fürs ganze Dokument.
+            'project_id' => ['nullable', new TenantExists('projects')],
             'category_account_id' => ['nullable', new TenantExists('accounts')],
             'is_paid' => 'nullable|boolean',
             'payment_account_id' => ['nullable', new TenantExists('accounts')],
@@ -84,6 +86,9 @@ class BelegController extends Controller
             'lines.*.unit_price' => 'required|integer',
             'lines.*.tax_rate' => 'nullable|numeric|min:0',
             'lines.*.account_id' => ['nullable', new TenantExists('accounts')],
+            // SPEC-08 (Teil A): Zeilen-Override der Dokument-Dimension.
+            'lines.*.cost_center_id' => ['nullable', new TenantExists('cost_centers')],
+            'lines.*.cost_object_id' => ['nullable', new TenantExists('cost_objects')],
         ]);
 
         // Handle file upload if present (Dateisystem-Operation, bewusst außerhalb
@@ -110,6 +115,7 @@ class BelegController extends Controller
                 'amount' => $validated['amount'],
                 'tax_amount' => $validated['tax_amount'] ?? 0,
                 'contact_id' => $validated['contact_id'] ?? null,
+                'project_id' => $validated['project_id'] ?? null,
                 'category_account_id' => $validated['category_account_id'] ?? null,
                 'is_paid' => $validated['is_paid'] ?? false,
                 'payment_account_id' => $validated['payment_account_id'] ?? null,
@@ -133,6 +139,8 @@ class BelegController extends Controller
                         'tax_rate' => $line['tax_rate'] ?? 19,
                         'line_total' => $lineTotal,
                         'account_id' => $line['account_id'] ?? null,
+                        'cost_center_id' => $line['cost_center_id'] ?? null,
+                        'cost_object_id' => $line['cost_object_id'] ?? null,
                     ]);
                 }
             }
@@ -167,6 +175,7 @@ class BelegController extends Controller
             'amount' => 'required|integer|min:0',
             'tax_amount' => 'nullable|integer|min:0',
             'contact_id' => ['nullable', new TenantExists('contacts')],
+            'project_id' => ['nullable', new TenantExists('projects')],
             'category_account_id' => ['nullable', new TenantExists('accounts')],
             'is_paid' => 'nullable|boolean',
             'payment_account_id' => ['nullable', new TenantExists('accounts')],
@@ -224,8 +233,27 @@ class BelegController extends Controller
 
                 $lines = [];
 
-                // 1. Contact Line (Debitor/Kreditor)
-                $beleg->loadMissing('contact');
+                // SPEC-08 (Teil A, Durchreich-Logik): Dokument.project_id -> dessen
+                // cost_object_id ist der Default für ALLE Zeilen dieser Beleg-Buchung.
+                // Ein Zeilen-Override ist nur möglich, wenn der Beleg GENAU EINE
+                // beleg_line hat - BelegController::book() bucht Kontakt-/Kontra-/
+                // USt-Zeile als EINE aggregierte Zeile pro Konto (kein Aufbau je
+                // beleg_line, siehe unten), ein Override aus mehreren, ggf.
+                // unterschiedlich dimensionierten beleg_lines ließe sich in dieser
+                // aggregierten Struktur nicht eindeutig auf eine einzelne
+                // Journalzeile zurückführen. Bei genau einer Zeile ist "die Zeile"
+                // und "die aggregierte Kontra-Buchung" 1:1 dasselbe - dort greift
+                // der Override.
+                $beleg->loadMissing(['contact', 'project', 'lines']);
+
+                $projectCostObjectId = $beleg->project?->cost_object_id;
+                $contraCostCenterId = null;
+                $contraCostObjectId = $projectCostObjectId;
+                if ($beleg->lines->count() === 1) {
+                    $onlyLine = $beleg->lines->first();
+                    $contraCostCenterId = $onlyLine->cost_center_id;
+                    $contraCostObjectId = $onlyLine->cost_object_id ?? $projectCostObjectId;
+                }
 
                 if (! $beleg->contact) {
                     throw new DomainException('Kein Kontakt ausgewählt.');
@@ -248,6 +276,7 @@ class BelegController extends Controller
                     'account_id' => $contactAccountId,
                     'type' => $contactLineType,
                     'amount' => $beleg->amount,
+                    'cost_object_id' => $projectCostObjectId,
                 ];
 
                 // 2. Contra Account (Revenue/Expense) - Use user-selected Sachkonto or fallback
@@ -271,10 +300,17 @@ class BelegController extends Controller
                 $contraLineType = ($beleg->document_type === 'ausgang') ? 'credit' : 'debit';
                 $netAmount = $beleg->amount - $beleg->tax_amount;
 
+                // SPEC-08 (Teil A, Kosten-Nachweis-Ableitung): tax_amount wird HIER
+                // informativ auf der Kontra-Zeile (Aufwand/Erlös) annotiert - analog zu
+                // InvoiceBookingService::buildLines() (siehe dortiger Kommentar).
+                // amount bleibt netto, beeinflusst NICHT die Soll=Haben-Prüfung.
                 $lines[] = [
                     'account_id' => $contraAccount->id,
                     'type' => $contraLineType,
                     'amount' => $netAmount,
+                    'tax_amount' => $beleg->tax_amount,
+                    'cost_center_id' => $contraCostCenterId,
+                    'cost_object_id' => $contraCostObjectId,
                 ];
 
                 // 3. Tax Line - Steuersatz aus Betrag/Nettobetrag ableiten (Beleg hat keinen
@@ -292,6 +328,7 @@ class BelegController extends Controller
                         'account_id' => $taxAccount->id,
                         'type' => $contraLineType,
                         'amount' => $beleg->tax_amount,
+                        'cost_object_id' => $projectCostObjectId,
                     ];
                 }
 

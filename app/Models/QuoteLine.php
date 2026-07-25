@@ -2,12 +2,13 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use App\Models\Concerns\HasPublicId;
+use Illuminate\Database\Eloquent\Model;
 
 class QuoteLine extends Model
 {
     use HasPublicId;
+
     protected $fillable = [
         'quote_id',
         'product_id',
@@ -17,6 +18,8 @@ class QuoteLine extends Model
         'unit_price',
         'tax_rate',
         'line_total',
+        'cost_center_id',
+        'cost_object_id',
     ];
 
     public function quote()
@@ -28,5 +31,14 @@ class QuoteLine extends Model
     {
         return $this->belongsTo(Product::class);
     }
-}
 
+    public function costCenter()
+    {
+        return $this->belongsTo(\App\Modules\Projects\Models\CostCenter::class);
+    }
+
+    public function costObject()
+    {
+        return $this->belongsTo(\App\Modules\Projects\Models\CostObject::class);
+    }
+}

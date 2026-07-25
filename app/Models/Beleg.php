@@ -2,14 +2,14 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Models\Concerns\BelongsToTenant;
 use App\Models\Concerns\HasPublicId;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Beleg extends Model
 {
-    use SoftDeletes, BelongsToTenant, HasPublicId;
+    use BelongsToTenant, HasPublicId, SoftDeletes;
 
     protected $table = 'belege';
 
@@ -21,6 +21,7 @@ class Beleg extends Model
         'amount',
         'tax_amount',
         'contact_id',
+        'project_id',
         'category_account_id',
         'journal_entry_id',
         'file_path',
@@ -61,5 +62,14 @@ class Beleg extends Model
     public function lines()
     {
         return $this->hasMany(BelegLine::class);
+    }
+
+    /**
+     * SPEC-08 (Teil A): Default-Kostenträger-Zuordnung fürs ganze Dokument
+     * (Durchreich-Logik in BelegController::book()).
+     */
+    public function project()
+    {
+        return $this->belongsTo(\App\Modules\Projects\Models\Project::class);
     }
 }

@@ -7,6 +7,7 @@ import { AccountsList } from './pages/AccountsList';
 import { AccountCreate } from './pages/AccountCreate';
 import { AccountDetail } from './pages/AccountDetail';
 import { JournalList } from './pages/JournalList';
+import { AuditLogList } from './pages/AuditLogList';
 import { BookingCreate } from './pages/BookingCreate';
 import { ContactsList } from './pages/ContactsList';
 import { InvoicesList } from './pages/InvoicesList';
@@ -227,6 +228,7 @@ function TenantRoutes() {
                             <Route path="/reports" element={<Reports />} />
                             <Route path="/journal" element={<Navigate to={`/${tenant}/reports`} replace />} />
                             <Route path="/bookings" element={<JournalList />} />
+                            <Route path="/audit-log" element={<AuditLogList />} />
                             <Route path="/bookings/create" element={<BookingCreate />} />
                             <Route path="/bank-accounts" element={<BankAccountsList />} />
                             <Route path="/users" element={<UsersList />} />

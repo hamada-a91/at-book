@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { AuditTrail } from '@/components/AuditTrail';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from '@/lib/axios';
 
@@ -629,6 +630,9 @@ export function InvoicePreview() {
                     </UiDialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* Verlauf (Audit-Trail) – blendet sich bei fehlender Berechtigung selbst aus */}
+            {id && <AuditTrail auditableType="invoice" auditableId={Number(id)} title="Verlauf" />}
         </div>
     );
 }

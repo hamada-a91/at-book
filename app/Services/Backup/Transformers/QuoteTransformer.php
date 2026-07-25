@@ -16,6 +16,7 @@ class QuoteTransformer extends BaseTransformer
         return [
             'public_id' => $model->public_id,
             'contact_public_id' => $this->getRelatedPublicId($model->contact),
+            'project_public_id' => $this->getRelatedPublicId($model->project),
             'order_public_id' => $this->getRelatedPublicId($model->order),
             'quote_number' => $model->quote_number,
             'quote_date' => $this->formatDate($model->quote_date),

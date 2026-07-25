@@ -17,6 +17,7 @@ class InvoiceTransformer extends BaseTransformer
             'public_id' => $model->public_id,
             'invoice_number' => $model->invoice_number,
             'contact_public_id' => $this->getRelatedPublicId($model->contact),
+            'project_public_id' => $this->getRelatedPublicId($model->project),
             'order_public_id' => $this->getRelatedPublicId($model->order),
             'invoice_date' => $this->formatDate($model->invoice_date),
             'due_date' => $this->formatDate($model->due_date),
