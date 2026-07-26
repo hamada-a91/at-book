@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Link, useParams } from 'react-router-dom';
 import axios from '@/lib/axios';
-import { Plus, Trash2, SlidersHorizontal } from 'lucide-react';
+import { Plus, Trash2, SlidersHorizontal, BarChart3 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 interface Dimension { id: number; code: string; name: string; active: boolean; }
 
 function DimensionManager({ resource, singular }: { resource: 'cost-centers' | 'cost-objects'; singular: string }) {
+    const { tenant } = useParams<{ tenant: string }>();
     const queryClient = useQueryClient();
     const [code, setCode] = useState('');
     const [name, setName] = useState('');
@@ -56,9 +58,16 @@ function DimensionManager({ resource, singular }: { resource: 'cost-centers' | '
                             <span>{d.name}</span>
                             {!d.active && <Badge variant="secondary">inaktiv</Badge>}
                         </div>
-                        <Button variant="ghost" size="sm" onClick={() => deleteMutation.mutate(d.id)}>
-                            <Trash2 className="h-4 w-4 text-red-600" />
-                        </Button>
+                        <div className="flex items-center gap-1">
+                            {resource === 'cost-centers' && (
+                                <Button variant="ghost" size="sm" asChild title="Auswertung öffnen">
+                                    <Link to={`/${tenant}/cost-centers/${d.id}`}><BarChart3 className="h-4 w-4 text-blue-600" /></Link>
+                                </Button>
+                            )}
+                            <Button variant="ghost" size="sm" onClick={() => deleteMutation.mutate(d.id)}>
+                                <Trash2 className="h-4 w-4 text-red-600" />
+                            </Button>
+                        </div>
                     </div>
                 ))}
             </div>

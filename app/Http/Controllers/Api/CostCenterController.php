@@ -20,6 +20,34 @@ class CostCenterController extends Controller
 {
     use HasTenantScope;
 
+    public function __construct(
+        private \App\Modules\Projects\Services\ProjectReportService $reportService,
+    ) {}
+
+    /**
+     * SPEC-08: KPIs + Berichts-Daten (Kosten je Konto, Monatsverlauf) einer Kostenstelle.
+     */
+    public function summary(CostCenter $costCenter)
+    {
+        $this->assertOwnedByTenant($costCenter);
+
+        return response()->json($this->reportService->costCenterSummary($costCenter));
+    }
+
+    /**
+     * SPEC-08: Kosten-Nachweis (Netto/USt/Brutto) einer Kostenstelle.
+     */
+    public function costReport(Request $request, CostCenter $costCenter)
+    {
+        $this->assertOwnedByTenant($costCenter);
+
+        return response()->json($this->reportService->costCenterCostReport(
+            $costCenter,
+            $request->input('from'),
+            $request->input('to')
+        ));
+    }
+
     public function index(Request $request)
     {
         $tenant = $this->getTenantOrFail();

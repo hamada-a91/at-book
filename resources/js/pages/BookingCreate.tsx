@@ -27,6 +27,8 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { ContactSelector } from '@/components/ContactSelector';
 import { AccountSelector } from '@/components/AccountSelector';
+import { ProjectSelector } from '@/components/ProjectSelector';
+import { CostCenterSelector } from '@/components/CostCenterSelector';
 import { roundToTwoDecimals, formatCurrency as formatEuro, calculateVAT } from '@/lib/currency';
 import {
     Dialog,
@@ -88,6 +90,20 @@ export function BookingCreate() {
     const navigate = useNavigate();
     const { tenant } = useParams();
     const queryClient = useQueryClient();
+    // SPEC-08: Kostenzuordnung (Projekt/Kostenstelle) für die gesamte Buchung.
+    const [projectId, setProjectId] = useState<string | undefined>();
+    const [costCenterId, setCostCenterId] = useState<string | undefined>();
+    const { data: bookingSettings } = useQuery({
+        queryKey: ['settings'],
+        queryFn: async () => (await axios.get('/api/settings')).data,
+    });
+    const { data: projectsForDim } = useQuery<any[]>({
+        queryKey: ['projects', 'active'],
+        queryFn: async () => (await axios.get('/api/projects', { params: { status: 'active' } })).data,
+        enabled: !!bookingSettings?.module_projects_enabled,
+    });
+    const selectedProjectCostObjectId = projectsForDim?.find((p) => String(p.id) === projectId)?.cost_object_id ?? null;
+
     // Beleg Workflow State
     type BelegOption = 'none' | 'attach' | 'create' | 'select' | 'exception';
     const [belegStep, setBelegStep] = useState<'select' | 'complete'>('select');
@@ -256,6 +272,9 @@ export function BookingCreate() {
                     amount: Math.round(line.amount * 100), // Convert to cents
                     tax_key: null,
                     tax_amount: 0,
+                    // SPEC-08: Kostenzuordnung auf alle Zeilen anwenden (Projekt -> Kostenträger)
+                    cost_object_id: selectedProjectCostObjectId,
+                    cost_center_id: costCenterId ? parseInt(costCenterId) : null,
                 })),
             };
 
@@ -1123,6 +1142,25 @@ export function BookingCreate() {
                                                 )}
                                             />
                                         </div>
+
+                                        {/* SPEC-08: Kostenzuordnung (Projekt / Kostenstelle) */}
+                                        {(bookingSettings?.module_projects_enabled || bookingSettings?.module_cost_centers_enabled) && (
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 rounded-lg border border-slate-200 dark:border-slate-800 p-4 bg-slate-50/50 dark:bg-slate-900/30">
+                                                {bookingSettings?.module_projects_enabled && (
+                                                    <div>
+                                                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300 block mb-2">Projekt (optional)</label>
+                                                        <ProjectSelector value={projectId} onChange={setProjectId} />
+                                                    </div>
+                                                )}
+                                                {bookingSettings?.module_cost_centers_enabled && (
+                                                    <div>
+                                                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300 block mb-2">Kostenstelle (optional)</label>
+                                                        <CostCenterSelector value={costCenterId} onChange={setCostCenterId} />
+                                                    </div>
+                                                )}
+                                                <p className="text-xs text-muted-foreground md:col-span-2">Die Zuordnung gilt für alle Buchungszeilen.</p>
+                                            </div>
+                                        )}
 
                                         {/* Lines */}
                                         <div className="space-y-4">

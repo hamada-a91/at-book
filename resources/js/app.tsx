@@ -11,6 +11,7 @@ import { AuditLogList } from './pages/AuditLogList';
 import { ProjectsList } from './pages/Projects/ProjectsList';
 import { ProjectDetail } from './pages/Projects/ProjectDetail';
 import { CostCentersList } from './pages/Projects/CostCentersList';
+import { CostCenterDetail } from './pages/Projects/CostCenterDetail';
 import { BookingCreate } from './pages/BookingCreate';
 import { ContactsList } from './pages/ContactsList';
 import { InvoicesList } from './pages/InvoicesList';
@@ -235,6 +236,7 @@ function TenantRoutes() {
                             <Route path="/projects" element={<ProjectsList />} />
                             <Route path="/projects/:id" element={<ProjectDetail />} />
                             <Route path="/cost-centers" element={<CostCentersList />} />
+                            <Route path="/cost-centers/:id" element={<CostCenterDetail />} />
                             <Route path="/bookings/create" element={<BookingCreate />} />
                             <Route path="/bank-accounts" element={<BankAccountsList />} />
                             <Route path="/users" element={<UsersList />} />

@@ -79,6 +79,8 @@ Route::middleware(['api', 'auth:api', \App\Http\Middleware\SetTenantFromUser::cl
         // (store/update/destroy) auf owner|manager|buchhalter beschränkt -
         // analog zum bestehenden Muster bei /bookings/lock-period und
         // /audit-logs oben.
+        Route::get('/cost-centers/{costCenter}/summary', [\App\Http\Controllers\Api\CostCenterController::class, 'summary']);
+        Route::get('/cost-centers/{costCenter}/cost-report', [\App\Http\Controllers\Api\CostCenterController::class, 'costReport']);
         Route::apiResource('cost-centers', \App\Http\Controllers\Api\CostCenterController::class)->only(['index', 'show']);
         Route::apiResource('cost-centers', \App\Http\Controllers\Api\CostCenterController::class)
             ->only(['store', 'update', 'destroy'])

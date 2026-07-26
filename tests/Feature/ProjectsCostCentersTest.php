@@ -459,4 +459,49 @@ class ProjectsCostCentersTest extends TestCase
             ->postJson("/api/belege/{$beleg->json('id')}/book")
             ->assertStatus(422);
     }
+
+    // -----------------------------------------------------------------
+    // Kostenstellen-Auswertung (KPIs + Kosten-Nachweis)
+    // -----------------------------------------------------------------
+
+    public function test_cost_center_summary_and_report_reflect_bookings(): void
+    {
+        $token = $this->ownerToken();
+
+        $cc = $this->withHeader('Authorization', "Bearer {$token}")->postJson('/api/cost-centers', [
+            'code' => 'VERTRIEB', 'name' => 'Vertrieb',
+        ]);
+        $ccId = $cc->json('id');
+
+        $booking = $this->withHeader('Authorization', "Bearer {$token}")->postJson('/api/bookings', [
+            'date' => now()->toDateString(),
+            'description' => 'Reisekosten Vertrieb',
+            'lines' => [
+                ['account_id' => $this->data->accountExpense->id, 'type' => 'debit', 'amount' => 50000, 'tax_amount' => 9500, 'cost_center_id' => $ccId],
+                ['account_id' => $this->data->accountTax->id, 'type' => 'debit', 'amount' => 9500],
+                ['account_id' => $this->data->accountBank->id, 'type' => 'credit', 'amount' => 59500],
+            ],
+        ]);
+        $this->withHeader('Authorization', "Bearer {$token}")->postJson("/api/bookings/{$booking->json('id')}/lock")->assertStatus(200);
+
+        $summary = $this->withHeader('Authorization', "Bearer {$token}")->getJson("/api/cost-centers/{$ccId}/summary");
+        $summary->assertStatus(200);
+        $summary->assertJson(['cost' => 50000, 'profit' => -50000]);
+        $this->assertNotEmpty($summary->json('cost_by_account'));
+        $this->assertNotEmpty($summary->json('monthly'));
+
+        $report = $this->withHeader('Authorization', "Bearer {$token}")->getJson("/api/cost-centers/{$ccId}/cost-report");
+        $report->assertStatus(200);
+        $report->assertJson(['totals' => ['netto' => 50000, 'ust' => 9500, 'brutto' => 59500]]);
+    }
+
+    public function test_project_summary_includes_report_breakdowns(): void
+    {
+        $token = $this->ownerToken();
+        $project = $this->withHeader('Authorization', "Bearer {$token}")->postJson('/api/projects', ['name' => 'Berichte-Projekt']);
+        $summary = $this->withHeader('Authorization', "Bearer {$token}")->getJson("/api/projects/{$project->json('id')}/summary");
+        $summary->assertStatus(200);
+        // Neue Berichts-Felder aus dem Service-Refactor müssen vorhanden sein.
+        $summary->assertJsonStructure(['revenue', 'cost', 'profit', 'cost_by_account', 'monthly']);
+    }
 }
