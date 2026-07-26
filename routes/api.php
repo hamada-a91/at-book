@@ -127,6 +127,7 @@ Route::middleware(['api', 'auth:api', \App\Http\Middleware\SetTenantFromUser::cl
         Route::post('/bookings', [JournalEntryController::class, 'store']);
         Route::post('/bookings/{id}/lock', [JournalEntryController::class, 'lock']);
         Route::post('/bookings/{id}/reverse', [JournalEntryController::class, 'reverse']);
+        Route::patch('/bookings/{id}/dimensions', [JournalEntryController::class, 'updateDimensions']);
 
         // Audit-Log (SPEC-06)
         Route::get('/audit-logs', [\App\Http\Controllers\Api\AuditLogController::class, 'index'])->middleware('role:owner|buchhalter,api');

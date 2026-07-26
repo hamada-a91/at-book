@@ -24,7 +24,20 @@ class JournalEntryLine extends Model
     protected static function booted(): void
     {
         static::updating(function (JournalEntryLine $line) {
-            if ($line->isLockedViaParent()) {
+            if (! $line->isLockedViaParent()) {
+                return;
+            }
+
+            // GoBD: Der finanzielle Teil einer festgeschriebenen Zeile (Konto,
+            // Soll/Haben, Betrag, Steuer) bleibt unveränderlich. Kostenstelle/
+            // Kostenträger sind hingegen eine reine AUSWERTUNGS-Dimension (kein
+            // Teil der Buchung selbst) und dürfen auch nachträglich zugeordnet/
+            // korrigiert werden - jede solche Änderung wird per Audit-Log
+            // protokolliert (siehe JournalEntryController::updateDimensions()).
+            $dirty = array_keys($line->getDirty());
+            $onlyDimensions = $dirty !== [] && empty(array_diff($dirty, ['cost_center_id', 'cost_object_id']));
+
+            if (! $onlyDimensions) {
                 throw new DomainException('Festgeschriebene Buchungszeile (GoBD) kann nicht geändert werden.');
             }
         });

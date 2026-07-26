@@ -1,7 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import axios from '@/lib/axios';
+import { ProjectSelector } from '@/components/ProjectSelector';
+import { CostCenterSelector } from '@/components/CostCenterSelector';
 import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { Plus, Eye, Lock, RotateCcw, CheckCircle2, AlertCircle, FileText, Calendar, Search, Paperclip, Download, CalendarClock, ShieldAlert } from 'lucide-react';
 import { DateRangeSelector } from '@/components/reports/DateRangeSelector';
@@ -90,6 +92,41 @@ export function JournalList() {
     });
     const [selectedBooking, setSelectedBooking] = useState<JournalEntry | null>(null);
     const queryClient = useQueryClient();
+
+    // SPEC-08: Kostenzuordnung einer Buchung ändern/zuordnen/entfernen.
+    const [dimProject, setDimProject] = useState<string | undefined>();
+    const [dimCostCenter, setDimCostCenter] = useState<string | undefined>();
+    const { data: settings } = useQuery({
+        queryKey: ['settings'],
+        queryFn: async () => (await axios.get('/api/settings')).data,
+    });
+    const { data: projectsForDim } = useQuery<any[]>({
+        queryKey: ['projects', 'active'],
+        queryFn: async () => (await axios.get('/api/projects', { params: { status: 'active' } })).data,
+        enabled: !!settings?.module_projects_enabled,
+    });
+    // Beim Öffnen der Detailansicht die aktuelle Zuordnung vorbelegen.
+    useEffect(() => {
+        const firstLine: any = selectedBooking?.lines?.[0];
+        const co = firstLine?.cost_object;
+        setDimProject(co?.project?.id ? String(co.project.id) : undefined);
+        setDimCostCenter(firstLine?.cost_center_id ? String(firstLine.cost_center_id) : undefined);
+    }, [selectedBooking?.id]);
+
+    const updateDimsMutation = useMutation({
+        mutationFn: async () => {
+            const projectId = dimProject ? Number(projectsForDim?.find((p) => String(p.id) === dimProject)?.id) : null;
+            return (await axios.patch(`/api/bookings/${selectedBooking!.id}/dimensions`, {
+                project_id: projectId,
+                cost_center_id: dimCostCenter ? Number(dimCostCenter) : null,
+            })).data;
+        },
+        onSuccess: (data) => {
+            queryClient.invalidateQueries({ queryKey: ['bookings'] });
+            setSelectedBooking(data);
+        },
+        onError: (e: any) => alert(e?.response?.data?.error ?? 'Zuordnung konnte nicht gespeichert werden.'),
+    });
 
     // SPEC-05 (Teil B): Standard-Vorschlag für "Zeitraum festschreiben" ist der
     // letzte Tag des Vormonats.
@@ -664,6 +701,36 @@ export function JournalList() {
                                     </Table>
                                 </div>
                             </div>
+
+                            {/* SPEC-08: Kostenzuordnung (Projekt / Kostenstelle) - auch nachträglich änderbar */}
+                            {(settings?.module_projects_enabled || settings?.module_cost_centers_enabled) && (
+                                <div>
+                                    <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
+                                        <div className="h-8 w-1 bg-blue-500 rounded-full"></div>
+                                        Kostenzuordnung
+                                    </h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {settings?.module_projects_enabled && (
+                                            <div>
+                                                <label className="text-sm font-medium text-slate-700 dark:text-slate-300 block mb-2">Projekt</label>
+                                                <ProjectSelector value={dimProject} onChange={setDimProject} />
+                                            </div>
+                                        )}
+                                        {settings?.module_cost_centers_enabled && (
+                                            <div>
+                                                <label className="text-sm font-medium text-slate-700 dark:text-slate-300 block mb-2">Kostenstelle</label>
+                                                <CostCenterSelector value={dimCostCenter} onChange={setDimCostCenter} />
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="mt-3 flex items-center gap-2">
+                                        <Button size="sm" onClick={() => updateDimsMutation.mutate()} disabled={updateDimsMutation.isPending}>
+                                            {updateDimsMutation.isPending ? 'Speichere…' : 'Zuordnung speichern'}
+                                        </Button>
+                                        <span className="text-xs text-muted-foreground">Auch bei festgeschriebenen Buchungen möglich (reine Auswertungs-Dimension).</span>
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Actions */}
                             <div className="flex justify-end gap-3 pt-6 border-t border-slate-200 dark:border-slate-700">

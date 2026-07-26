@@ -113,31 +113,47 @@ export function ProjectsList() {
             ) : (
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     {(projects ?? []).map((p) => (
-                        <Card key={p.id} className="hover:shadow-md transition-shadow">
-                            <CardContent className="p-4">
-                                <div className="flex items-start justify-between">
-                                    <Link to={`/${tenant}/projects/${p.id}`} className="flex-1">
-                                        <div className="text-xs text-muted-foreground font-mono">{p.number}</div>
-                                        <div className="font-semibold text-lg leading-tight">{p.name}</div>
-                                    </Link>
-                                    <Badge className={statusLabels[p.status]?.color}>{statusLabels[p.status]?.label}</Badge>
+                        <Link
+                            key={p.id}
+                            to={`/${tenant}/projects/${p.id}`}
+                            className="group block rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900
+                                       p-4 shadow-sm transition-all duration-200
+                                       hover:shadow-lg hover:-translate-y-0.5 hover:border-blue-400 dark:hover:border-blue-500
+                                       hover:bg-blue-50/40 dark:hover:bg-blue-900/10
+                                       focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                        >
+                            <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                    <div className="text-xs text-muted-foreground font-mono">{p.number}</div>
+                                    <div className="font-semibold text-lg leading-tight truncate group-hover:text-blue-700 dark:group-hover:text-blue-400">
+                                        {p.name}
+                                    </div>
                                 </div>
-                                <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
-                                    {p.contact
-                                        ? <><User className="h-3.5 w-3.5" /> {p.contact.name}</>
-                                        : <><Building2 className="h-3.5 w-3.5" /> Internes Projekt</>}
-                                </div>
-                                {p.budget_amount != null && (
-                                    <div className="mt-1 text-sm">Budget: {formatCurrency(p.budget_amount / 100)}</div>
-                                )}
-                                <div className="mt-3 flex justify-end">
-                                    <Button variant="ghost" size="sm"
-                                        onClick={() => { if (confirm(`Projekt "${p.name}" löschen?`)) deleteMutation.mutate(p.id); }}>
-                                        <Trash2 className="h-4 w-4 text-red-600" />
-                                    </Button>
-                                </div>
-                            </CardContent>
-                        </Card>
+                                <Badge className={statusLabels[p.status]?.color}>{statusLabels[p.status]?.label}</Badge>
+                            </div>
+                            <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+                                {p.contact
+                                    ? <><User className="h-3.5 w-3.5" /> {p.contact.name}</>
+                                    : <><Building2 className="h-3.5 w-3.5" /> Internes Projekt</>}
+                            </div>
+                            {p.budget_amount != null && (
+                                <div className="mt-1 text-sm">Budget: {formatCurrency(p.budget_amount / 100)}</div>
+                            )}
+                            <div className="mt-3 flex justify-end">
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        if (confirm(`Projekt "${p.name}" löschen?`)) deleteMutation.mutate(p.id);
+                                    }}
+                                >
+                                    <Trash2 className="h-4 w-4 text-red-600" />
+                                </Button>
+                            </div>
+                        </Link>
                     ))}
                 </div>
             )}

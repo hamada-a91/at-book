@@ -504,4 +504,77 @@ class ProjectsCostCentersTest extends TestCase
         // Neue Berichts-Felder aus dem Service-Refactor müssen vorhanden sein.
         $summary->assertJsonStructure(['revenue', 'cost', 'profit', 'cost_by_account', 'monthly']);
     }
+
+    // -----------------------------------------------------------------
+    // Nachträgliche Kostenzuordnung (auch bei festgeschriebenen Buchungen)
+    // -----------------------------------------------------------------
+
+    public function test_dimensions_can_be_assigned_to_a_locked_booking(): void
+    {
+        $token = $this->ownerToken();
+
+        $project = $this->withHeader('Authorization', "Bearer {$token}")->postJson('/api/projects', ['name' => 'Nachtrag-Projekt']);
+        $costObjectId = $project->json('cost_object_id');
+
+        // Buchung OHNE Zuordnung anlegen und festschreiben.
+        $booking = $this->withHeader('Authorization', "Bearer {$token}")->postJson('/api/bookings', [
+            'date' => now()->toDateString(),
+            'description' => 'Kosten ohne Zuordnung',
+            'lines' => [
+                ['account_id' => $this->data->accountExpense->id, 'type' => 'debit', 'amount' => 10000],
+                ['account_id' => $this->data->accountBank->id, 'type' => 'credit', 'amount' => 10000],
+            ],
+        ]);
+        $bookingId = $booking->json('id');
+        $this->withHeader('Authorization', "Bearer {$token}")->postJson("/api/bookings/{$bookingId}/lock")->assertStatus(200);
+
+        // Nachträglich das Projekt zuordnen - trotz Festschreibung erlaubt.
+        $this->withHeader('Authorization', "Bearer {$token}")
+            ->patchJson("/api/bookings/{$bookingId}/dimensions", ['project_id' => $project->json('id')])
+            ->assertStatus(200);
+
+        // Alle Zeilen tragen jetzt den Kostenträger; show liefert Projektnamen.
+        $show = $this->withHeader('Authorization', "Bearer {$token}")->getJson("/api/bookings/{$bookingId}");
+        foreach ($show->json('lines') as $line) {
+            $this->assertSame((int) $costObjectId, (int) $line['cost_object_id']);
+        }
+        $this->assertSame('Nachtrag-Projekt', $show->json('lines.0.cost_object.project.name'));
+
+        // Kosten-Nachweis des Projekts zeigt die Buchung nun.
+        $report = $this->withHeader('Authorization', "Bearer {$token}")->getJson("/api/projects/{$project->json('id')}/cost-report");
+        $this->assertSame(10000, $report->json('totals.netto'));
+
+        // Entfernen (null) funktioniert ebenfalls.
+        $this->withHeader('Authorization', "Bearer {$token}")
+            ->patchJson("/api/bookings/{$bookingId}/dimensions", ['project_id' => null])
+            ->assertStatus(200);
+        $show2 = $this->withHeader('Authorization', "Bearer {$token}")->getJson("/api/bookings/{$bookingId}");
+        $this->assertNull($show2->json('lines.0.cost_object_id'));
+
+        // Ein Audit-Eintrag 'dimensions_changed' wurde protokolliert.
+        $this->assertDatabaseHas('audit_logs', ['event' => 'dimensions_changed']);
+    }
+
+    public function test_financial_change_on_locked_booking_still_blocked(): void
+    {
+        // Absicherung: die GoBD-Sperre erlaubt NUR Dimensions-Änderungen, keine
+        // finanziellen (Betrag/Konto) - direkt am Model geprüft.
+        $service = new \App\Modules\Accounting\Services\BookingService(new \App\Services\NumberSequenceService);
+        \Illuminate\Support\Facades\Auth::setUser($this->data->user);
+
+        $entry = $service->createBooking([
+            'date' => now()->toDateString(),
+            'description' => 'Test',
+            'lines' => [
+                ['account_id' => $this->data->accountExpense->id, 'type' => 'debit', 'amount' => 5000],
+                ['account_id' => $this->data->accountBank->id, 'type' => 'credit', 'amount' => 5000],
+            ],
+        ]);
+        $service->lockBooking($entry->id);
+
+        $line = $entry->lines()->first();
+        $line->amount = 9999;
+        $this->expectException(\DomainException::class);
+        $line->save();
+    }
 }

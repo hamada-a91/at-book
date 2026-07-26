@@ -121,10 +121,64 @@ class JournalEntryController extends Controller
      */
     public function show(int $id): JsonResponse
     {
-        $entry = \App\Modules\Accounting\Models\JournalEntry::with(['lines.account', 'beleg'])
-            ->findOrFail($id);
+        $entry = \App\Modules\Accounting\Models\JournalEntry::with([
+            'lines.account',
+            'lines.costCenter',
+            'lines.costObject.project',
+            'beleg',
+        ])->findOrFail($id);
 
         return response()->json($entry);
+    }
+
+    /**
+     * SPEC-08: Kostenstelle/Kostenträger (Projekt) einer Buchung nachträglich
+     * zuordnen, ändern oder entfernen - auf ALLE Zeilen angewandt. Erlaubt auch
+     * bei festgeschriebenen Buchungen, da KOST eine reine Auswertungs-Dimension
+     * ist (kein Teil des finanziellen Buchungssatzes, siehe JournalEntryLine::
+     * booted()). null entfernt die Zuordnung. Wird per Audit-Log protokolliert.
+     */
+    public function updateDimensions(Request $request, int $id): JsonResponse
+    {
+        $tenant = $this->getTenantOrFail();
+
+        $validated = $request->validate([
+            'cost_center_id' => ['nullable', new TenantExists('cost_centers')],
+            'project_id' => ['nullable', new TenantExists('projects')],
+        ]);
+
+        $entry = JournalEntry::where('tenant_id', $tenant->id)->with('lines')->findOrFail($id);
+
+        // Projekt -> dessen Kostenträger (cost_object_id) auflösen.
+        $costObjectId = null;
+        if (! empty($validated['project_id'])) {
+            $costObjectId = \App\Modules\Projects\Models\Project::where('id', $validated['project_id'])->value('cost_object_id');
+        }
+        $costCenterId = $validated['cost_center_id'] ?? null;
+
+        $old = [
+            'cost_center_id' => optional($entry->lines->first())->cost_center_id,
+            'cost_object_id' => optional($entry->lines->first())->cost_object_id,
+        ];
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($entry, $costCenterId, $costObjectId) {
+            foreach ($entry->lines as $line) {
+                $line->cost_center_id = $costCenterId;
+                $line->cost_object_id = $costObjectId;
+                $line->save();
+            }
+        });
+
+        \App\Modules\Accounting\Models\AuditLog::record(
+            $entry,
+            'dimensions_changed',
+            $old,
+            ['cost_center_id' => $costCenterId, 'cost_object_id' => $costObjectId]
+        );
+
+        return response()->json(
+            $entry->fresh(['lines.account', 'lines.costCenter', 'lines.costObject.project', 'beleg'])
+        );
     }
 
     /**
