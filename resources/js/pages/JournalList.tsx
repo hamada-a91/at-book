@@ -113,6 +113,7 @@ export function JournalList() {
         setDimCostCenter(firstLine?.cost_center_id ? String(firstLine.cost_center_id) : undefined);
     }, [selectedBooking?.id]);
 
+    const [dimSaved, setDimSaved] = useState(false);
     const updateDimsMutation = useMutation({
         mutationFn: async () => {
             const projectId = dimProject ? Number(projectsForDim?.find((p) => String(p.id) === dimProject)?.id) : null;
@@ -124,6 +125,8 @@ export function JournalList() {
         onSuccess: (data) => {
             queryClient.invalidateQueries({ queryKey: ['bookings'] });
             setSelectedBooking(data);
+            setDimSaved(true);
+            window.setTimeout(() => setDimSaved(false), 2500);
         },
         onError: (e: any) => alert(e?.response?.data?.error ?? 'Zuordnung konnte nicht gespeichert werden.'),
     });
@@ -727,7 +730,13 @@ export function JournalList() {
                                         <Button size="sm" onClick={() => updateDimsMutation.mutate()} disabled={updateDimsMutation.isPending}>
                                             {updateDimsMutation.isPending ? 'Speichere…' : 'Zuordnung speichern'}
                                         </Button>
-                                        <span className="text-xs text-muted-foreground">Auch bei festgeschriebenen Buchungen möglich (reine Auswertungs-Dimension).</span>
+                                        {dimSaved ? (
+                                            <span className="inline-flex items-center gap-1 text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                                                <CheckCircle2 className="w-4 h-4" /> Zuordnung gespeichert
+                                            </span>
+                                        ) : (
+                                            <span className="text-xs text-muted-foreground">Auch bei festgeschriebenen Buchungen möglich (reine Auswertungs-Dimension).</span>
+                                        )}
                                     </div>
                                 </div>
                             )}

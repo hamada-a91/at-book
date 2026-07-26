@@ -37,9 +37,9 @@ export function Sidebar({ className, onItemClick }: SidebarProps) {
     const location = useLocation()
     const { tenant } = useParams()
     const pathname = location.pathname
-    const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
-        products: true, // Default expanded
-    })
+    // Pro Kategorie: true/false = vom Nutzer umgeschaltet; undefined = Default
+    // (aktive Kategorie offen, siehe renderGroup).
+    const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({})
 
     const tenantUrl = (path: string) => {
         return tenant ? `/${tenant}${path}` : path
@@ -52,9 +52,6 @@ export function Sidebar({ className, onItemClick }: SidebarProps) {
         return pathname.startsWith(`/${tenant}${path}`)
     }
 
-    const toggleSection = (section: string) => {
-        setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }))
-    }
 
     const { data: settings } = useQuery({
         queryKey: ['settings'],
@@ -77,132 +74,56 @@ export function Sidebar({ className, onItemClick }: SidebarProps) {
     const canSeeAuditLog = currentUser?.roles?.some((role: any) => ['owner', 'buchhalter'].includes(role.name)) || false;
 
 
-    // Routes grouped by category
-    const mainRoutes = [
-        {
-            label: "Dashboard",
-            icon: LayoutDashboard,
-            href: tenantUrl("/dashboard"),
-            active: isActive("/dashboard") || isActive("/"),
-        },
-        {
-            label: "Buchungen",
-            icon: BookOpen,
-            href: tenantUrl("/bookings"),
-            active: isActive("/bookings"),
-        },
-        {
-            label: "Sachkonten",
-            icon: Layers,
-            href: tenantUrl("/accounts"),
-            active: isActive("/accounts"),
-        },
-        {
-            label: "Bankkonten",
-            icon: Landmark,
-            href: tenantUrl("/bank-accounts"),
-            active: isActive("/bank-accounts"),
-        },
-        {
-            label: "Journal & Berichte",
-            icon: FileText,
-            href: tenantUrl("/reports"),
-            active: isActive("/reports"),
-        },
-        {
-            label: "Kontakte",
-            icon: Users,
-            href: tenantUrl("/contacts"),
-            active: isActive("/contacts"),
-        },
-        {
-            label: "Benutzer",
-            icon: UserCog,
-            href: tenantUrl("/users"),
-            active: isActive("/users"),
-        },
-        {
-            label: "Meldungen",
-            icon: Bug,
-            href: tenantUrl("/bug-reports"),
-            active: isActive("/bug-reports"),
-        },
-        ...(settings?.module_projects_enabled ? [{
-            label: "Projekte",
-            icon: FolderKanban,
-            href: tenantUrl("/projects"),
-            active: isActive("/projects"),
-        }] : []),
-        ...(settings?.module_cost_centers_enabled ? [{
-            label: "Kostenstellen",
-            icon: SlidersHorizontal,
-            href: tenantUrl("/cost-centers"),
-            active: isActive("/cost-centers"),
-        }] : []),
-        ...(canSeeAuditLog ? [{
-            label: "Audit-Log",
-            icon: History,
-            href: tenantUrl("/audit-log"),
-            active: isActive("/audit-log"),
-        }] : []),
-        // Admin Link - Only visible if user has admin role (need to check role)
-        // For now, we'll verify checking userService or similar, but simplified:
-        {
-            label: "Admin Panel",
-            icon: Shield,
-            href: "/admin/dashboard", // Global route
-            active: location.pathname.startsWith("/admin"),
-        }
-    ]
-
-
-    // Products section with sub-items
-    const productsSection = {
-        label: "Produkte",
-        icon: Package,
-        expanded: expandedSections.products,
-        active: isActive("/products"),
-        items: [
-            {
-                label: "Alle Produkte",
-                href: tenantUrl("/products"),
-                active: pathname === `/${tenant}/products` || pathname === `/${tenant}/products/create`,
-            },
-            {
-                label: "Lagerbestand",
-                href: tenantUrl("/products/movements"),
-                active: isActive("/products/movements"),
-            },
-        ]
+    // Einzel-Einträge oben
+    const dashboardItem = {
+        label: "Dashboard", icon: LayoutDashboard, href: tenantUrl("/dashboard"),
+        active: isActive("/dashboard") || isActive("/"),
+    }
+    const kontakteItem = {
+        label: "Kontakte", icon: Users, href: tenantUrl("/contacts"), active: isActive("/contacts"),
     }
 
-    // Sales/Documents routes
-    const salesRoutes = [
+    // Gruppen (aufklappbare Kategorien). Leere Gruppen werden ausgeblendet.
+    const groups: { key: string; label: string; icon: any; items: any[] }[] = [
         {
-            label: "Angebote",
-            icon: FileCheck,
-            href: tenantUrl("/quotes"),
-            active: isActive("/quotes"),
+            key: "verkauf", label: "Verkauf", icon: ShoppingCart, items: [
+                { label: "Angebote", href: tenantUrl("/quotes"), active: isActive("/quotes") },
+                { label: "Aufträge", href: tenantUrl("/orders"), active: isActive("/orders") },
+                { label: "Rechnungen", href: tenantUrl("/invoices"), active: isActive("/invoices") },
+            ],
         },
         {
-            label: "Aufträge",
-            icon: ShoppingCart,
-            href: tenantUrl("/orders"),
-            active: isActive("/orders"),
+            key: "buchhaltung", label: "Buchhaltung", icon: BookOpen, items: [
+                { label: "Belege", href: tenantUrl("/belege"), active: isActive("/belege") },
+                { label: "Buchungen", href: tenantUrl("/bookings"), active: isActive("/bookings") },
+                { label: "Journal & Berichte", href: tenantUrl("/reports"), active: isActive("/reports") },
+                { label: "Sachkonten", href: tenantUrl("/accounts"), active: isActive("/accounts") },
+                { label: "Bankkonten", href: tenantUrl("/bank-accounts"), active: isActive("/bank-accounts") },
+            ],
         },
         {
-            label: "Rechnungen",
-            icon: FileText,
-            href: tenantUrl("/invoices"),
-            active: isActive("/invoices"),
+            key: "produkte", label: "Produkte", icon: Package, items: [
+                { label: "Alle Produkte", href: tenantUrl("/products"), active: pathname === `/${tenant}/products` || pathname === `/${tenant}/products/create` },
+                { label: "Lagerbestand", href: tenantUrl("/products/movements"), active: isActive("/products/movements") },
+            ],
         },
         {
-            label: "Belege",
-            icon: Receipt,
-            href: tenantUrl("/belege"),
-            active: isActive("/belege"),
+            key: "controlling", label: "Controlling", icon: BarChart3, items: [
+                ...(settings?.module_projects_enabled ? [{ label: "Projekte", href: tenantUrl("/projects"), active: isActive("/projects") }] : []),
+                ...(settings?.module_cost_centers_enabled ? [{ label: "Kostenstellen", href: tenantUrl("/cost-centers"), active: isActive("/cost-centers") }] : []),
+            ],
         },
-    ]
+    ].filter((g) => g.items.length > 0)
+
+    // Einstellungen-Gruppe (unten)
+    const settingsGroup = {
+        key: "einstellungen", label: "Einstellungen", icon: Settings, items: [
+            { label: "Firmeneinstellungen", href: tenantUrl("/settings"), active: isActive("/settings") },
+            { label: "Benutzer", href: tenantUrl("/users"), active: isActive("/users") },
+            ...(canSeeAuditLog ? [{ label: "Audit-Log", href: tenantUrl("/audit-log"), active: isActive("/audit-log") }] : []),
+            { label: "Meldungen", href: tenantUrl("/bug-reports"), active: isActive("/bug-reports") },
+        ],
+    }
 
     const renderRouteButton = (route: any, isSubItem = false) => (
         <Button
@@ -225,6 +146,35 @@ export function Sidebar({ className, onItemClick }: SidebarProps) {
             </Link>
         </Button>
     )
+
+    // Aufklappbare Kategorie. Standardmäßig ist die Kategorie der AKTIVEN Seite
+    // offen (expandedSections[key] überschreibt das, sobald der Nutzer klickt).
+    const renderGroup = (group: { key: string; label: string; icon: any; items: any[] }) => {
+        const groupActive = group.items.some((i) => i.active)
+        const expanded = expandedSections[group.key] ?? groupActive
+        return (
+            <div key={group.key} className="space-y-1">
+                <button
+                    onClick={() => setExpandedSections((prev) => ({ ...prev, [group.key]: !expanded }))}
+                    className={cn(
+                        "w-full flex items-center justify-between px-3 py-2 text-base font-medium rounded-md transition-all duration-200",
+                        groupActive ? "text-blue-900 dark:text-blue-100" : "text-blue-900 dark:text-blue-100 hover:bg-blue-200 dark:hover:bg-blue-900"
+                    )}
+                >
+                    <div className="flex items-center">
+                        <group.icon className="mr-3 h-5 w-5 text-blue-600 dark:text-blue-400" />
+                        {group.label}
+                    </div>
+                    {expanded ? <ChevronDown className="h-4 w-4 text-blue-500" /> : <ChevronRight className="h-4 w-4 text-blue-500" />}
+                </button>
+                {expanded && (
+                    <div className="space-y-1 ml-2">
+                        {group.items.map((item) => renderRouteButton(item, true))}
+                    </div>
+                )}
+            </div>
+        )
+    }
 
     return (
         <div className={cn("pb-24 md:pb-12 h-screen overflow-y-auto bg-gradient-to-b from-blue-50 to-blue-100 dark:from-blue-950 dark:to-slate-950 border-r border-blue-200 dark:border-blue-900", className)}>
@@ -250,10 +200,9 @@ export function Sidebar({ className, onItemClick }: SidebarProps) {
                         </div>
                     </div>
 
-                    {/* Main Routes */}
+                    {/* Navigation */}
                     <div className="space-y-1">
                         {isAdmin ? (
-                            // Admin only sees Admin Panel
                             renderRouteButton({
                                 label: "Admin Panel",
                                 icon: Shield,
@@ -261,90 +210,23 @@ export function Sidebar({ className, onItemClick }: SidebarProps) {
                                 active: location.pathname.startsWith("/admin"),
                             })
                         ) : (
-                            // Regular users see all tenant routes except Admin Panel
-                            mainRoutes
-                                .filter(route => route.label !== 'Admin Panel')
-                                .map((route) => renderRouteButton(route))
+                            <>
+                                {renderRouteButton(dashboardItem)}
+                                {renderRouteButton(kontakteItem)}
+                                <div className="my-2 border-t border-blue-200 dark:border-blue-800" />
+                                {groups.map((group) => renderGroup(group))}
+                            </>
                         )}
-
-                        {/* Products Section with Sub-items */}
-                        {!isAdmin && (
-                            <div className="space-y-1">
-                                <button
-                                    onClick={() => toggleSection('products')}
-                                    className={cn(
-                                        "w-full flex items-center justify-between px-3 py-2 text-base font-medium rounded-md transition-all duration-200",
-                                        productsSection.active
-                                            ? "bg-blue-100 dark:bg-blue-900/50 text-blue-900 dark:text-blue-100"
-                                            : "text-blue-900 dark:text-blue-100 hover:bg-blue-200 dark:hover:bg-blue-900"
-                                    )}
-                                >
-                                    <div className="flex items-center">
-                                        <Package className={cn("mr-3 h-5 w-5", productsSection.active ? "text-blue-600 dark:text-blue-400" : "text-blue-600 dark:text-blue-400")} />
-                                        Produkte
-                                    </div>
-                                    {productsSection.expanded ? (
-                                        <ChevronDown className="h-4 w-4 text-blue-500" />
-                                    ) : (
-                                        <ChevronRight className="h-4 w-4 text-blue-500" />
-                                    )}
-                                </button>
-                                {productsSection.expanded && (
-                                    <div className="space-y-1 ml-2">
-                                        {productsSection.items.map((item) => (
-                                            <Button
-                                                key={item.href}
-                                                variant={item.active ? "secondary" : "ghost"}
-                                                className={cn(
-                                                    "w-full justify-start text-sm font-medium pl-10 transition-all duration-200",
-                                                    item.active
-                                                        ? "bg-blue-600 dark:bg-blue-700 shadow text-white hover:bg-blue-700 dark:hover:bg-blue-800"
-                                                        : "text-blue-800 dark:text-blue-200 hover:bg-blue-200 dark:hover:bg-blue-900"
-                                                )}
-                                                asChild
-                                                onClick={onItemClick}
-                                            >
-                                                <Link to={item.href}>
-                                                    <span className="mr-2">
-                                                        {item.label === "Lagerbestand" ? (
-                                                            <BarChart3 className="h-4 w-4 inline" />
-                                                        ) : (
-                                                            <Package className="h-4 w-4 inline" />
-                                                        )}
-                                                    </span>
-                                                    {item.label}
-                                                </Link>
-                                            </Button>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {/* Divider */}
-                        {!isAdmin && <div className="my-3 border-t border-blue-200 dark:border-blue-800" />}
-
-                        {/* Sales Routes */}
-                        {!isAdmin && salesRoutes.map((route) => renderRouteButton(route))}
                     </div>
                 </div>
 
-                <div className="px-3 py-2 mt-auto">
-                    <Button
-                        variant="ghost"
-                        className={cn(
-                            "w-full justify-start text-base font-medium text-blue-900 dark:text-blue-100 hover:bg-blue-200 dark:hover:bg-blue-900",
-                            isActive("/settings") && "bg-blue-600 dark:bg-blue-700 shadow-lg text-white hover:bg-blue-700 dark:hover:bg-blue-800"
-                        )}
-                        asChild
-                        onClick={onItemClick}
-                    >
-                        <Link to={tenantUrl("/settings")}>
-                            <Settings className={cn("mr-3 h-5 w-5", isActive("/settings") ? "text-white" : "text-blue-600 dark:text-blue-400")} />
-                            Einstellungen
-                        </Link>
-                    </Button>
-                </div>
+                {!isAdmin && (
+                    <div className="px-3 py-2 mt-auto">
+                        <div className="border-t border-blue-200 dark:border-blue-800 pt-2">
+                            {renderGroup(settingsGroup)}
+                        </div>
+                    </div>
+                )}
             </div>
         </div >
     )
