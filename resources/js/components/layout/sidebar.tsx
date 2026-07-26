@@ -74,43 +74,41 @@ export function Sidebar({ className, onItemClick }: SidebarProps) {
     const canSeeAuditLog = currentUser?.roles?.some((role: any) => ['owner', 'buchhalter'].includes(role.name)) || false;
 
 
-    // Einzel-Einträge oben
-    const dashboardItem = {
-        label: "Dashboard", icon: LayoutDashboard, href: tenantUrl("/dashboard"),
-        active: isActive("/dashboard") || isActive("/"),
-    }
-    const kontakteItem = {
-        label: "Kontakte", icon: Users, href: tenantUrl("/contacts"), active: isActive("/contacts"),
-    }
+    // Einzel-Einträge (Hauptkategorien ohne Untermenü)
+    const topLevelItems = [
+        { label: "Dashboard", icon: LayoutDashboard, href: tenantUrl("/dashboard"), active: isActive("/dashboard") || isActive("/") },
+        { label: "Journal & Berichte", icon: FileText, href: tenantUrl("/reports"), active: isActive("/reports") },
+        { label: "Kontakte", icon: Users, href: tenantUrl("/contacts"), active: isActive("/contacts") },
+        { label: "Bankkonten", icon: Landmark, href: tenantUrl("/bank-accounts"), active: isActive("/bank-accounts") },
+    ]
 
-    // Gruppen (aufklappbare Kategorien). Leere Gruppen werden ausgeblendet.
+    // Gruppen (aufklappbare Kategorien). Jedes Untermenü-Item hat ein eigenes
+    // Icon. Leere Gruppen werden ausgeblendet.
     const groups: { key: string; label: string; icon: any; items: any[] }[] = [
         {
             key: "verkauf", label: "Verkauf", icon: ShoppingCart, items: [
-                { label: "Angebote", href: tenantUrl("/quotes"), active: isActive("/quotes") },
-                { label: "Aufträge", href: tenantUrl("/orders"), active: isActive("/orders") },
-                { label: "Rechnungen", href: tenantUrl("/invoices"), active: isActive("/invoices") },
+                { label: "Angebote", icon: FileCheck, href: tenantUrl("/quotes"), active: isActive("/quotes") },
+                { label: "Aufträge", icon: ShoppingCart, href: tenantUrl("/orders"), active: isActive("/orders") },
+                { label: "Rechnungen", icon: FileText, href: tenantUrl("/invoices"), active: isActive("/invoices") },
             ],
         },
         {
             key: "buchhaltung", label: "Buchhaltung", icon: BookOpen, items: [
-                { label: "Belege", href: tenantUrl("/belege"), active: isActive("/belege") },
-                { label: "Buchungen", href: tenantUrl("/bookings"), active: isActive("/bookings") },
-                { label: "Journal & Berichte", href: tenantUrl("/reports"), active: isActive("/reports") },
-                { label: "Sachkonten", href: tenantUrl("/accounts"), active: isActive("/accounts") },
-                { label: "Bankkonten", href: tenantUrl("/bank-accounts"), active: isActive("/bank-accounts") },
+                { label: "Belege", icon: Receipt, href: tenantUrl("/belege"), active: isActive("/belege") },
+                { label: "Buchungen", icon: BookOpen, href: tenantUrl("/bookings"), active: isActive("/bookings") },
+                { label: "Sachkonten", icon: Layers, href: tenantUrl("/accounts"), active: isActive("/accounts") },
             ],
         },
         {
             key: "produkte", label: "Produkte", icon: Package, items: [
-                { label: "Alle Produkte", href: tenantUrl("/products"), active: pathname === `/${tenant}/products` || pathname === `/${tenant}/products/create` },
-                { label: "Lagerbestand", href: tenantUrl("/products/movements"), active: isActive("/products/movements") },
+                { label: "Alle Produkte", icon: Package, href: tenantUrl("/products"), active: pathname === `/${tenant}/products` || pathname === `/${tenant}/products/create` },
+                { label: "Lagerbestand", icon: BarChart3, href: tenantUrl("/products/movements"), active: isActive("/products/movements") },
             ],
         },
         {
             key: "controlling", label: "Controlling", icon: BarChart3, items: [
-                ...(settings?.module_projects_enabled ? [{ label: "Projekte", href: tenantUrl("/projects"), active: isActive("/projects") }] : []),
-                ...(settings?.module_cost_centers_enabled ? [{ label: "Kostenstellen", href: tenantUrl("/cost-centers"), active: isActive("/cost-centers") }] : []),
+                ...(settings?.module_projects_enabled ? [{ label: "Projekte", icon: FolderKanban, href: tenantUrl("/projects"), active: isActive("/projects") }] : []),
+                ...(settings?.module_cost_centers_enabled ? [{ label: "Kostenstellen", icon: SlidersHorizontal, href: tenantUrl("/cost-centers"), active: isActive("/cost-centers") }] : []),
             ],
         },
     ].filter((g) => g.items.length > 0)
@@ -118,10 +116,10 @@ export function Sidebar({ className, onItemClick }: SidebarProps) {
     // Einstellungen-Gruppe (unten)
     const settingsGroup = {
         key: "einstellungen", label: "Einstellungen", icon: Settings, items: [
-            { label: "Firmeneinstellungen", href: tenantUrl("/settings"), active: isActive("/settings") },
-            { label: "Benutzer", href: tenantUrl("/users"), active: isActive("/users") },
-            ...(canSeeAuditLog ? [{ label: "Audit-Log", href: tenantUrl("/audit-log"), active: isActive("/audit-log") }] : []),
-            { label: "Meldungen", href: tenantUrl("/bug-reports"), active: isActive("/bug-reports") },
+            { label: "Firmeneinstellungen", icon: Settings, href: tenantUrl("/settings"), active: isActive("/settings") },
+            { label: "Benutzer", icon: UserCog, href: tenantUrl("/users"), active: isActive("/users") },
+            ...(canSeeAuditLog ? [{ label: "Audit-Log", icon: History, href: tenantUrl("/audit-log"), active: isActive("/audit-log") }] : []),
+            { label: "Meldungen", icon: Bug, href: tenantUrl("/bug-reports"), active: isActive("/bug-reports") },
         ],
     }
 
@@ -140,8 +138,13 @@ export function Sidebar({ className, onItemClick }: SidebarProps) {
             onClick={onItemClick}
         >
             <Link to={route.href}>
-                {!isSubItem && route.icon && <route.icon className={cn("mr-3 h-5 w-5", route.active ? "text-white" : "text-blue-600 dark:text-blue-400")} />}
-                {isSubItem && <span className="mr-3 h-5 w-5 flex items-center justify-center text-xs">•</span>}
+                {route.icon && (
+                    <route.icon className={cn(
+                        "mr-3",
+                        isSubItem ? "h-4 w-4" : "h-5 w-5",
+                        route.active ? "text-white" : "text-blue-600 dark:text-blue-400"
+                    )} />
+                )}
                 {route.label}
             </Link>
         </Button>
@@ -211,8 +214,7 @@ export function Sidebar({ className, onItemClick }: SidebarProps) {
                             })
                         ) : (
                             <>
-                                {renderRouteButton(dashboardItem)}
-                                {renderRouteButton(kontakteItem)}
+                                {topLevelItems.map((item) => renderRouteButton(item))}
                                 <div className="my-2 border-t border-blue-200 dark:border-blue-800" />
                                 {groups.map((group) => renderGroup(group))}
                             </>
