@@ -402,4 +402,61 @@ class ProjectsCostCentersTest extends TestCase
         $this->assertSame('application/pdf', $pdf->headers->get('content-type'));
         $this->assertStringStartsWith('%PDF', $pdf->getContent());
     }
+
+    // -----------------------------------------------------------------
+    // Barbeleg ohne Kontakt (Direktzahlung)
+    // -----------------------------------------------------------------
+
+    public function test_cash_beleg_without_contact_books_expense_against_bank(): void
+    {
+        $token = $this->ownerToken();
+
+        // Eingangsbeleg Bürobedarf, KEIN Kontakt, direkt bezahlt (119 EUR brutto, 19 USt).
+        $beleg = $this->withHeader('Authorization', "Bearer {$token}")->postJson('/api/belege', [
+            'document_type' => 'eingang',
+            'title' => 'Bürobedarf bar',
+            'document_date' => now()->toDateString(),
+            'amount' => 11900,
+            'tax_amount' => 1900,
+            'category_account_id' => $this->data->accountExpense->id,
+            'is_paid' => true,
+            'payment_account_id' => $this->data->accountBank->id,
+        ]);
+        $beleg->assertStatus(201);
+
+        $book = $this->withHeader('Authorization', "Bearer {$token}")->postJson("/api/belege/{$beleg->json('id')}/book");
+        $book->assertStatus(200);
+
+        // Genau EINE (ausgeglichene) Buchung: Aufwand + Vorsteuer an Bank - keine
+        // separate Zahlungsbuchung, kein Personenkonto.
+        $entryId = $book->json('journal_entry_id');
+        $entry = \App\Modules\Accounting\Models\JournalEntry::with('lines.account')->findOrFail($entryId);
+        $debit = $entry->lines->where('type', 'debit')->sum('amount');
+        $credit = $entry->lines->where('type', 'credit')->sum('amount');
+        $this->assertSame($debit, $credit);
+        $bankLine = $entry->lines->first(fn ($l) => $l->account_id === $this->data->accountBank->id);
+        $this->assertSame('credit', $bankLine->type);
+        $this->assertSame(11900, (int) $bankLine->amount);
+    }
+
+    public function test_beleg_without_contact_and_not_paid_is_rejected(): void
+    {
+        $token = $this->ownerToken();
+
+        $beleg = $this->withHeader('Authorization', "Bearer {$token}")->postJson('/api/belege', [
+            'document_type' => 'eingang',
+            'title' => 'Offener Beleg ohne Kontakt',
+            'document_date' => now()->toDateString(),
+            'amount' => 11900,
+            'tax_amount' => 1900,
+            'category_account_id' => $this->data->accountExpense->id,
+            'is_paid' => false,
+        ]);
+        $beleg->assertStatus(201);
+
+        // Ohne Kontakt UND ohne Direktzahlung ist keine Buchung möglich -> 422.
+        $this->withHeader('Authorization', "Bearer {$token}")
+            ->postJson("/api/belege/{$beleg->json('id')}/book")
+            ->assertStatus(422);
+    }
 }

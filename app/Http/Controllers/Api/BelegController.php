@@ -255,12 +255,21 @@ class BelegController extends Controller
                     $contraCostObjectId = $onlyLine->cost_object_id ?? $projectCostObjectId;
                 }
 
-                if (! $beleg->contact) {
-                    throw new DomainException('Kein Kontakt ausgewählt.');
-                }
+                // Barbeleg / Direktzahlung ohne Kontakt: Aufwand/Erlös wird direkt
+                // gegen das Zahlungskonto (Kasse/Bank) gebucht, statt über ein
+                // Personenkonto (Debitor/Kreditor). Typischer Fall: bar bezahltes
+                // Büromaterial ohne hinterlegten Lieferanten. Es entsteht dann KEINE
+                // separate Zahlungsbuchung (die Primärbuchung settlet bereits gegen
+                // die Kasse/Bank).
+                $isDirectCashBeleg = ! $beleg->contact;
 
-                // Determine account based on document type
-                if ($beleg->document_type === 'ausgang') {
+                if ($isDirectCashBeleg) {
+                    if (! $beleg->is_paid || ! $beleg->payment_account_id) {
+                        throw new DomainException('Bitte einen Kontakt auswählen – oder den Beleg als „direkt bezahlt" mit Zahlungskonto (Kasse/Bank) erfassen.');
+                    }
+                    $contactAccountId = $beleg->payment_account_id;
+                } elseif ($beleg->document_type === 'ausgang') {
+                    // Determine account based on document type
                     $contactAccountId = $beleg->contact->customer_account_id ?? $beleg->contact->vendor_account_id;
                 } else {
                     // eingang, offen, sonstige -> treat as incoming/vendor usually
@@ -341,8 +350,10 @@ class BelegController extends Controller
                 ]);
                 $bookingService->lockBooking($journalEntry->id);
 
-                // If marked as paid, create a payment booking
-                if ($beleg->is_paid && $beleg->payment_account_id) {
+                // If marked as paid, create a payment booking (Personenkonto -> Kasse/Bank).
+                // Beim Barbeleg ohne Kontakt entfällt das: die Primärbuchung oben hat
+                // Aufwand/Erlös bereits direkt gegen das Zahlungskonto gebucht.
+                if (! $isDirectCashBeleg && $beleg->is_paid && $beleg->payment_account_id) {
                     $paymentAccount = \App\Modules\Accounting\Models\Account::find($beleg->payment_account_id);
 
                     if ($paymentAccount) {
