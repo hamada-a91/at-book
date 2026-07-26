@@ -97,8 +97,9 @@ Route::middleware(['api', 'auth:api', \App\Http\Middleware\SetTenantFromUser::cl
         Route::get('/projects/{project}/summary', [\App\Http\Controllers\Api\ProjectController::class, 'summary']);
         Route::get('/projects/{project}/entries', [\App\Http\Controllers\Api\ProjectController::class, 'entries']);
         Route::get('/projects/{project}/cost-report', [\App\Http\Controllers\Api\ProjectController::class, 'costReport']);
-        // TODO(Teil B): GET /projects/{project}/cost-report/pdf (dompdf, Muster invoices.pdf)
-        // TODO(Teil B): POST /projects/{project}/cost-report/send (SendDocumentMail, Muster InvoiceController::send)
+        Route::get('/projects/{project}/cost-report/pdf', [\App\Http\Controllers\Api\ProjectController::class, 'costReportPdf']);
+        Route::post('/projects/{project}/cost-report/send', [\App\Http\Controllers\Api\ProjectController::class, 'costReportSend'])
+            ->middleware('role:owner|manager|buchhalter,api');
 
         // Invoices
         Route::apiResource('invoices', \App\Http\Controllers\Api\InvoiceController::class);

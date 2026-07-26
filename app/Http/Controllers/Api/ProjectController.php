@@ -221,10 +221,82 @@ class ProjectController extends Controller
      */
     public function costReport(Request $request, Project $project)
     {
+        $this->assertOwnedByTenant($project);
+
         return response()->json($this->projectReportService->costReport(
             $project,
             $request->input('from'),
             $request->input('to')
         ));
+    }
+
+    /**
+     * GET /projects/{project}/cost-report/pdf?from&to - kundentauglicher
+     * Kosten-Nachweis als PDF (nur Kosten, Netto/USt/Brutto, keine Erlöse).
+     */
+    public function costReportPdf(Request $request, Project $project)
+    {
+        $this->assertOwnedByTenant($project);
+
+        $pdf = $this->renderCostReportPdf($project, $request->input('from'), $request->input('to'));
+
+        return $pdf->download("Kosten-Nachweis-{$project->number}.pdf");
+    }
+
+    /**
+     * POST /projects/{project}/cost-report/send - Kosten-Nachweis per E-Mail an
+     * den Kunden (Muster: InvoiceController::send + SendDocumentMail).
+     */
+    public function costReportSend(Request $request, Project $project)
+    {
+        $this->assertOwnedByTenant($project);
+
+        $validated = $request->validate([
+            'to' => 'required|email',
+            'cc' => 'nullable|email',
+            'subject' => 'required|string',
+            'body' => 'required|string',
+            'signature' => 'nullable|string',
+            'from' => 'nullable|date',
+            'to_date' => 'nullable|date',
+        ]);
+
+        $pdf = $this->renderCostReportPdf($project, $request->input('from'), $request->input('to_date'));
+
+        if (! is_dir(storage_path('app/temp'))) {
+            mkdir(storage_path('app/temp'), 0755, true);
+        }
+        $pdfPath = storage_path("app/temp/kosten-nachweis-{$project->number}.pdf");
+        $pdf->save($pdfPath);
+
+        $mail = new \App\Mail\SendDocumentMail(
+            $validated['subject'],
+            $validated['body'],
+            $validated['signature'] ?? '',
+            $pdfPath,
+            "Kosten-Nachweis-{$project->number}.pdf"
+        );
+
+        if (! empty($validated['cc'])) {
+            \Illuminate\Support\Facades\Mail::to($validated['to'])->cc($validated['cc'])->send($mail);
+        } else {
+            \Illuminate\Support\Facades\Mail::to($validated['to'])->send($mail);
+        }
+
+        return response()->json(['message' => 'Kosten-Nachweis versendet.']);
+    }
+
+    private function renderCostReportPdf(Project $project, ?string $from, ?string $to): \Barryvdh\DomPDF\PDF
+    {
+        $project->load('contact');
+        $report = $this->projectReportService->costReport($project, $from, $to);
+        $settings = \App\Models\CompanySetting::first();
+
+        return \Barryvdh\DomPDF\Facade\Pdf::loadView('projects.cost-report', [
+            'project' => $project,
+            'customer' => $project->contact,
+            'report' => $report,
+            'settings' => $settings,
+        ])->setPaper('a4');
     }
 }

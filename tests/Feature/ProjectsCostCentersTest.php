@@ -370,4 +370,36 @@ class ProjectsCostCentersTest extends TestCase
         $ids = collect($listB->json())->pluck('id');
         $this->assertNotContains($projectA->id, $ids);
     }
+
+    // -----------------------------------------------------------------
+    // Teil B: Kosten-Nachweis-PDF
+    // -----------------------------------------------------------------
+
+    public function test_cost_report_pdf_renders_and_contains_no_revenue(): void
+    {
+        $token = $this->ownerToken();
+
+        $projectResponse = $this->withHeader('Authorization', "Bearer {$token}")->postJson('/api/projects', [
+            'name' => 'PDF-Projekt', 'contact_id' => $this->data->customer->id,
+        ]);
+        $costObjectId = $projectResponse->json('cost_object_id');
+        $projectId = $projectResponse->json('id');
+
+        // Eine Kostenbuchung (Aufwand + Vorsteuer an Bank) auf das Projekt.
+        $booking = $this->withHeader('Authorization', "Bearer {$token}")->postJson('/api/bookings', [
+            'date' => now()->toDateString(),
+            'description' => 'Geheime Beratungskosten',
+            'lines' => [
+                ['account_id' => $this->data->accountExpense->id, 'type' => 'debit', 'amount' => 10000, 'tax_amount' => 1900, 'cost_object_id' => $costObjectId],
+                ['account_id' => $this->data->accountTax->id, 'type' => 'debit', 'amount' => 1900],
+                ['account_id' => $this->data->accountBank->id, 'type' => 'credit', 'amount' => 11900],
+            ],
+        ]);
+        $this->withHeader('Authorization', "Bearer {$token}")->postJson("/api/bookings/{$booking->json('id')}/lock")->assertStatus(200);
+
+        $pdf = $this->withHeader('Authorization', "Bearer {$token}")->get("/api/projects/{$projectId}/cost-report/pdf");
+        $pdf->assertStatus(200);
+        $this->assertSame('application/pdf', $pdf->headers->get('content-type'));
+        $this->assertStringStartsWith('%PDF', $pdf->getContent());
+    }
 }

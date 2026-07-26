@@ -11,6 +11,7 @@ import { ArrowLeft, Save, X, Calendar, FileText, Upload, Receipt, Euro, User, Pl
 import { ContactSelector } from '@/components/ContactSelector';
 import { AccountSelector } from '@/components/AccountSelector';
 import { ProductSelector } from '@/components/ProductSelector';
+import { ProjectSelector } from '@/components/ProjectSelector';
 import { BelegType } from '@/types/beleg';
 
 interface Product {
@@ -67,6 +68,13 @@ export function BelegCreate() {
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [showProductLines, setShowProductLines] = useState(false);
     const [lines, setLines] = useState<BelegLine[]>([]);
+    const [projectId, setProjectId] = useState<string | undefined>();
+
+    // SPEC-08 (Teil B): Projekt-Feld nur zeigen, wenn das Modul aktiv ist.
+    const { data: companySettings } = useQuery({
+        queryKey: ['settings'],
+        queryFn: async () => (await axios.get('/api/settings')).data,
+    });
 
     const { data: contacts } = useQuery<Contact[]>({
         queryKey: ['contacts'],
@@ -196,6 +204,7 @@ export function BelegCreate() {
             amount: Math.round((amount || 0) * 100),
             tax_amount: Math.round((taxAmount || 0) * 100),
             contact_id: contactId ? parseInt(contactId) : null,
+            project_id: projectId ? parseInt(projectId) : null,
             category_account_id: categoryAccountId ? parseInt(categoryAccountId) : null,
             is_paid: isPaid,
             payment_account_id: isPaid && paymentAccountId ? parseInt(paymentAccountId) : null,
@@ -404,6 +413,14 @@ export function BelegCreate() {
                                     onChange={setContactId}
                                 />
                             </div>
+                            {companySettings?.module_projects_enabled && (
+                                <div className="mt-4">
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                        Projekt (optional)
+                                    </label>
+                                    <ProjectSelector value={projectId} onChange={setProjectId} />
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
 

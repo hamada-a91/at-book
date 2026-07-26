@@ -23,6 +23,8 @@ import {
     Bug,
     Shield,
     History,
+    FolderKanban,
+    SlidersHorizontal,
 } from "lucide-react"
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
@@ -125,6 +127,18 @@ export function Sidebar({ className, onItemClick }: SidebarProps) {
             href: tenantUrl("/bug-reports"),
             active: isActive("/bug-reports"),
         },
+        ...(settings?.module_projects_enabled ? [{
+            label: "Projekte",
+            icon: FolderKanban,
+            href: tenantUrl("/projects"),
+            active: isActive("/projects"),
+        }] : []),
+        ...(settings?.module_cost_centers_enabled ? [{
+            label: "Kostenstellen",
+            icon: SlidersHorizontal,
+            href: tenantUrl("/cost-centers"),
+            active: isActive("/cost-centers"),
+        }] : []),
         ...(canSeeAuditLog ? [{
             label: "Audit-Log",
             icon: History,

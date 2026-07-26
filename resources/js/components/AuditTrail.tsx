@@ -71,6 +71,7 @@ const typeLabels: Record<string, string> = {
     Contact: 'Kontakt',
     User: 'Benutzer',
     CompanySetting: 'Firmeneinstellungen',
+    Project: 'Projekt',
 };
 
 // Kurznamen für den API-Filter (Whitelist des Endpoints)
@@ -84,6 +85,7 @@ const filterTypes: { value: string; label: string }[] = [
     { value: 'contact', label: 'Kontakt' },
     { value: 'user', label: 'Benutzer' },
     { value: 'company_setting', label: 'Firmeneinstellungen' },
+    { value: 'project', label: 'Projekt' },
 ];
 
 function typeLabel(fqcn: string | null): string {
