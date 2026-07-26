@@ -40,6 +40,8 @@ Detaillierte, umsetzbare Spezifikationen liegen in **[specs/](specs/README.md)**
 | Spec | Inhalt | Abhängig von |
 |---|---|---|
 | [SPEC-08](specs/SPEC-08-projekte-kostenstellen.md) | **Projekte mit Kostenstellen (KOST1) & Kostenträgern (KOST2)** als Modul `Modules/Projects`, Dimensionen an Buchungszeilen, Reports | SPEC-03, 04, 07 |
+| [SPEC-11](specs/SPEC-11-berichte-steuerzentrale-elster.md) | **Berichte 2.0, Steuerzentrale & ELSTER**: zentraler Report-Kern, BWA, Exporte, USt-VA; später EÜR, Anlagen/AfA und E-Bilanz | SPEC-02 bis 07; Projektberichte SPEC-08 |
+| [SPEC-12](specs/SPEC-12-bankabgleich-import.md) | **Bankabgleich**: Kontoauszug-CSV-Import + Zuordnung zu Belegen/Rechnungen/Kategorien (erzeugt Zahlungsbuchungen), Auto-Match & Lern-Regeln. Vorgezogen vor 09/10 | SPEC-04, 05, 06, 08 |
 | [SPEC-09](specs/SPEC-09-ocr-belege.md) | **OCR-Belegerfassung**: ZUGFeRD/XRechnung zuerst, dann Vision-LLM, Buchungsvorschlag mit User-Bestätigung | SPEC-04, 05, 06 |
 | [SPEC-10](specs/SPEC-10-ai-assistent.md) | **AI-Buchungsassistent**: Kontierungsvorschläge, später Chat-Auswertungen | SPEC-09 (teilt Infrastruktur) |
 
@@ -52,6 +54,7 @@ SPEC-03 (TenantExists) ──► SPEC-08                 │
 SPEC-04 (Buchungslogik) ──► SPEC-05 ──► SPEC-09    │
 SPEC-06 (Audit) ──► SPEC-09                        │
 SPEC-07 (DB) ──► SPEC-08                           │
+SPEC-02…07 ──► SPEC-11 (Reports/Steuer/ELSTER)      │
 SPEC-09 (OCR) ──► SPEC-10 (AI)                     ▼
                                             Produktion sicher
 ```

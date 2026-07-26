@@ -14,6 +14,8 @@ Jede Datei ist eine eigenständig umsetzbare Spezifikation. Reihenfolge und Abh�
 | [SPEC-08](SPEC-08-projekte-kostenstellen.md) | Feature: Projekte, Kostenstellen & Kostenträger | 3 | ✅ fertig |
 | [SPEC-09](SPEC-09-ocr-belege.md) | Feature: OCR-Belegerfassung | 3 | 🔲 offen |
 | [SPEC-10](SPEC-10-ai-assistent.md) | Feature: AI-Buchungsassistent | 3 | 🔲 offen |
+| [SPEC-11](SPEC-11-berichte-steuerzentrale-elster.md) | Berichte 2.0, Steuerzentrale & ELSTER | 3 (vorgezogen) | 🔲 offen |
+| [SPEC-12](SPEC-12-bankabgleich-import.md) | Bankabgleich: Kontoauszug-Import & Zuordnung | 3 (vor 09/10) | 🔲 offen |
 
 Status-Pflege: 🔲 offen → 🔨 in Arbeit → ✅ fertig (bitte beim Abschließen aktualisieren).
 
