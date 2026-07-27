@@ -152,6 +152,7 @@ class PaymentTest extends TestCase
         $after = $this->withHeaders($headers)->getJson('/api/reports/open-items?type=debitor&as_of='.$paymentDate);
         $after->assertOk()->assertJsonPath('items.0.open_amount', $invoice->total - 5000);
     }
+
     public function test_paid_beleg_requires_a_payment_account_when_created(): void
     {
         $data = TenantTestDataFactory::create('payments-beleg-required-account');
@@ -230,5 +231,4 @@ class PaymentTest extends TestCase
             ->assertJsonPath('month', null)
             ->assertJsonPath('as_of', now()->endOfYear()->toDateString());
     }
-
 }

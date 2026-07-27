@@ -21,12 +21,35 @@ class Payment extends Model
         'discount_amount' => 'integer',
     ];
 
-    public function paymentAccount() { return $this->belongsTo(Account::class, 'payment_account_id'); }
-    public function discountAccount() { return $this->belongsTo(Account::class, 'discount_account_id'); }
-    public function journalEntry() { return $this->belongsTo(JournalEntry::class); }
-    public function reversalJournalEntry() { return $this->belongsTo(JournalEntry::class, 'reversal_journal_entry_id'); }
-    public function invoice() { return $this->belongsTo(Invoice::class, 'payable_id'); }
-    public function beleg() { return $this->belongsTo(Beleg::class, 'payable_id'); }
+    public function paymentAccount()
+    {
+        return $this->belongsTo(Account::class, 'payment_account_id');
+    }
+
+    public function discountAccount()
+    {
+        return $this->belongsTo(Account::class, 'discount_account_id');
+    }
+
+    public function journalEntry()
+    {
+        return $this->belongsTo(JournalEntry::class);
+    }
+
+    public function reversalJournalEntry()
+    {
+        return $this->belongsTo(JournalEntry::class, 'reversal_journal_entry_id');
+    }
+
+    public function invoice()
+    {
+        return $this->belongsTo(Invoice::class, 'payable_id');
+    }
+
+    public function beleg()
+    {
+        return $this->belongsTo(Beleg::class, 'payable_id');
+    }
 
     public function getSettlementAmountAttribute(): int
     {
