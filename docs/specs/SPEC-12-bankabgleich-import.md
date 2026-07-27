@@ -1,6 +1,6 @@
 # SPEC-12 – Bankabgleich: Kontoauszug-Import & Zuordnung
 
-**Phase:** 3 (vorgezogen – vor SPEC-09/10 auf Wunsch) · **Aufwand:** ~2–3 Wochen (Teil A + B) · **Abhängigkeiten:** SPEC-04 (Zahlungsbuchung via `InvoiceBookingService`/`BelegController`), SPEC-05 (Periodensperre), SPEC-06 (Audit-Log), SPEC-08 (Kostenzuordnung durchreichen) · **Vorbild:** Lexware „Umsätze importieren" + „Umsatz zuordnen"
+**Phase:** 3 (vorgezogen – vor SPEC-09/10 auf Wunsch) · **Aufwand:** ~2–3 Wochen (Teil A + B) · **Abhängigkeiten:** SPEC-04 (Zahlungsbuchung), SPEC-05 (Periodensperre), SPEC-06 (Audit-Log), SPEC-08 (Kostenzuordnung durchreichen); **Teil B zusätzlich: SPEC-13 (Offene Posten/Teilzahlungen)** für die Zuordnung abweichender/teilweiser Beträge · **Vorbild:** Lexware „Umsätze importieren" + „Umsatz zuordnen"
 
 ## Ziel
 Bankumsätze aus einer **CSV-Datei importieren** (mit anpassbarem Mapping), sie als Liste vorhalten und anschließend **Belegen / Rechnungen / Kategorien zuordnen** – wobei die Zuordnung automatisch die passende **Zahlungsbuchung** (Bank an Debitor / Aufwand an Bank …) erzeugt. Ziel ist ein Ablauf wie in Lexware, aber **effizienter** durch automatische Zuordnungsvorschläge, Sammelbestätigung und lernende Regeln.
@@ -131,5 +131,5 @@ Rollen: Import + Zuordnung für `owner|manager|buchhalter` (Schreibrouten mit `r
 - **Teil B:** Zuordnung (assign/ignore/unassign → Zahlungsbuchungen), Auto-Match + Lern-Regeln, komplettes Frontend (Wizard + Banking-Seite).
 
 ## Offene fachliche Punkte (vor Teil B entscheiden)
-- **Teilzahlungen:** Das aktuelle Modell kennt nur „voll bezahlt" (Invoice→`paid`, Beleg→`is_paid`). Für abweichende Beträge (Skonto, Teilzahlung) braucht es entweder eine Toleranz + Differenzbuchung (Skonto/Rundung) oder ein echtes Zahlungs-Ledger. Empfehlung: in Teil B zunächst nur exakte Beträge automatisch, abweichende manuell mit Differenz-auf-Konto.
+- **Teilzahlungen → gelöst durch SPEC-13:** Teilzahlungen/Skonto werden über die Offene-Posten-Verwaltung (**SPEC-13**, Zahlungs-Ledger + `amount_paid`) abgebildet. Beim Zuordnen eines Bankumsatzes zu einer Rechnung/einem Beleg ruft dieser Bankabgleich `PaymentService::recordPayment()` mit dem Umsatzbetrag auf; ist der Betrag kleiner als der offene Posten, bleibt der Rest offen (Status `teilweise_bezahlt`). **SPEC-13 ist daher Voraussetzung für Teil B.** Die `bank_transactions` verweisen über `payment.bank_transaction_id` auf die erzeugte Zahlung.
 - **Verrechnungskonto/Umbuchungen** zwischen eigenen Bankkonten: als „Ignorieren" oder eigenes Ziel „Umbuchung".

@@ -23,7 +23,8 @@ AT-Book ist eine webbasierte **Buchhaltungs- und Warenwirtschafts-App für klein
 - Projekte mit **Kostenstellen und Kostenträgern**
 - **OCR** für Belege (automatische Buchungsvorschläge)
 - **AI-Integration** (Buchungsassistent)
-- **Berichte 2.0 & Steuerzentrale** mit BWA, Exporten und stufenweiser ELSTER-Anbindung (SPEC-11, vor OCR/AI priorisiert)
+- **Berichte 2.0, BWA, EÜR & Exporte** mit USt-VA-/EÜR-Eingabehilfe für die manuelle Übergabe an Mein ELSTER (SPEC-11A, vor OCR/AI priorisiert)
+- **Automatische USt-VA via ELSTER/ERiC** als späterer Ausbau (SPEC-11B)
 
 ## Tech-Stack
 
