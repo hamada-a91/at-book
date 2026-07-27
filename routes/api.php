@@ -68,6 +68,8 @@ Route::middleware(['api', 'auth:api', \App\Http\Middleware\SetTenantFromUser::cl
             Route::get('/journal-export', [ReportsController::class, 'journalExport']);
             Route::get('/account-movements', [ReportsController::class, 'accountMovements']);
             Route::get('/tax-report', [ReportsController::class, 'taxReport']);
+            Route::get('/open-items', \App\Http\Controllers\Api\OpenItemsReportController::class)
+                ->middleware('role:owner|manager|buchhalter,api');
             // SPEC-08 (Teil A)
             Route::get('/cost-centers', [ReportsController::class, 'costCenters']);
             Route::get('/projects/{project}/profitability', [ReportsController::class, 'projectProfitability']);
@@ -109,11 +111,21 @@ Route::middleware(['api', 'auth:api', \App\Http\Middleware\SetTenantFromUser::cl
         Route::post('/invoices/{invoice}/book', [\App\Http\Controllers\Api\InvoiceController::class, 'book']);
         Route::post('/invoices/{invoice}/send', [\App\Http\Controllers\Api\InvoiceController::class, 'send']);
         Route::post('/invoices/{invoice}/payment', [\App\Http\Controllers\Api\InvoiceController::class, 'recordPayment']);
+        Route::get('/invoices/{invoice}/payments', [\App\Http\Controllers\Api\PaymentController::class, 'indexInvoice'])
+            ->middleware('role:owner|manager|buchhalter,api');
+        Route::post('/invoices/{invoice}/payments', [\App\Http\Controllers\Api\PaymentController::class, 'storeInvoice'])
+            ->middleware('role:owner|manager|buchhalter,api');
         Route::get('/invoices/{invoice}/pdf', [\App\Http\Controllers\Api\InvoiceController::class, 'downloadPDF']);
 
         // Belege (Documents/Receipts)
         Route::apiResource('belege', \App\Http\Controllers\Api\BelegController::class)->parameters(['belege' => 'beleg']);
         Route::post('/belege/{beleg}/book', [\App\Http\Controllers\Api\BelegController::class, 'book']);
+        Route::get('/belege/{beleg}/payments', [\App\Http\Controllers\Api\PaymentController::class, 'indexBeleg'])
+            ->middleware('role:owner|manager|buchhalter,api');
+        Route::post('/belege/{beleg}/payments', [\App\Http\Controllers\Api\PaymentController::class, 'storeBeleg'])
+            ->middleware('role:owner|manager|buchhalter,api');
+        Route::delete('/payments/{payment}', [\App\Http\Controllers\Api\PaymentController::class, 'destroy'])
+            ->middleware('role:owner|manager|buchhalter,api');
         Route::post('/belege/{beleg}/upload', [\App\Http\Controllers\Api\BelegController::class, 'uploadFile']);
         Route::get('/belege/{beleg}/download', [\App\Http\Controllers\Api\BelegController::class, 'downloadFile']);
 

@@ -588,7 +588,7 @@ export function BelegCreate() {
                                         Zahlungskonto *
                                     </label>
                                     <AccountSelector
-                                        accounts={accounts}
+                                        accounts={accounts?.filter((account: any) => account.type === 'asset' && /^(10|12)\d{2}$/.test(String(account.code)))}
                                         value={paymentAccountId}
                                         onChange={setPaymentAccountId}
                                         filterType={['asset']}

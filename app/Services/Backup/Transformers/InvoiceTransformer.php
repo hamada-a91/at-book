@@ -25,6 +25,7 @@ class InvoiceTransformer extends BaseTransformer
             'subtotal' => $this->formatDecimal($model->subtotal),
             'tax_total' => $this->formatDecimal($model->tax_total),
             'total' => $this->formatDecimal($model->total),
+            'amount_paid' => $this->formatDecimal($model->amount_paid),
             'journal_entry_public_id' => $this->getRelatedPublicId($model->journalEntry),
             'notes' => $model->notes,
             'intro_text' => $model->intro_text,

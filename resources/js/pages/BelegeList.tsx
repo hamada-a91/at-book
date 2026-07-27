@@ -256,6 +256,9 @@ export function BelegeList() {
                                         </span>
                                         <span className="font-bold text-slate-900 dark:text-slate-100">
                                             {formatCurrency(beleg.amount)}
+                                            {beleg.amount_paid > 0 && beleg.open_amount > 0 && (
+                                                <span className="block text-xs font-normal text-amber-600">offen {formatCurrency(beleg.open_amount)}</span>
+                                            )}
                                         </span>
                                     </div>
                                     <div className="flex justify-between items-end">
@@ -271,6 +274,9 @@ export function BelegeList() {
                                             <Badge variant="outline" className={`text-[10px] h-5 px-1.5 font-normal ${statusStyles[beleg.status]}`}>
                                                 {statusLabels[beleg.status]}
                                             </Badge>
+                                            {beleg.amount_paid > 0 && beleg.open_amount > 0 && (
+                                                <Badge variant="outline" className="text-[10px] h-5 px-1.5 text-amber-700">Teilbezahlt</Badge>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -331,13 +337,19 @@ export function BelegeList() {
                                         <td className="px-6 py-4 text-slate-500 dark:text-slate-400">
                                             {new Date(beleg.document_date).toLocaleDateString('de-DE')}
                                         </td>
-                                        <td className="px-6 py-4 text-right font-semibold text-slate-900 dark:text-slate-100">
-                                            {formatCurrency(beleg.amount)}
+                                        <td className="px-6 py-4 text-right text-slate-900 dark:text-slate-100">
+                                            <div className="font-semibold">{formatCurrency(beleg.amount)}</div>
+                                            {beleg.amount_paid > 0 && beleg.open_amount > 0 && (
+                                                <div className="text-xs text-amber-600">offen {formatCurrency(beleg.open_amount)}</div>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4">
                                             <Badge variant="outline" className={`font-normal ${statusStyles[beleg.status]}`}>
                                                 {statusLabels[beleg.status]}
                                             </Badge>
+                                            {beleg.amount_paid > 0 && beleg.open_amount > 0 && (
+                                                <Badge variant="outline" className="ml-2 font-normal text-amber-700">Teilbezahlt</Badge>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                                             <div className="flex justify-end items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">

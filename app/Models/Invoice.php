@@ -21,6 +21,7 @@ class Invoice extends Model
         'subtotal',
         'tax_total',
         'total',
+        'amount_paid',
         'journal_entry_id',
         'notes',
         'intro_text',
@@ -31,6 +32,11 @@ class Invoice extends Model
     protected $casts = [
         'invoice_date' => 'date',
         'due_date' => 'date',
+        'amount_paid' => 'integer',
+    ];
+
+    protected $appends = [
+        'open_amount',
     ];
 
     public function contact()
@@ -46,6 +52,17 @@ class Invoice extends Model
     public function journalEntry()
     {
         return $this->belongsTo(\App\Modules\Accounting\Models\JournalEntry::class);
+    }
+
+    public function payments()
+    {
+        return $this->hasMany(Payment::class, 'payable_id')
+            ->where('payable_type', 'invoice');
+    }
+
+    public function getOpenAmountAttribute(): int
+    {
+        return max(0, (int) $this->total - (int) $this->amount_paid);
     }
 
     public function order()

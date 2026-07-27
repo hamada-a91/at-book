@@ -23,6 +23,7 @@ interface AccountSelectorProps {
     onChange: (value: string) => void;
     placeholder?: string;
     filterType?: string[];
+    disabled?: boolean;
 }
 
 const typeLabels: Record<string, { label: string; color: string }> = {
@@ -38,7 +39,8 @@ export function AccountSelector({
     value,
     onChange,
     placeholder = "Konto wählen...",
-    filterType
+    filterType,
+    disabled = false
 }: AccountSelectorProps) {
     const [open, setOpen] = useState(false);
     const [search, setSearch] = useState('');
@@ -73,13 +75,14 @@ export function AccountSelector({
     };
 
     return (
-        <Popover open={open} onOpenChange={setOpen}>
+        <Popover open={disabled ? false : open} onOpenChange={(nextOpen) => !disabled && setOpen(nextOpen)}>
             <PopoverTrigger asChild>
                 <Button
                     type="button"
                     variant="outline"
                     role="combobox"
-                    aria-expanded={open}
+                    aria-expanded={disabled ? false : open}
+                    disabled={disabled}
                     className="w-full justify-between bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800"
                 >
                     {selectedAccount ? (

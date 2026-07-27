@@ -16,6 +16,7 @@ use DomainException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 
 class BelegController extends Controller
 {
@@ -73,7 +74,11 @@ class BelegController extends Controller
             'project_id' => ['nullable', new TenantExists('projects')],
             'category_account_id' => ['nullable', new TenantExists('accounts')],
             'is_paid' => 'nullable|boolean',
-            'payment_account_id' => ['nullable', new TenantExists('accounts')],
+            'payment_account_id' => [
+                'nullable',
+                Rule::requiredIf(fn () => $request->boolean('is_paid')),
+                new TenantExists('accounts'),
+            ],
             'notes' => 'nullable|string',
             'due_date' => 'nullable|date',
             'file' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
@@ -178,7 +183,11 @@ class BelegController extends Controller
             'project_id' => ['nullable', new TenantExists('projects')],
             'category_account_id' => ['nullable', new TenantExists('accounts')],
             'is_paid' => 'nullable|boolean',
-            'payment_account_id' => ['nullable', new TenantExists('accounts')],
+            'payment_account_id' => [
+                'nullable',
+                Rule::requiredIf(fn () => $request->boolean('is_paid')),
+                new TenantExists('accounts'),
+            ],
             'notes' => 'nullable|string',
             'due_date' => 'nullable|date',
         ]);
@@ -222,6 +231,18 @@ class BelegController extends Controller
         }
 
         try {
+            if ($beleg->is_paid && ! $beleg->payment_account_id) {
+                throw new DomainException('Für einen als bezahlt markierten Beleg ist ein Zahlungskonto erforderlich.');
+            }
+            if ($beleg->is_paid) {
+                $paymentAccount = \App\Modules\Accounting\Models\Account::find($beleg->payment_account_id);
+                if (! $paymentAccount || $paymentAccount->type !== 'asset'
+                    || preg_match('/^(10|12)\d{2}$/', (string) $paymentAccount->code) !== 1) {
+                    throw new DomainException('Als Zahlungskonto ist nur ein Kassen- oder Bankkonto erlaubt.');
+                }
+            }
+
+
             $beleg = DB::transaction(function () use ($beleg) {
                 // SPEC-05 (Teil B): Erfassungssperre gilt auch für die automatische
                 // Beleg-Buchung - Belegdatum in einer festgeschriebenen Periode -> 422,
@@ -353,6 +374,7 @@ class BelegController extends Controller
                 // If marked as paid, create a payment booking (Personenkonto -> Kasse/Bank).
                 // Beim Barbeleg ohne Kontakt entfällt das: die Primärbuchung oben hat
                 // Aufwand/Erlös bereits direkt gegen das Zahlungskonto gebucht.
+                $paymentJournalEntry = null;
                 if (! $isDirectCashBeleg && $beleg->is_paid && $beleg->payment_account_id) {
                     $paymentAccount = \App\Modules\Accounting\Models\Account::find($beleg->payment_account_id);
 
@@ -381,11 +403,27 @@ class BelegController extends Controller
                     }
                 }
 
+                // Bestehender Sofort-zahlen-Flow wird in das neue OPOS-Ledger
+                // übernommen. Barbelege ohne Kontakt sind bereits durch die
+                // Primärbuchung ausgeglichen und bleiben bewusst ohne OPOS-Zeile.
+                if ($paymentJournalEntry) {
+                    \App\Models\Payment::create([
+                        'payable_type' => 'beleg',
+                        'payable_id' => $beleg->id,
+                        'amount' => (int) $beleg->amount,
+                        'payment_date' => $beleg->document_date->format('Y-m-d'),
+                        'payment_account_id' => $beleg->payment_account_id,
+                        'journal_entry_id' => $paymentJournalEntry->id,
+                        'discount_amount' => 0,
+                    ]);
+                }
+
                 $oldBelegStatus = $beleg->status;
 
                 $beleg->update([
                     'status' => ($beleg->is_paid && $beleg->payment_account_id) ? 'paid' : 'booked',
                     'journal_entry_id' => $journalEntry->id,
+                    'amount_paid' => ($beleg->is_paid && $beleg->payment_account_id) ? (int) $beleg->amount : 0,
                 ]);
 
                 // SPEC-06: fachlicher Event, explizit hier gefeuert (siehe

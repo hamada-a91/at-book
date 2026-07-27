@@ -50,6 +50,7 @@ class EntityTransformerRegistry
             'beleg_lines' => BelegLineTransformer::class,
             'journal_entries' => JournalEntryTransformer::class,
             'journal_entry_lines' => JournalEntryLineTransformer::class,
+            'payments' => PaymentTransformer::class,
             'inventory_transactions' => InventoryTransactionTransformer::class,
             // Note: 'documents' excluded - uses morph relationship without direct tenant_id
             // SPEC-06: audit_logs bewusst ZULETZT registriert - ein Audit-Eintrag

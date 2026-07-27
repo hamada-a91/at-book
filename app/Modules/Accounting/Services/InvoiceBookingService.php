@@ -93,54 +93,15 @@ class InvoiceBookingService
      */
     public function recordPayment(Invoice $invoice, int $paymentAccountId, string $paymentDate): JournalEntry
     {
-        return DB::transaction(function () use ($invoice, $paymentAccountId, $paymentDate) {
-            $invoice->load('contact');
+        $invoice->refresh();
+        $payment = app(PaymentService::class)->recordPayment(
+            $invoice,
+            $invoice->open_amount,
+            $paymentDate,
+            $paymentAccountId
+        );
 
-            if (! in_array($invoice->status, ['booked', 'sent'], true)) {
-                throw new DomainException('Nur gebuchte/versendete Rechnungen können bezahlt werden.');
-            }
-
-            if (! $invoice->contact) {
-                throw new DomainException('Kunde nicht gefunden.');
-            }
-
-            if (! $invoice->contact->customer_account_id) {
-                throw new DomainException("Kunde '{$invoice->contact->name}' hat kein Debitorenkonto. Bitte Kunden neu anlegen.");
-            }
-
-            $entry = $this->bookingService->createBooking([
-                'date' => $paymentDate,
-                'description' => "Zahlung Rechnung {$invoice->invoice_number} - {$invoice->contact->name}",
-                'contact_id' => $invoice->contact_id,
-                'lines' => [
-                    ['account_id' => $paymentAccountId, 'type' => 'debit', 'amount' => (int) $invoice->total],
-                    ['account_id' => $invoice->contact->customer_account_id, 'type' => 'credit', 'amount' => (int) $invoice->total],
-                ],
-            ]);
-
-            $this->bookingService->lockBooking($entry->id);
-
-            $oldInvoiceStatus = $invoice->status;
-
-            $invoice->update(['status' => 'paid']);
-
-            // SPEC-06: fachlicher Event, explizit aus dem Service gefeuert
-            // (siehe AuditObserver::isServiceManaged() - unterdrückt den
-            // generischen 'updated'-Eintrag für genau diesen Übergang).
-            AuditLog::record(
-                $invoice,
-                'payment_recorded',
-                ['status' => $oldInvoiceStatus],
-                [
-                    'status' => $invoice->status,
-                    'payment_account_id' => $paymentAccountId,
-                    'payment_date' => $paymentDate,
-                    'journal_entry_public_id' => $entry->public_id,
-                ]
-            );
-
-            return $entry->fresh('lines');
-        });
+        return $payment->journalEntry->fresh('lines');
     }
 
     /**

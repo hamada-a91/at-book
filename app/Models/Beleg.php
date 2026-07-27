@@ -20,6 +20,7 @@ class Beleg extends Model
         'document_date',
         'amount',
         'tax_amount',
+        'amount_paid',
         'contact_id',
         'project_id',
         'category_account_id',
@@ -37,6 +38,11 @@ class Beleg extends Model
         'document_date' => 'datetime:Y-m-d',
         'due_date' => 'datetime:Y-m-d',
         'is_paid' => 'boolean',
+        'amount_paid' => 'integer',
+    ];
+
+    protected $appends = [
+        'open_amount',
     ];
 
     public function contact()
@@ -62,6 +68,17 @@ class Beleg extends Model
     public function lines()
     {
         return $this->hasMany(BelegLine::class);
+    }
+
+    public function payments()
+    {
+        return $this->hasMany(Payment::class, 'payable_id')
+            ->where('payable_type', 'beleg');
+    }
+
+    public function getOpenAmountAttribute(): int
+    {
+        return max(0, (int) $this->amount - (int) $this->amount_paid);
     }
 
     /**

@@ -18,6 +18,7 @@ import { InvoicesList } from './pages/InvoicesList';
 import { InvoiceCreate } from './pages/InvoiceCreate';
 import { InvoicePreview } from './pages/InvoicePreview';
 import { Reports } from './pages/Reports';
+import { OpenItems } from './pages/OpenItems';
 import { Settings } from './pages/Settings';
 import { BelegeList } from './pages/BelegeList';
 import { BelegCreate } from './pages/BelegCreate';
@@ -230,6 +231,7 @@ function TenantRoutes() {
                             <Route path="/belege/:id" element={<BelegView />} />
                             <Route path="/belege/:id/edit" element={<BelegCreate />} />
                             <Route path="/reports" element={<Reports />} />
+                            <Route path="/open-items" element={<OpenItems />} />
                             <Route path="/journal" element={<Navigate to={`/${tenant}/reports`} replace />} />
                             <Route path="/bookings" element={<JournalList />} />
                             <Route path="/audit-log" element={<AuditLogList />} />

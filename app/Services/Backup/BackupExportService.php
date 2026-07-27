@@ -42,6 +42,7 @@ class BackupExportService
         'beleg_lines',
         'journal_entries',
         'journal_entry_lines',
+        'payments',
         'inventory_transactions',
         // Note: 'documents' excluded - uses morph relationship without direct tenant_id
         // SPEC-06: audit_logs zuletzt - kann auf jede Entity oben verweisen.

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import axios from '@/lib/axios';
@@ -6,11 +7,13 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Edit, Trash2, Send, Download, FileText, Calendar, Euro, Receipt, Eye } from 'lucide-react';
 import { Beleg } from '@/types/beleg';
+import { PaymentManagement } from '@/components/PaymentManagement';
 
 export function BelegView() {
     const navigate = useNavigate();
     const { tenant, id } = useParams<{ tenant: string; id: string }>();
     const queryClient = useQueryClient();
+    const [paymentDialog, setPaymentDialog] = useState(false);
 
     const { data: beleg, isLoading } = useQuery<Beleg>({
         queryKey: ['beleg', id],
@@ -426,6 +429,16 @@ export function BelegView() {
                                     </span>
                                 </div>
                             </div>
+                            <div className="flex justify-between items-center text-sm">
+                                <span className="text-slate-600 dark:text-slate-400">Bereits ausgeglichen:</span>
+                                <span>{formatCurrency(beleg.amount_paid)}</span>
+                            </div>
+                            <div className="flex justify-between items-center font-semibold">
+                                <span>Offener Betrag:</span>
+                                <span className={beleg.open_amount > 0 ? 'text-amber-600' : 'text-emerald-600'}>
+                                    {formatCurrency(beleg.open_amount)}
+                                </span>
+                            </div>
                         </CardContent>
                     </Card>
 
@@ -520,6 +533,18 @@ export function BelegView() {
                     </Card>
                 </div>
             </div>
+            {beleg.contact && beleg.status !== 'draft' && (
+                <PaymentManagement
+                    resource="belege"
+                    payableId={id!}
+                    documentLabel={beleg.document_number}
+                    amountPaid={beleg.amount_paid}
+                    openAmount={beleg.open_amount}
+                    open={paymentDialog}
+                    onOpenChange={setPaymentDialog}
+                    onChanged={() => queryClient.invalidateQueries({ queryKey: ['beleg', id] })}
+                />
+            )}
         </div>
     );
 }

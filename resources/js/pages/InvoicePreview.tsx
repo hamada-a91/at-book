@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { AuditTrail } from '@/components/AuditTrail';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from '@/lib/axios';
+import { PaymentManagement } from '@/components/PaymentManagement';
 
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -22,6 +23,8 @@ interface Invoice {
     subtotal: number;
     tax_total: number;
     total: number;
+    amount_paid: number;
+    open_amount: number;
     intro_text: string;
     payment_terms: string;
     footer_note: string;
@@ -290,7 +293,7 @@ export function InvoicePreview() {
                             className="gap-2 bg-gradient-to-r from-emerald-600 to-emerald-500"
                         >
                             <CreditCard className="w-4 h-4" />
-                            Als bezahlt markieren
+                            Zahlung erfassen
                         </Button>
                     )}
                 </div>
@@ -440,6 +443,16 @@ export function InvoicePreview() {
                                     </span>
                                 </div>
                             </div>
+                            <div className="flex justify-between items-center text-sm">
+                                <span className="text-slate-600 dark:text-slate-400">Bereits ausgeglichen:</span>
+                                <span>{formatCurrency(invoice.amount_paid)}</span>
+                            </div>
+                            <div className="flex justify-between items-center font-semibold">
+                                <span>Offener Betrag:</span>
+                                <span className={invoice.open_amount > 0 ? 'text-amber-600' : 'text-emerald-600'}>
+                                    {formatCurrency(invoice.open_amount)}
+                                </span>
+                            </div>
                         </CardContent>
                     </Card>
 
@@ -482,7 +495,7 @@ export function InvoicePreview() {
                                     onClick={() => setPaymentDialog(true)}
                                 >
                                     <CreditCard className="w-4 h-4" />
-                                    Als bezahlt markieren
+                                    Zahlung erfassen
                                 </Button>
                             )}
                             <Button variant="outline" className="w-full gap-2" onClick={handlePreviewPDF}>
@@ -569,7 +582,7 @@ export function InvoicePreview() {
                 />
             )}
             {/* Payment Dialog */}
-            <Dialog open={paymentDialog} onOpenChange={setPaymentDialog}>
+            <Dialog open={false} onOpenChange={setPaymentDialog}>
                 <DialogContent className="sm:max-w-[425px]">
                     <DialogHeader>
                         <DialogTitle>Zahlung erfassen</DialogTitle>
@@ -630,6 +643,17 @@ export function InvoicePreview() {
                     </UiDialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <PaymentManagement
+                resource="invoices"
+                payableId={id!}
+                documentLabel={invoice.invoice_number}
+                amountPaid={invoice.amount_paid}
+                openAmount={invoice.open_amount}
+                open={paymentDialog}
+                onOpenChange={setPaymentDialog}
+                onChanged={() => queryClient.invalidateQueries({ queryKey: ['invoice', id] })}
+            />
 
             {/* Verlauf (Audit-Trail) – blendet sich bei fehlender Berechtigung selbst aus */}
             {id && <AuditTrail auditableType="invoice" auditableId={Number(id)} title="Verlauf" />}

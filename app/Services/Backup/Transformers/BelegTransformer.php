@@ -20,6 +20,7 @@ class BelegTransformer extends BaseTransformer
             'title' => $model->title,
             'document_date' => $this->formatDate($model->document_date),
             'amount' => $this->formatDecimal($model->amount),
+            'amount_paid' => $this->formatDecimal($model->amount_paid),
             'tax_amount' => $this->formatDecimal($model->tax_amount),
             'contact_public_id' => $this->getRelatedPublicId($model->contact),
             'project_public_id' => $this->getRelatedPublicId($model->project),

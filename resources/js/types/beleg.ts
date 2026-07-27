@@ -24,6 +24,8 @@ export interface Beleg {
     title: string;
     document_date: string;
     amount: number;
+    amount_paid: number;
+    open_amount: number;
     tax_amount: number;
     contact_id: number | null;
     contact?: {

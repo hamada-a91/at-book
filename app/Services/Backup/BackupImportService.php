@@ -45,6 +45,7 @@ class BackupImportService
         'beleg_lines',
         'journal_entries',
         'journal_entry_lines',
+        'payments',
         'inventory_transactions',
         // Note: 'documents' excluded - uses morph relationship without direct tenant_id
         // SPEC-06: audit_logs zuletzt importieren - die auditable-Referenz
@@ -405,7 +406,7 @@ class BackupImportService
             // journal_entry_lines/invoice_lines/etc.), Position daher unkritisch.
             'cost_centers', 'cost_objects', 'projects',
             'quotes', 'orders',
-            'delivery_notes', 'invoices', 'belege', 'journal_entries', 'inventory_transactions',
+            'delivery_notes', 'invoices', 'belege', 'journal_entries', 'payments', 'inventory_transactions',
             // SPEC-06: audit_logs hat eine eigene tenant_id-Spalte (kein Child-Table) und
             // keine eingehenden FK-Constraints von anderen Tabellen - Reihenfolge relativ
             // zu den übrigen Einträgen ist daher unkritisch, wird aber der Vollständigkeit
@@ -753,8 +754,23 @@ class BackupImportService
             return $this->mapAuditLogAuditable($data, $idMapping);
         }
 
+        if ($entityType === 'payments' && array_key_exists('payable_public_id', $data)) {
+            $payablePublicId = $data['payable_public_id'];
+            unset($data['payable_public_id']);
+            $payableEntity = ($data['payable_type'] ?? null) === 'invoice' ? 'invoices' : 'belege';
+            $data['payable_id'] = $payablePublicId
+                ? $idMapping->get($payableEntity, $payablePublicId)
+                : null;
+        }
+
         // Define foreign key mappings
         $mappings = [
+            'payments' => [
+                'payment_account_public_id' => ['accounts', 'payment_account_id'],
+                'journal_entry_public_id' => ['journal_entries', 'journal_entry_id'],
+                'discount_account_public_id' => ['accounts', 'discount_account_id'],
+                'reversal_journal_entry_public_id' => ['journal_entries', 'reversal_journal_entry_id'],
+            ],
             'invoices' => [
                 'contact_public_id' => ['contacts', 'contact_id'],
                 'project_public_id' => ['projects', 'project_id'],
@@ -999,8 +1015,9 @@ class BackupImportService
             'invoice_lines' => ['unit_price', 'line_total'],
             'delivery_notes' => ['subtotal', 'tax_total', 'total'],
             'delivery_note_lines' => ['unit_price', 'line_total'],
-            'belege' => ['amount', 'tax_amount'],
+            'belege' => ['amount', 'tax_amount', 'amount_paid'],
             'beleg_lines' => ['unit_price', 'line_total'],
+            'payments' => ['amount', 'discount_amount'],
             'journal_entry_lines' => ['amount', 'tax_amount'],
             'products' => ['purchase_price', 'selling_price'],
             // SPEC-08 (Teil A): budget_amount ist nullable - der Cast unten läuft
@@ -1242,6 +1259,7 @@ class BackupImportService
             'beleg_lines' => \App\Models\BelegLine::class,
             'journal_entries' => \App\Modules\Accounting\Models\JournalEntry::class,
             'journal_entry_lines' => \App\Modules\Accounting\Models\JournalEntryLine::class,
+            'payments' => \App\Models\Payment::class,
             'inventory_transactions' => \App\Models\InventoryTransaction::class,
             // Note: 'documents' excluded - uses morph relationship without direct tenant_id
             'audit_logs' => AuditLog::class,

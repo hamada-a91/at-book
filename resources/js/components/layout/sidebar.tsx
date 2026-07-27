@@ -25,6 +25,7 @@ import {
     History,
     FolderKanban,
     SlidersHorizontal,
+    CircleDollarSign,
 } from "lucide-react"
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
@@ -72,6 +73,21 @@ export function Sidebar({ className, onItemClick }: SidebarProps) {
     const isAdmin = currentUser?.roles?.some((role: any) => role.name === 'admin') || false;
     // Audit-Log ist nur für owner/buchhalter zugänglich (API liefert sonst 403)
     const canSeeAuditLog = currentUser?.roles?.some((role: any) => ['owner', 'buchhalter'].includes(role.name)) || false;
+    const canSeeOpenItems = currentUser?.roles?.some(
+        (role: any) => ['owner', 'manager', 'buchhalter'].includes(role.name)
+    ) || false;
+    const { data: openItemsNotification } = useQuery({
+        queryKey: ['open-items', 'notification'],
+        queryFn: async () => (await axios.get('/api/reports/open-items')).data,
+        enabled: canSeeOpenItems,
+        staleTime: 30_000,
+        refetchInterval: 60_000,
+        refetchOnWindowFocus: true,
+    });
+    const openItemsCount = Array.isArray(openItemsNotification?.items)
+        ? openItemsNotification.items.length
+        : 0;
+
 
 
     // Einzel-Einträge (Hauptkategorien ohne Untermenü)
@@ -84,7 +100,7 @@ export function Sidebar({ className, onItemClick }: SidebarProps) {
 
     // Gruppen (aufklappbare Kategorien). Jedes Untermenü-Item hat ein eigenes
     // Icon. Leere Gruppen werden ausgeblendet.
-    const groups: { key: string; label: string; icon: any; items: any[] }[] = [
+    const groups: { key: string; label: string; icon: any; items: any[]; badge?: number }[] = [
         {
             key: "verkauf", label: "Verkauf", icon: ShoppingCart, items: [
                 { label: "Angebote", icon: FileCheck, href: tenantUrl("/quotes"), active: isActive("/quotes") },
@@ -93,8 +109,9 @@ export function Sidebar({ className, onItemClick }: SidebarProps) {
             ],
         },
         {
-            key: "buchhaltung", label: "Buchhaltung", icon: BookOpen, items: [
+            key: "buchhaltung", label: "Buchhaltung", icon: BookOpen, badge: canSeeOpenItems ? openItemsCount : 0, items: [
                 { label: "Belege", icon: Receipt, href: tenantUrl("/belege"), active: isActive("/belege") },
+                ...(canSeeOpenItems ? [{ label: "Offene Posten", icon: CircleDollarSign, href: tenantUrl("/open-items"), active: isActive("/open-items"), badge: openItemsCount }] : []),
                 { label: "Buchungen", icon: BookOpen, href: tenantUrl("/bookings"), active: isActive("/bookings") },
                 { label: "Sachkonten", icon: Layers, href: tenantUrl("/accounts"), active: isActive("/accounts") },
             ],
@@ -146,15 +163,21 @@ export function Sidebar({ className, onItemClick }: SidebarProps) {
                     )} />
                 )}
                 {route.label}
+                {route.badge > 0 && (
+                    <span className="ml-auto min-w-5 rounded-full bg-red-600 px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white">
+                        {route.badge > 99 ? '99+' : route.badge}
+                    </span>
+                )}
             </Link>
         </Button>
     )
 
     // Aufklappbare Kategorie. Standardmäßig ist die Kategorie der AKTIVEN Seite
     // offen (expandedSections[key] überschreibt das, sobald der Nutzer klickt).
-    const renderGroup = (group: { key: string; label: string; icon: any; items: any[] }) => {
+    const renderGroup = (group: { key: string; label: string; icon: any; items: any[]; badge?: number }) => {
         const groupActive = group.items.some((i) => i.active)
         const expanded = expandedSections[group.key] ?? groupActive
+        const groupBadge = group.badge ?? 0
         return (
             <div key={group.key} className="space-y-1">
                 <button
@@ -168,7 +191,14 @@ export function Sidebar({ className, onItemClick }: SidebarProps) {
                         <group.icon className="mr-3 h-5 w-5 text-blue-600 dark:text-blue-400" />
                         {group.label}
                     </div>
-                    {expanded ? <ChevronDown className="h-4 w-4 text-blue-500" /> : <ChevronRight className="h-4 w-4 text-blue-500" />}
+                    <div className="flex items-center gap-2">
+                        {groupBadge > 0 && (
+                            <span className="min-w-5 rounded-full bg-red-600 px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white">
+                                {groupBadge > 99 ? '99+' : groupBadge}
+                            </span>
+                        )}
+                        {expanded ? <ChevronDown className="h-4 w-4 text-blue-500" /> : <ChevronRight className="h-4 w-4 text-blue-500" />}
+                    </div>
                 </button>
                 {expanded && (
                     <div className="space-y-1 ml-2">

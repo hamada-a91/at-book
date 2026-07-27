@@ -6,11 +6,10 @@ import axios from '@/lib/axios';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Plus, FileText, Trash2, Send, Euro, Eye, Edit, Search, Package } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { SendEmailModal, EmailData } from '@/components/SendEmailModal';
+import { PaymentManagement } from '@/components/PaymentManagement';
 
 interface Invoice {
     id: number;
@@ -28,6 +27,8 @@ interface Invoice {
     due_date: string;
     status: string;
     total: number;
+    amount_paid: number;
+    open_amount: number;
 }
 
 export function InvoicesList() {
@@ -35,8 +36,6 @@ export function InvoicesList() {
     const { tenant } = useParams();
     const queryClient = useQueryClient();
     const [paymentDialog, setPaymentDialog] = useState<{ open: boolean; invoice: Invoice | null }>({ open: false, invoice: null });
-    const [paymentAccount, setPaymentAccount] = useState('');
-    const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
     const [searchTerm, setSearchTerm] = useState('');
     const [emailModal, setEmailModal] = useState<{ open: boolean; invoice: Invoice | null }>({ open: false, invoice: null });
 
@@ -88,27 +87,6 @@ export function InvoicesList() {
         },
     });
 
-    // Get accounts for payment (Kasse/Bank)
-    const { data: accounts } = useQuery({
-        queryKey: ['accounts'],
-        queryFn: async () => {
-            const { data } = await axios.get('/api/accounts');
-            return data;
-        },
-    });
-
-    const paymentMutation = useMutation({
-        mutationFn: async ({ invoiceId, data }: { invoiceId: number; data: any }) => {
-            const { data: resData } = await axios.post(`/api/invoices/${invoiceId}/payment`, data);
-            return resData;
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['invoices'] });
-            setPaymentDialog({ open: false, invoice: null });
-            setPaymentAccount('');
-        },
-    });
-
     const formatCurrency = (cents: number) => {
         return new Intl.NumberFormat('de-DE', {
             style: 'currency',
@@ -130,20 +108,6 @@ export function InvoicesList() {
         sent: 'Versendet',
         paid: 'Bezahlt',
         cancelled: 'Storniert',
-    };
-
-    const cashAndBankAccounts = accounts?.filter((a: any) => a.type === 'asset' && (a.code.startsWith('10') || a.code.startsWith('12'))) || [];
-
-    const handlePayment = () => {
-        if (!paymentDialog.invoice || !paymentAccount) return;
-
-        paymentMutation.mutate({
-            invoiceId: paymentDialog.invoice.id,
-            data: {
-                payment_account_id: parseInt(paymentAccount),
-                payment_date: paymentDate,
-            },
-        });
     };
 
     const handleDelete = (id: number) => {
@@ -235,6 +199,9 @@ export function InvoicesList() {
                                         </span>
                                         <span className="font-bold text-slate-900 dark:text-slate-100">
                                             {formatCurrency(invoice.total)}
+                                            {invoice.amount_paid > 0 && invoice.open_amount > 0 && (
+                                                <span className="block text-xs font-normal text-amber-600">offen {formatCurrency(invoice.open_amount)}</span>
+                                            )}
                                         </span>
                                     </div>
                                     <div className="flex justify-between items-end">
@@ -250,6 +217,9 @@ export function InvoicesList() {
                                             <Badge variant="outline" className={`text-[10px] h-5 px-1.5 font-normal ${statusStyles[invoice.status] || 'bg-slate-100 text-slate-700'}`}>
                                                 {statusLabels[invoice.status] || invoice.status}
                                             </Badge>
+                                            {invoice.amount_paid > 0 && invoice.open_amount > 0 && (
+                                                <Badge variant="outline" className="text-[10px] h-5 px-1.5 text-amber-700">Teilbezahlt</Badge>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -302,14 +272,20 @@ export function InvoicesList() {
                                         <td className="px-6 py-4 text-slate-500 dark:text-slate-400">
                                             {new Date(invoice.due_date).toLocaleDateString('de-DE')}
                                         </td>
-                                        <td className="px-6 py-4 text-right font-semibold text-slate-900 dark:text-slate-100">
-                                            {formatCurrency(invoice.total)}
+                                        <td className="px-6 py-4 text-right text-slate-900 dark:text-slate-100">
+                                            <div className="font-semibold">{formatCurrency(invoice.total)}</div>
+                                            {invoice.amount_paid > 0 && invoice.open_amount > 0 && (
+                                                <div className="text-xs text-amber-600">offen {formatCurrency(invoice.open_amount)}</div>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-2">
                                                 <Badge variant="outline" className={`font-normal ${statusStyles[invoice.status] || 'bg-slate-100 text-slate-700 border-slate-200'}`}>
                                                     {statusLabels[invoice.status] || invoice.status}
                                                 </Badge>
+                                                {invoice.amount_paid > 0 && invoice.open_amount > 0 && (
+                                                    <Badge variant="outline" className="font-normal text-amber-700">Teilbezahlt</Badge>
+                                                )}
                                                 {invoice.order && (
                                                     <Badge variant="outline" className="font-normal bg-indigo-50 text-indigo-600 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-400 dark:border-indigo-800">
                                                         <Package className="w-3 h-3 mr-1" />
@@ -398,68 +374,21 @@ export function InvoicesList() {
                 )}
             </Card>
 
-            {/* Payment Dialog */}
-            <Dialog open={paymentDialog.open} onOpenChange={(open) => !open && setPaymentDialog({ open: false, invoice: null })}>
-                <DialogContent className="sm:max-w-[425px]">
-                    <DialogHeader>
-                        <DialogTitle>Zahlung erfassen</DialogTitle>
-                        <DialogDescription>
-                            Verbuchen Sie einen Zahlungseingang für diese Rechnung.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="grid gap-4 py-4">
-                        <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-lg space-y-2">
-                            <div className="flex justify-between text-sm">
-                                <span className="text-slate-500">Rechnung:</span>
-                                <span className="font-mono font-medium">{paymentDialog.invoice?.invoice_number}</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                                <span className="text-slate-500">Offener Betrag:</span>
-                                <span className="font-bold text-slate-900 dark:text-slate-100">{paymentDialog.invoice && formatCurrency(paymentDialog.invoice.total)}</span>
-                            </div>
-                        </div>
-
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                                Zahlungseingang auf Konto *
-                            </label>
-                            <Select value={paymentAccount} onValueChange={setPaymentAccount}>
-                                <SelectTrigger className="bg-white dark:bg-slate-950">
-                                    <SelectValue placeholder="Konto auswählen..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {cashAndBankAccounts.map((account: any) => (
-                                        <SelectItem key={account.id} value={account.id.toString()}>
-                                            <span className="font-mono text-slate-500 mr-2">{account.code}</span>
-                                            {account.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                                Zahlungsdatum *
-                            </label>
-                            <Input
-                                type="date"
-                                value={paymentDate}
-                                onChange={(e) => setPaymentDate(e.target.value)}
-                                className="bg-white dark:bg-slate-950"
-                            />
-                        </div>
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setPaymentDialog({ open: false, invoice: null })}>
-                            Abbrechen
-                        </Button>
-                        <Button onClick={handlePayment} disabled={!paymentAccount || paymentMutation.isPending}>
-                            {paymentMutation.isPending ? 'Erfasse...' : 'Zahlung buchen'}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            {paymentDialog.invoice && (
+                <PaymentManagement
+                    resource="invoices"
+                    payableId={paymentDialog.invoice.id}
+                    documentLabel={`Rechnung ${paymentDialog.invoice.invoice_number}`}
+                    amountPaid={paymentDialog.invoice.amount_paid}
+                    openAmount={paymentDialog.invoice.open_amount}
+                    open={paymentDialog.open}
+                    onOpenChange={(open) => {
+                        if (!open) setPaymentDialog({ open: false, invoice: null });
+                    }}
+                    onChanged={() => queryClient.invalidateQueries({ queryKey: ['invoices'] })}
+                    showCard={false}
+                />
+            )}
 
             {/* Send Email Modal */}
             {emailModal.invoice && (

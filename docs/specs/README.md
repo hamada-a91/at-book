@@ -17,7 +17,7 @@ Jede Datei ist eine eigenständig umsetzbare Spezifikation. Reihenfolge und Abh�
 | [SPEC-11A](SPEC-11A-berichte-exporte.md) | Berichte 2.0, BWA, EÜR & manuelle ELSTER-Übergabe | 3 (vorgezogen) | 🔲 offen |
 | [SPEC-11B](SPEC-11B-ustva-elster-eric.md) | Zukunft: USt-VA automatisch via ELSTER/ERiC | Zukunft | 🔲 später |
 | [SPEC-12](SPEC-12-bankabgleich-import.md) | Bankabgleich: Kontoauszug-Import & Zuordnung | 3 (vor 09/10) | 🔲 offen |
-| [SPEC-13](SPEC-13-offene-posten-teilzahlungen.md) | Offene Posten & Teilzahlungen (OPOS) | 3 (Fundament) | 🔲 offen |
+| [SPEC-13](SPEC-13-offene-posten-teilzahlungen.md) | Offene Posten & Teilzahlungen (OPOS) | 3 (Fundament) | ✅ umgesetzt |
 
 Status-Pflege: 🔲 offen → 🔨 in Arbeit → ✅ fertig (bitte beim Abschließen aktualisieren).
 
