@@ -12,6 +12,7 @@ import {
     BookOpen,
     Receipt,
     Landmark,
+    WalletCards,
     FileCheck,
     ShoppingCart,
     Package,
@@ -111,6 +112,7 @@ export function Sidebar({ className, onItemClick }: SidebarProps) {
         {
             key: "buchhaltung", label: "Buchhaltung", icon: BookOpen, badge: canSeeOpenItems ? openItemsCount : 0, items: [
                 { label: "Belege", icon: Receipt, href: tenantUrl("/belege"), active: isActive("/belege") },
+                { label: "Banking", icon: WalletCards, href: tenantUrl("/banking"), active: isActive("/banking") },
                 ...(canSeeOpenItems ? [{ label: "Offene Posten", icon: CircleDollarSign, href: tenantUrl("/open-items"), active: isActive("/open-items"), badge: openItemsCount }] : []),
                 { label: "Buchungen", icon: BookOpen, href: tenantUrl("/bookings"), active: isActive("/bookings") },
                 { label: "Sachkonten", icon: Layers, href: tenantUrl("/accounts"), active: isActive("/accounts") },

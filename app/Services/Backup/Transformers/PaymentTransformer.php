@@ -24,7 +24,7 @@ class PaymentTransformer extends BaseTransformer
             'payment_date' => $this->formatDate($model->payment_date),
             'payment_account_public_id' => $this->getRelatedPublicId($model->paymentAccount),
             'journal_entry_public_id' => $this->getRelatedPublicId($model->journalEntry),
-            'bank_transaction_id' => $model->bank_transaction_id,
+            'bank_transaction_public_id' => $this->getRelatedPublicId($model->bankTransaction),
             'discount_amount' => $this->formatDecimal($model->discount_amount),
             'discount_account_public_id' => $this->getRelatedPublicId($model->discountAccount),
             'reversal_journal_entry_public_id' => $this->getRelatedPublicId($model->reversalJournalEntry),

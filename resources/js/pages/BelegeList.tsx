@@ -6,8 +6,9 @@ import axios from '@/lib/axios';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, FileText, Trash2, Eye, Edit, Search, Download, Upload, Send, Receipt } from 'lucide-react';
+import { Plus, FileText, Trash2, Eye, Edit, Search, Download, Upload, Send, Receipt, AlertCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Beleg, BelegType, BelegStatus } from '@/types/beleg';
 
@@ -137,6 +138,14 @@ export function BelegeList() {
         beleg.contact?.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
+    const bookError = (bookMutation.error as any)?.response?.data?.error
+        || (bookMutation.error as any)?.response?.data?.message
+        || (bookMutation.error as any)?.message;
+
+    const deleteError = (deleteMutation.error as any)?.response?.data?.error
+        || (deleteMutation.error as any)?.response?.data?.message
+        || (deleteMutation.error as any)?.message;
+
     return (
         <div className="space-y-6">
             {/* Header */}
@@ -152,6 +161,13 @@ export function BelegeList() {
                     </Button>
                 </Link>
             </div>
+
+            {(bookError || deleteError) && (
+                <Alert variant="destructive" className="bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800 text-red-900 dark:text-red-200">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{bookError || deleteError}</AlertDescription>
+                </Alert>
+            )}
 
             {/* Quick Filters */}
             <div className="flex flex-wrap items-center gap-3">

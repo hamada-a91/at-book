@@ -56,7 +56,7 @@ class BelegController extends Controller
             });
         }
 
-        $belege = $query->latest('document_date')->get();
+        $belege = $query->orderByDesc('document_number')->orderByDesc('id')->get();
 
         return response()->json($belege);
     }
@@ -241,7 +241,6 @@ class BelegController extends Controller
                     throw new DomainException('Als Zahlungskonto ist nur ein Kassen- oder Bankkonto erlaubt.');
                 }
             }
-
 
             $beleg = DB::transaction(function () use ($beleg) {
                 // SPEC-05 (Teil B): Erfassungssperre gilt auch für die automatische

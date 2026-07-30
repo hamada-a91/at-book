@@ -24,6 +24,8 @@ class BackupExportService
         'products',
         'contacts',
         'bank_accounts',
+        'bank_import_batches',
+        'bank_matching_rules',
         'company_settings',
         // SPEC-08 (Teil A): Dimensionen vor den Belegketten (siehe
         // EntityTransformerRegistry für die Begründung).
@@ -42,6 +44,7 @@ class BackupExportService
         'beleg_lines',
         'journal_entries',
         'journal_entry_lines',
+        'bank_transactions',
         'payments',
         'inventory_transactions',
         // Note: 'documents' excluded - uses morph relationship without direct tenant_id
@@ -402,9 +405,13 @@ class BackupExportService
             now()->format('Y-m-d_His')
         );
 
-        $storagePath = "{$this->backupPath}/{$tenant->id}/{$filename}";
+        $tenantFolder = $tenant->public_id ?? (string) $tenant->id;
 
-        Storage::disk($this->disk)->put($storagePath, file_get_contents($tempZipPath));
+        $storagePath = "{$this->backupPath}/{$tenantFolder}/{$filename}";
+
+        if (! Storage::disk($this->disk)->put($storagePath, file_get_contents($tempZipPath))) {
+            throw new \RuntimeException("Backup-Datei konnte nicht gespeichert werden: {$storagePath}");
+        }
 
         // Clean up temp file
         unlink($tempZipPath);

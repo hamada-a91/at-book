@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useParams, Link, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, Link, useSearchParams, useLocation } from 'react-router-dom';
 import axios from '@/lib/axios';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -46,6 +46,15 @@ interface Product {
     tax_rate: number;
 }
 
+interface BankTransaction {
+    id: number;
+    booking_date: string;
+    counterparty?: string | null;
+    purpose?: string | null;
+    amount: number;
+    currency: string;
+}
+
 // Tax rate to revenue account mapping
 const TAX_ACCOUNT_MAP: Record<number, string> = {
     19: '8400', // Erlöse 19% USt
@@ -55,8 +64,12 @@ const TAX_ACCOUNT_MAP: Record<number, string> = {
 
 export function InvoiceCreate() {
     const navigate = useNavigate();
+    const location = useLocation();
     const { tenant, id } = useParams();
     const [searchParams] = useSearchParams();
+    const locationState = location.state as { bankTransaction?: BankTransaction; returnTo?: string } | null;
+    const sourceBankTransactionId = searchParams.get('bank_transaction_id');
+    const returnTo = searchParams.get('return_to') || locationState?.returnTo || `/${tenant}/banking`;
     const queryClient = useQueryClient();
     const isEditMode = !!id;
 
@@ -113,6 +126,17 @@ export function InvoiceCreate() {
         enabled: !!id,
     });
 
+    const { data: fetchedBankTransaction } = useQuery<BankTransaction | null>({
+        queryKey: ['bank-transaction', sourceBankTransactionId],
+        queryFn: async () => {
+            if (!sourceBankTransactionId) return null;
+            const { data } = await axios.get(`/api/bank-transactions/${sourceBankTransactionId}`);
+            return data;
+        },
+        enabled: !!sourceBankTransactionId && !locationState?.bankTransaction,
+    });
+    const sourceBankTransaction = locationState?.bankTransaction || fetchedBankTransaction || null;
+
     // Fetch order data if creating from order
     const { data: sourceOrder } = useQuery({
         queryKey: ['order', fromOrderId],
@@ -163,6 +187,28 @@ export function InvoiceCreate() {
             }
         }
     }, [sourceOrder, isEditMode, accounts]);
+
+    useEffect(() => {
+        if (!sourceBankTransaction || isEditMode || fromOrderId) return;
+        const gross = Math.abs(sourceBankTransaction.amount) / 100;
+        const taxRate = lines[0]?.tax_rate || 19;
+        const net = gross / (1 + taxRate / 100);
+        setCustomerName(sourceBankTransaction.counterparty || '');
+        setInvoiceDate(sourceBankTransaction.booking_date?.split('T')[0] || new Date().toISOString().split('T')[0]);
+        setDueDate(sourceBankTransaction.booking_date?.split('T')[0] || new Date().toISOString().split('T')[0]);
+        setIntroText('Unsere Lieferungen/Leistungen stellen wir Ihnen wie folgt in Rechnung.');
+        setPaymentTerms('Zahlung per Bankumsatz importiert');
+        setFooterNote(sourceBankTransaction.purpose || '');
+        setLines([{
+            product_id: null,
+            description: sourceBankTransaction.purpose || sourceBankTransaction.counterparty || 'Bankumsatz',
+            quantity: 1,
+            unit: 'Pauschal',
+            unit_price: parseFloat(net.toFixed(2)),
+            tax_rate: taxRate,
+            account_id: lines[0]?.account_id || '',
+        }]);
+    }, [sourceBankTransaction?.id, isEditMode, fromOrderId]);
 
     // Populate form when invoice data loads
     useEffect(() => {
@@ -218,7 +264,23 @@ export function InvoiceCreate() {
                 throw new Error(error.response?.data?.message || 'Fehler beim Speichern');
             }
         },
-        onSuccess: (data) => {
+        onSuccess: async (data) => {
+            if (sourceBankTransactionId && !isEditMode) {
+                try {
+                    await axios.post(`/api/invoices/${data.id}/book`);
+                    await axios.post(`/api/bank-transactions/${sourceBankTransactionId}/assign`, {
+                        target_type: 'invoice',
+                        target_id: data.id,
+                        note: 'Automatisch aus neuer Rechnung zugeordnet.',
+                    });
+                    queryClient.invalidateQueries({ queryKey: ['bank-transactions'] });
+                    queryClient.invalidateQueries({ queryKey: ['invoices'] });
+                    navigate(returnTo);
+                    return;
+                } catch (error: any) {
+                    alert(error.response?.data?.error || 'Rechnung wurde erstellt, konnte aber nicht automatisch zugeordnet werden. Bitte prüfen und manuell zuordnen.');
+                }
+            }
             navigate(`/${tenant}/invoices/${data.id}/preview`);
         },
     });
@@ -659,7 +721,7 @@ export function InvoiceCreate() {
                                 Zurück zum Bearbeiten
                             </Button>
                             <div className="flex gap-3">
-                                <Link to={`/${tenant}/invoices`}>
+                                <Link to={sourceBankTransactionId ? returnTo : `/${tenant}/invoices`}>
                                     <Button variant="ghost" className="gap-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50">
                                         <X className="w-4 h-4" />
                                         Verwerfen
@@ -680,7 +742,7 @@ export function InvoiceCreate() {
                     /* Edit Mode - Show the form */
                     <>
                         <div className="flex items-center gap-4">
-                            <Link to={`/${tenant}/invoices`}>
+                            <Link to={sourceBankTransactionId ? returnTo : `/${tenant}/invoices`}>
                                 <Button variant="ghost" size="icon" className="h-10 w-10 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
                                     <ArrowLeft className="w-5 h-5" />
                                 </Button>
@@ -696,6 +758,13 @@ export function InvoiceCreate() {
                         </div>
 
                         <form onSubmit={handleSubmit} className="space-y-6">
+                            {sourceBankTransaction && !isEditMode && (
+                                <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 rounded-lg p-4">
+                                    <p className="text-emerald-800 dark:text-emerald-200 text-sm">
+                                        <strong>Aus Bankumsatz erstellt:</strong> {new Date(sourceBankTransaction.booking_date).toLocaleDateString('de-DE')} · {sourceBankTransaction.counterparty || '-'} · {(sourceBankTransaction.amount / 100).toLocaleString('de-DE', { style: 'currency', currency: sourceBankTransaction.currency || 'EUR' })}
+                                    </p>
+                                </div>
+                            )}
                             {/* Info when creating from order */}
                             {sourceOrder && (
                                 <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
@@ -1000,7 +1069,7 @@ export function InvoiceCreate() {
 
                             {/* Actions */}
                             <div className="flex justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
-                                <Link to={`/${tenant}/invoices`}>
+                                <Link to={sourceBankTransactionId ? returnTo : `/${tenant}/invoices`}>
                                     <Button type="button" variant="outline" className="gap-2">
                                         <X className="w-4 h-4" />
                                         Abbrechen

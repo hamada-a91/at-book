@@ -5,7 +5,8 @@ import axios from '@/lib/axios';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Edit, Trash2, Send, Download, FileText, Calendar, Euro, Receipt, Eye } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { ArrowLeft, Edit, Trash2, Send, Download, FileText, Calendar, Euro, Receipt, Eye, AlertCircle } from 'lucide-react';
 import { Beleg } from '@/types/beleg';
 import { PaymentManagement } from '@/components/PaymentManagement';
 
@@ -120,6 +121,14 @@ export function BelegView() {
         }
     };
 
+    const bookError = (bookMutation.error as any)?.response?.data?.error
+        || (bookMutation.error as any)?.response?.data?.message
+        || (bookMutation.error as any)?.message;
+
+    const deleteError = (deleteMutation.error as any)?.response?.data?.error
+        || (deleteMutation.error as any)?.response?.data?.message
+        || (deleteMutation.error as any)?.message;
+
     const formatCurrency = (cents: number) => {
         return new Intl.NumberFormat('de-DE', {
             style: 'currency',
@@ -226,6 +235,13 @@ export function BelegView() {
                     {statusLabels[beleg.status]}
                 </Badge>
             </div>
+
+            {(bookError || deleteError) && (
+                <Alert variant="destructive" className="bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800 text-red-900 dark:text-red-200">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{bookError || deleteError}</AlertDescription>
+                </Alert>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Main Details */}

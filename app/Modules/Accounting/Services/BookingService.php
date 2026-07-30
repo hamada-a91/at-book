@@ -2,7 +2,11 @@
 
 namespace App\Modules\Accounting\Services;
 
+use App\Models\BankTransaction;
+use App\Models\Beleg;
 use App\Models\CompanySetting;
+use App\Models\Invoice;
+use App\Models\Payment;
 use App\Modules\Accounting\Models\AuditLog;
 use App\Modules\Accounting\Models\JournalEntry;
 use App\Services\NumberSequenceService;
@@ -295,9 +299,9 @@ class BookingService
      * SPEC-05 (Teil A): die Storno-Buchung bekommt eine eigene, neue
      * journal_number (nicht die des Originals).
      */
-    public function reverseBooking(int $journalEntryId): JournalEntry
+    public function reverseBooking(int $journalEntryId, bool $syncLinkedRecords = true): JournalEntry
     {
-        return DB::transaction(function () use ($journalEntryId) {
+        return DB::transaction(function () use ($journalEntryId, $syncLinkedRecords) {
             // SPEC-03/3.3: Wie in lockBooking() oben - Global Scope aus BelongsToTenant
             // schützt findOrFail() im HTTP-Kontext bereits vor Fremd-Tenant-Zugriff.
             $original = JournalEntry::with('lines')->findOrFail($journalEntryId);
@@ -370,7 +374,108 @@ class BookingService
                 ['status' => $original->status, 'reversal_journal_entry_public_id' => $reversal->public_id]
             );
 
+            if ($syncLinkedRecords) {
+                $this->syncLinkedRecordsAfterReversal($original, $reversal);
+            }
+
             return $reversal;
         });
+    }
+
+    private function syncLinkedRecordsAfterReversal(JournalEntry $original, JournalEntry $reversal): void
+    {
+        $payment = Payment::query()
+            ->where('journal_entry_id', $original->id)
+            ->whereNull('reversed_at')
+            ->lockForUpdate()
+            ->first();
+
+        if ($payment) {
+            $this->syncPaymentAfterDirectBookingReversal($payment, $reversal);
+
+            return;
+        }
+
+        $this->releaseBankTransactionAfterReversal(null, $original->id);
+    }
+
+    private function syncPaymentAfterDirectBookingReversal(Payment $payment, JournalEntry $reversal): void
+    {
+        $payableClass = $payment->payable_type === 'invoice' ? Invoice::class : Beleg::class;
+        $payable = $payableClass::query()->whereKey($payment->payable_id)->lockForUpdate()->first();
+
+        if ($payable) {
+            $oldStatus = $payable->status;
+            $oldPaid = (int) $payable->amount_paid;
+            $newPaid = max(0, $oldPaid - $payment->settlement_amount);
+
+            $payableTotal = $this->payableTotal($payable);
+            $changes = ['amount_paid' => $newPaid];
+            if ($newPaid < $payableTotal && $payable->status === 'paid') {
+                $changes['status'] = 'booked';
+            }
+            if ($payable instanceof Beleg) {
+                $changes['is_paid'] = $newPaid >= $payableTotal;
+            }
+
+            $payable->update($changes);
+
+            AuditLog::record(
+                $payable,
+                'payment_reversed',
+                ['status' => $oldStatus, 'amount_paid' => $oldPaid],
+                [
+                    'status' => $payable->status,
+                    'amount_paid' => $newPaid,
+                    'payment_public_id' => $payment->public_id,
+                    'reversal_journal_entry_public_id' => $reversal->public_id,
+                ]
+            );
+        }
+
+        $payment->update([
+            'reversal_journal_entry_id' => $reversal->id,
+            'reversed_at' => now(),
+        ]);
+
+        $this->releaseBankTransactionAfterReversal($payment->bank_transaction_id, $payment->journal_entry_id);
+    }
+
+    private function payableTotal(Invoice|Beleg $payable): int
+    {
+        return $payable instanceof Invoice ? (int) $payable->total : (int) $payable->amount;
+    }
+
+    private function releaseBankTransactionAfterReversal(?int $bankTransactionId, int $journalEntryId): void
+    {
+        $query = BankTransaction::query()
+            ->where('status', BankTransaction::STATUS_MATCHED);
+
+        if ($bankTransactionId) {
+            $query->whereKey($bankTransactionId);
+        } else {
+            $query->where('journal_entry_id', $journalEntryId);
+        }
+
+        $transaction = $query->lockForUpdate()->first();
+        if (! $transaction) {
+            return;
+        }
+
+        $old = $transaction->only(['status', 'matched_type', 'matched_id', 'journal_entry_id']);
+
+        $transaction->update([
+            'status' => BankTransaction::STATUS_UNMATCHED,
+            'matched_type' => null,
+            'matched_id' => null,
+            'journal_entry_id' => null,
+        ]);
+
+        AuditLog::record(
+            $transaction,
+            'bank_tx_unassigned_by_booking_reversal',
+            $old,
+            $transaction->only(['status', 'matched_type', 'matched_id', 'journal_entry_id'])
+        );
     }
 }

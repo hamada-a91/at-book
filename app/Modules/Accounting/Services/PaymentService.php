@@ -2,6 +2,7 @@
 
 namespace App\Modules\Accounting\Services;
 
+use App\Models\BankTransaction;
 use App\Models\Beleg;
 use App\Models\Invoice;
 use App\Models\Payment;
@@ -124,9 +125,9 @@ class PaymentService
         });
     }
 
-    public function reversePayment(Payment $payment): Payment
+    public function reversePayment(Payment $payment, bool $releaseBankTransaction = true): Payment
     {
-        return DB::transaction(function () use ($payment) {
+        return DB::transaction(function () use ($payment, $releaseBankTransaction) {
             $payment = Payment::query()->whereKey($payment->getKey())->lockForUpdate()->firstOrFail();
             if ($payment->reversed_at) {
                 throw new DomainException('Diese Zahlung wurde bereits storniert.');
@@ -136,7 +137,7 @@ class PaymentService
             $payable = $payableClass::query()->whereKey($payment->payable_id)->lockForUpdate()->firstOrFail();
             $oldStatus = $payable->status;
             $oldPaid = (int) $payable->amount_paid;
-            $reversal = $this->bookingService->reverseBooking($payment->journal_entry_id);
+            $reversal = $this->bookingService->reverseBooking($payment->journal_entry_id, false);
 
             $newPaid = max(0, $oldPaid - $payment->settlement_amount);
             $changes = ['amount_paid' => $newPaid];
@@ -165,8 +166,46 @@ class PaymentService
                 ]
             );
 
+            if ($releaseBankTransaction) {
+                $this->releaseBankTransactionAfterPaymentReversal($payment);
+            }
+
             return $payment->fresh(['paymentAccount', 'discountAccount', 'journalEntry', 'reversalJournalEntry']);
         });
+    }
+
+    private function releaseBankTransactionAfterPaymentReversal(Payment $payment): void
+    {
+        $transaction = BankTransaction::query()
+            ->where('status', BankTransaction::STATUS_MATCHED)
+            ->where(function ($query) use ($payment) {
+                $query->where('journal_entry_id', $payment->journal_entry_id);
+                if ($payment->bank_transaction_id) {
+                    $query->orWhere('id', $payment->bank_transaction_id);
+                }
+            })
+            ->lockForUpdate()
+            ->first();
+
+        if (! $transaction) {
+            return;
+        }
+
+        $old = $transaction->only(['status', 'matched_type', 'matched_id', 'journal_entry_id']);
+
+        $transaction->update([
+            'status' => BankTransaction::STATUS_UNMATCHED,
+            'matched_type' => null,
+            'matched_id' => null,
+            'journal_entry_id' => null,
+        ]);
+
+        AuditLog::record(
+            $transaction,
+            'bank_tx_unassigned_by_payment_reversal',
+            $old,
+            $transaction->only(['status', 'matched_type', 'matched_id', 'journal_entry_id'])
+        );
     }
 
     private function assertSupported(Model $payable): void

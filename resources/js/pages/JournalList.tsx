@@ -87,7 +87,7 @@ export function JournalList() {
     const [searchQuery, setSearchQuery] = useState('');
     const { tenant } = useParams();
     const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
-        from: startOfMonth(new Date()),
+        from: startOfMonth(subMonths(new Date(), 12)),
         to: endOfMonth(new Date())
     });
     const [selectedBooking, setSelectedBooking] = useState<JournalEntry | null>(null);

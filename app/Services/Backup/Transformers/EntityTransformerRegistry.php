@@ -31,6 +31,8 @@ class EntityTransformerRegistry
             'products' => ProductTransformer::class,
             'contacts' => ContactTransformer::class,
             'bank_accounts' => BankAccountTransformer::class,
+            'bank_import_batches' => BankImportBatchTransformer::class,
+            'bank_matching_rules' => BankMatchingRuleTransformer::class,
             'company_settings' => CompanySettingTransformer::class,
             // SPEC-08 (Teil A): Dimensionen VOR den Belegketten registrieren
             // (quotes/orders/invoices/belege/journal_entries referenzieren sie über
@@ -50,6 +52,7 @@ class EntityTransformerRegistry
             'beleg_lines' => BelegLineTransformer::class,
             'journal_entries' => JournalEntryTransformer::class,
             'journal_entry_lines' => JournalEntryLineTransformer::class,
+            'bank_transactions' => BankTransactionTransformer::class,
             'payments' => PaymentTransformer::class,
             'inventory_transactions' => InventoryTransactionTransformer::class,
             // Note: 'documents' excluded - uses morph relationship without direct tenant_id

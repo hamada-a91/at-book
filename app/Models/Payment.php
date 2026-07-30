@@ -36,6 +36,11 @@ class Payment extends Model
         return $this->belongsTo(JournalEntry::class);
     }
 
+    public function bankTransaction()
+    {
+        return $this->belongsTo(BankTransaction::class);
+    }
+
     public function reversalJournalEntry()
     {
         return $this->belongsTo(JournalEntry::class, 'reversal_journal_entry_id');

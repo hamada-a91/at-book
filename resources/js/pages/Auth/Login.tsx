@@ -37,7 +37,18 @@ export default function Login() {
                 navigate(`/${data.tenant.slug}/dashboard`);
             }
         } catch (err: any) {
-            setError(err.response?.data?.message || err.message || 'An error occurred during login');
+            const status = err.response?.status;
+            const message = err.response?.data?.message;
+
+            if (status === 401) {
+                setError('E-Mail oder Passwort ist falsch. Demo-Login: demo@at-book.local / password');
+            } else if (status === 429) {
+                setError(message || 'Zu viele Login-Versuche. Bitte warten und erneut versuchen.');
+            } else if (status === 422) {
+                setError('Bitte E-Mail und Passwort prüfen.');
+            } else {
+                setError(message || err.message || 'Login fehlgeschlagen. Bitte erneut versuchen.');
+            }
         } finally {
             setLoading(false);
         }
@@ -67,7 +78,7 @@ export default function Login() {
                                 Welcome Back
                             </CardTitle>
                             <CardDescription className="text-gray-600 dark:text-gray-400">
-                                Sign in to access your dashboard
+                                Mit deinem Konto anmelden
                             </CardDescription>
                         </div>
                     </CardHeader>
@@ -80,8 +91,12 @@ export default function Login() {
                                 </Alert>
                             )}
 
+                            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                                Demo-Zugang: <span className="font-medium">demo@at-book.local</span> / <span className="font-medium">password</span>
+                            </div>
+
                             <div className="space-y-2">
-                                <Label htmlFor="email" className="text-gray-900 dark:text-gray-100">Email Address</Label>
+                                <Label htmlFor="email" className="text-gray-900 dark:text-gray-100">E-Mail-Adresse</Label>
                                 <div className="relative">
                                     <Mail className="absolute left-3 top-2.5 h-5 w-5 text-gray-400 dark:text-gray-500" />
                                     <Input
@@ -99,9 +114,9 @@ export default function Login() {
 
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between">
-                                    <Label htmlFor="password" className="text-gray-900 dark:text-gray-100">Password</Label>
+                                    <Label htmlFor="password" className="text-gray-900 dark:text-gray-100">Passwort</Label>
                                     <a href="#" className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 hover:underline">
-                                        Forgot password?
+                                        Passwort vergessen?
                                     </a>
                                 </div>
                                 <div className="relative">
@@ -133,7 +148,7 @@ export default function Login() {
                                     htmlFor="remember"
                                     className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer select-none"
                                 >
-                                    Remember me on this device
+                                    Auf diesem Gerät merken
                                 </label>
                             </div>
 
@@ -145,10 +160,10 @@ export default function Login() {
                                 {loading ? (
                                     <>
                                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                        Signing in...
+                                        Anmeldung...
                                     </>
                                 ) : (
-                                    'Sign In'
+                                    'Anmelden'
                                 )}
                             </Button>
                         </form>
@@ -156,9 +171,9 @@ export default function Login() {
 
                     <CardFooter className="justify-center border-t border-gray-200 dark:border-gray-700 pt-6 pb-6">
                         <p className="text-sm text-gray-600 dark:text-gray-400">
-                            Don't have an account?{' '}
+                            Noch kein Konto?{' '}
                             <a href="/register" className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 hover:underline font-medium">
-                                Create an account
+                                Konto erstellen
                             </a>
                         </p>
                     </CardFooter>

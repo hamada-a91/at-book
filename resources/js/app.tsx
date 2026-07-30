@@ -24,6 +24,7 @@ import { BelegeList } from './pages/BelegeList';
 import { BelegCreate } from './pages/BelegCreate';
 import { BelegView } from './pages/BelegView';
 import { BankAccountsList } from './pages/BankAccountsList';
+import { BankingList } from './pages/Banking/BankingList';
 import { QuotesList } from './pages/QuotesList';
 import { QuoteCreate } from './pages/QuoteCreate';
 import { OrdersList } from './pages/OrdersList';
@@ -241,6 +242,7 @@ function TenantRoutes() {
                             <Route path="/cost-centers/:id" element={<CostCenterDetail />} />
                             <Route path="/bookings/create" element={<BookingCreate />} />
                             <Route path="/bank-accounts" element={<BankAccountsList />} />
+                            <Route path="/banking" element={<BankingList />} />
                             <Route path="/users" element={<UsersList />} />
                             <Route path="/bug-reports" element={<BugReportsList />} />
                             <Route path="/profile" element={<Profile />} />

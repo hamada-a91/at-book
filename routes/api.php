@@ -160,6 +160,27 @@ Route::middleware(['api', 'auth:api', \App\Http\Middleware\SetTenantFromUser::cl
         Route::apiResource('bank-accounts', \App\Http\Controllers\Api\BankAccountController::class);
         Route::post('/bank-accounts/{id}/set-default', [\App\Http\Controllers\Api\BankAccountController::class, 'setDefault']);
 
+        // Bankabgleich (SPEC-12)
+        Route::post('/bank-imports/preview', [\App\Http\Controllers\Api\BankImportController::class, 'preview'])
+            ->middleware('role:owner|manager|buchhalter,api');
+        Route::post('/bank-imports', [\App\Http\Controllers\Api\BankImportController::class, 'store'])
+            ->middleware('role:owner|manager|buchhalter,api');
+        Route::get('/bank-imports/{batch}/skipped', [\App\Http\Controllers\Api\BankImportController::class, 'skipped'])
+            ->middleware('role:owner|manager|buchhalter,api');
+        Route::get('/bank-transactions', [\App\Http\Controllers\Api\BankTransactionController::class, 'index']);
+        Route::get('/bank-transactions/suggestions', [\App\Http\Controllers\Api\BankTransactionController::class, 'suggestions']);
+        Route::get('/bank-transactions/{tx}', [\App\Http\Controllers\Api\BankTransactionController::class, 'show']);
+        Route::patch('/bank-transactions/{tx}', [\App\Http\Controllers\Api\BankTransactionController::class, 'update'])
+            ->middleware('role:owner|manager|buchhalter,api');
+        Route::post('/bank-transactions/assign-suggestions', [\App\Http\Controllers\Api\BankTransactionController::class, 'assignSuggestions'])
+            ->middleware('role:owner|manager|buchhalter,api');
+        Route::post('/bank-transactions/{tx}/assign', [\App\Http\Controllers\Api\BankTransactionController::class, 'assign'])
+            ->middleware('role:owner|manager|buchhalter,api');
+        Route::post('/bank-transactions/{tx}/ignore', [\App\Http\Controllers\Api\BankTransactionController::class, 'ignore'])
+            ->middleware('role:owner|manager|buchhalter,api');
+        Route::post('/bank-transactions/{tx}/unassign', [\App\Http\Controllers\Api\BankTransactionController::class, 'unassign'])
+            ->middleware('role:owner|manager|buchhalter,api');
+
         // Quotes (Angebote)
         Route::apiResource('quotes', \App\Http\Controllers\Api\QuoteController::class);
         Route::post('/quotes/{quote}/send', [\App\Http\Controllers\Api\QuoteController::class, 'send']);

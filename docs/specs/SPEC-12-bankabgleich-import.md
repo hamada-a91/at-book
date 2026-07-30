@@ -1,11 +1,11 @@
 # SPEC-12 – Bankabgleich: Kontoauszug-Import & Zuordnung
 
-**Phase:** 3 (vorgezogen – vor SPEC-09/10 auf Wunsch) · **Aufwand:** ~2–3 Wochen (Teil A + B) · **Abhängigkeiten:** SPEC-04 (Zahlungsbuchung), SPEC-05 (Periodensperre), SPEC-06 (Audit-Log), SPEC-08 (Kostenzuordnung durchreichen); **Teil B zusätzlich: SPEC-13 (Offene Posten/Teilzahlungen)** für die Zuordnung abweichender/teilweiser Beträge · **Vorbild:** Lexware „Umsätze importieren" + „Umsatz zuordnen"
+**Phase:** 3 (vorgezogen – vor SPEC-09/10 auf Wunsch) · **Aufwand:** ~2–3 Wochen (Teil A + B) · **Abhängigkeiten:** SPEC-04 (Zahlungsbuchung), SPEC-05 (Periodensperre), SPEC-06 (Audit-Log), SPEC-08 (Kostenzuordnung durchreichen); **Teil B zusätzlich: SPEC-13 (Offene Posten/Teilzahlungen)** für die Zuordnung abweichender/teilweiser Beträge · **Vorbild:** Lexware „Umsätze importieren" + „Umsatz zuordnen" · **Status:** ✅ umgesetzt (27.07.2026)
 
 ## Ziel
 Bankumsätze aus einer **CSV-Datei importieren** (mit anpassbarem Mapping), sie als Liste vorhalten und anschließend **Belegen / Rechnungen / Kategorien zuordnen** – wobei die Zuordnung automatisch die passende **Zahlungsbuchung** (Bank an Debitor / Aufwand an Bank …) erzeugt. Ziel ist ein Ablauf wie in Lexware, aber **effizienter** durch automatische Zuordnungsvorschläge, Sammelbestätigung und lernende Regeln.
 
-**Nicht in Scope (Ausblick):** direkter Bankabruf via FinTS/PSD2 (nur CSV-Import jetzt), Teilzahlungen (das aktuelle Modell kennt nur „voll bezahlt" – siehe Offene Punkte).
+**Nicht in Scope (Ausblick):** direkter Bankabruf via FinTS/PSD2 (nur CSV-Import jetzt).
 
 ---
 
@@ -110,15 +110,15 @@ Rollen: Import + Zuordnung für `owner|manager|buchhalter` (Schreibrouten mit `r
 ---
 
 ## Akzeptanzkriterien
-- [ ] CSV-Import mit konfigurierbarem Trennzeichen/Encoding/Mapping + Vorzeichen-Toggle; deutsche & englische Betragsformate korrekt als Cents
-- [ ] Erneuter Import überlappender Auszüge legt **keine Duplikate** an (Fingerprint); übersprungene Zeilen herunterladbar
-- [ ] Zuordnung Umsatz→Rechnung erzeugt korrekte Zahlungsbuchung (Bank an Debitor), Invoice wird `paid`
-- [ ] Zuordnung Umsatz→Beleg bucht Zahlung + `is_paid`; Umsatz→Kategorie bucht Aufwand/Erlös an Bank
-- [ ] „Ignorieren" bucht nichts; „Zuordnung aufheben" storniert die Buchung (GoBD) und setzt Umsatz auf offen
-- [ ] Auto-Match-Vorschläge (Betrag+Referenz) erscheinen im Tab „Vorschläge"; Sammelbestätigung funktioniert
-- [ ] Lern-Regel: nach 1× Zuordnung „Google → Konto X" wird der nächste „Google"-Umsatz vorgeschlagen
-- [ ] Periodensperre (SPEC-05) & Festschreibung greifen bei den erzeugten Buchungen
-- [ ] Tenant-Isolation für alle neuen Entities; Rollen (`cachier` → 403 auf Import/Zuordnung)
+- [x] CSV-Import mit konfigurierbarem Trennzeichen/Encoding/Mapping + Vorzeichen-Toggle; deutsche & englische Betragsformate korrekt als Cents
+- [x] Erneuter Import überlappender Auszüge legt **keine Duplikate** an (Fingerprint); übersprungene Zeilen herunterladbar
+- [x] Zuordnung Umsatz→Rechnung erzeugt korrekte Zahlungsbuchung (Bank an Debitor), Invoice wird `paid`
+- [x] Zuordnung Umsatz→Beleg bucht Zahlung + `is_paid`; Umsatz→Kategorie bucht Aufwand/Erlös an Bank
+- [x] „Ignorieren" bucht nichts; „Zuordnung aufheben" storniert die Buchung (GoBD) und setzt Umsatz auf offen
+- [x] Auto-Match-Vorschläge (Betrag+Referenz) erscheinen im Tab „Vorschläge"; Sammelbestätigung funktioniert
+- [x] Lern-Regel: nach 1× Zuordnung „Google → Konto X" wird der nächste „Google"-Umsatz vorgeschlagen
+- [x] Periodensperre (SPEC-05) & Festschreibung greifen bei den erzeugten Buchungen
+- [x] Tenant-Isolation für alle neuen Entities; Rollen (`cachier` → 403 auf Import/Zuordnung)
 
 ## Backup-Impact ⚠️
 1. **Neue tenant-scoped Tabellen** `bank_import_batches`, `bank_transactions`, `bank_matching_rules` → je Transformer + Registry-Eintrag + Roundtrip-Erweiterung. Referenzen (bank_account, matched invoice/beleg, journal_entry) über `public_id` exportieren, Import via `ImportIdMapping` zurückmappen; `matched_id`/`journal_entry_id` bei fehlendem Ziel `null` (Historie bleibt).

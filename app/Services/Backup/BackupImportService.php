@@ -26,6 +26,8 @@ class BackupImportService
         'products',
         'contacts',
         'bank_accounts',
+        'bank_import_batches',
+        'bank_matching_rules',
         'company_settings',
         // SPEC-08 (Teil A): Dimensionen vor den Belegketten importieren (quotes/
         // orders/invoices/belege/journal_entries referenzieren sie über
@@ -45,6 +47,7 @@ class BackupImportService
         'beleg_lines',
         'journal_entries',
         'journal_entry_lines',
+        'bank_transactions',
         'payments',
         'inventory_transactions',
         // Note: 'documents' excluded - uses morph relationship without direct tenant_id
@@ -68,6 +71,9 @@ class BackupImportService
         'account' => 'accounts',
         'tax_code' => 'tax_codes',
         'bank_account' => 'bank_accounts',
+        'bank_import_batch' => 'bank_import_batches',
+        'bank_transaction' => 'bank_transactions',
+        'bank_matching_rule' => 'bank_matching_rules',
         'contact' => 'contacts',
         'user' => 'users',
         'company_setting' => 'company_settings',
@@ -97,8 +103,11 @@ class BackupImportService
             now()->format('Y-m-d_His')
         );
 
-        $path = "{$this->uploadPath}/{$tenant->id}/{$filename}";
-        Storage::disk($this->disk)->put($path, file_get_contents($file->getRealPath()));
+        $tenantFolder = $tenant->public_id ?? (string) $tenant->id;
+        $path = "{$this->uploadPath}/{$tenantFolder}/{$filename}";
+        if (! Storage::disk($this->disk)->put($path, file_get_contents($file->getRealPath()))) {
+            throw new \RuntimeException("Backup-Upload konnte nicht gespeichert werden: {$path}");
+        }
 
         $job = BackupJob::create([
             'tenant_id' => $tenant->id,
@@ -396,7 +405,7 @@ class BackupImportService
         // Define which entity types have direct tenant_id and which are child tables
         $directTenantTables = [
             'users', 'accounts', 'tax_codes', 'product_categories', 'products',
-            'contacts', 'bank_accounts', 'company_settings',
+            'contacts', 'bank_accounts', 'bank_import_batches', 'bank_matching_rules', 'company_settings',
             // SPEC-08 (Teil A): 'projects' referenziert 'cost_objects' per
             // restrictOnDelete (projects.cost_object_id) - muss daher VOR
             // cost_objects in dieser Liste stehen, damit die (unten per
@@ -406,7 +415,7 @@ class BackupImportService
             // journal_entry_lines/invoice_lines/etc.), Position daher unkritisch.
             'cost_centers', 'cost_objects', 'projects',
             'quotes', 'orders',
-            'delivery_notes', 'invoices', 'belege', 'journal_entries', 'payments', 'inventory_transactions',
+            'delivery_notes', 'invoices', 'belege', 'journal_entries', 'bank_transactions', 'payments', 'inventory_transactions',
             // SPEC-06: audit_logs hat eine eigene tenant_id-Spalte (kein Child-Table) und
             // keine eingehenden FK-Constraints von anderen Tabellen - Reihenfolge relativ
             // zu den übrigen Einträgen ist daher unkritisch, wird aber der Vollständigkeit
@@ -763,11 +772,27 @@ class BackupImportService
                 : null;
         }
 
+        if ($entityType === 'bank_transactions' && array_key_exists('matched_public_id', $data)) {
+            $matchedPublicId = $data['matched_public_id'];
+            unset($data['matched_public_id']);
+            $matchedEntity = match ($data['matched_type'] ?? null) {
+                'invoice' => 'invoices',
+                'beleg' => 'belege',
+                'journal_entry' => 'journal_entries',
+                'category' => 'accounts',
+                default => null,
+            };
+            $data['matched_id'] = ($matchedEntity && $matchedPublicId)
+                ? $idMapping->get($matchedEntity, $matchedPublicId)
+                : null;
+        }
+
         // Define foreign key mappings
         $mappings = [
             'payments' => [
                 'payment_account_public_id' => ['accounts', 'payment_account_id'],
                 'journal_entry_public_id' => ['journal_entries', 'journal_entry_id'],
+                'bank_transaction_public_id' => ['bank_transactions', 'bank_transaction_id'],
                 'discount_account_public_id' => ['accounts', 'discount_account_id'],
                 'reversal_journal_entry_public_id' => ['journal_entries', 'reversal_journal_entry_id'],
             ],
@@ -839,6 +864,19 @@ class BackupImportService
             ],
             'bank_accounts' => [
                 'account_public_id' => ['accounts', 'account_id'],
+            ],
+            'bank_import_batches' => [
+                'bank_account_public_id' => ['bank_accounts', 'bank_account_id'],
+                'user_public_id' => ['users', 'user_id'],
+            ],
+            'bank_transactions' => [
+                'bank_account_public_id' => ['bank_accounts', 'bank_account_id'],
+                'import_batch_public_id' => ['bank_import_batches', 'import_batch_id'],
+                'journal_entry_public_id' => ['journal_entries', 'journal_entry_id'],
+            ],
+            'bank_matching_rules' => [
+                'target_account_public_id' => ['accounts', 'target_account_id'],
+                'target_contact_public_id' => ['contacts', 'target_contact_id'],
             ],
             'tax_codes' => [
                 'account_public_id' => ['accounts', 'account_id'],
@@ -1018,6 +1056,7 @@ class BackupImportService
             'belege' => ['amount', 'tax_amount', 'amount_paid'],
             'beleg_lines' => ['unit_price', 'line_total'],
             'payments' => ['amount', 'discount_amount'],
+            'bank_transactions' => ['amount'],
             'journal_entry_lines' => ['amount', 'tax_amount'],
             'products' => ['purchase_price', 'selling_price'],
             // SPEC-08 (Teil A): budget_amount ist nullable - der Cast unten läuft
@@ -1242,6 +1281,9 @@ class BackupImportService
             'products' => \App\Models\Product::class,
             'contacts' => \App\Modules\Contacts\Models\Contact::class,
             'bank_accounts' => \App\Models\BankAccount::class,
+            'bank_import_batches' => \App\Models\BankImportBatch::class,
+            'bank_transactions' => \App\Models\BankTransaction::class,
+            'bank_matching_rules' => \App\Models\BankMatchingRule::class,
             'company_settings' => \App\Models\CompanySetting::class,
             // SPEC-08 (Teil A)
             'cost_centers' => \App\Modules\Projects\Models\CostCenter::class,

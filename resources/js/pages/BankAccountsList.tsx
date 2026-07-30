@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from '@/lib/axios';
-import { Plus, Search, Pencil, Trash2, Eye, Star, Landmark, CreditCard } from 'lucide-react';
+import { Link, useParams } from 'react-router-dom';
+import { formatCurrency } from '@/lib/currency';
+import { Plus, Search, Pencil, Trash2, Eye, Star, Landmark, CreditCard, Link2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,6 +17,19 @@ import {
 } from '@/components/ui/dialog';
 import { BankAccountForm, BankAccountFormValues } from '@/components/BankAccountForm';
 import { Badge } from '@/components/ui/badge';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
+interface BankTransaction {
+    id: number;
+    bank_account_id?: number;
+    booking_date: string;
+    counterparty?: string | null;
+    purpose?: string | null;
+    amount: number;
+    currency: string;
+    status: 'unmatched' | 'matched' | 'ignored';
+}
 
 interface BankAccount {
     id: number;
@@ -48,13 +63,24 @@ const accountTypeStyles: Record<string, string> = {
 };
 
 export function BankAccountsList() {
+    const { tenant } = useParams<{ tenant: string }>();
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [editAccount, setEditAccount] = useState<BankAccount | null>(null);
     const [viewAccount, setViewAccount] = useState<BankAccount | null>(null);
     const [deleteAccount, setDeleteAccount] = useState<BankAccount | null>(null);
     const [search, setSearch] = useState('');
+    const [transactionBankAccountFilter, setTransactionBankAccountFilter] = useState('all');
+    const [transactionSort, setTransactionSort] = useState<'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc'>('date_desc');
 
     const queryClient = useQueryClient();
+
+    const { data: bankTransactions, isLoading: isTransactionsLoading } = useQuery<BankTransaction[]>({
+        queryKey: ['bank-transactions', 'bank-accounts-module'],
+        queryFn: async () => {
+            const { data } = await axios.get('/api/bank-transactions', { params: { per_page: 250 } });
+            return data.data ?? data;
+        },
+    });
 
     const { data: accounts, isLoading } = useQuery<BankAccount[]>({
         queryKey: ['bank-accounts'],
@@ -129,6 +155,34 @@ export function BankAccountsList() {
     });
 
     // Filter accounts based on search
+    const bankAccountNameById = useMemo(() => {
+        return new Map((accounts || []).map((account) => [account.id, account.name]));
+    }, [accounts]);
+
+    const visibleBankTransactions = useMemo(() => {
+        return (bankTransactions || [])
+            .filter((transaction) => {
+                if (transactionBankAccountFilter !== 'all' && String(transaction.bank_account_id) !== transactionBankAccountFilter) {
+                    return false;
+                }
+                if (!search) return true;
+                const value = `${transaction.counterparty || ''} ${transaction.purpose || ''} ${bankAccountNameById.get(transaction.bank_account_id || 0) || ''}`.toLowerCase();
+                return value.includes(search.toLowerCase());
+            })
+            .sort((a, b) => {
+                if (transactionSort === 'date_asc') return new Date(a.booking_date).getTime() - new Date(b.booking_date).getTime();
+                if (transactionSort === 'amount_desc') return Math.abs(b.amount) - Math.abs(a.amount);
+                if (transactionSort === 'amount_asc') return Math.abs(a.amount) - Math.abs(b.amount);
+                return new Date(b.booking_date).getTime() - new Date(a.booking_date).getTime();
+            });
+    }, [bankTransactions, bankAccountNameById, search, transactionBankAccountFilter, transactionSort]);
+
+    const viewAccountTransactions = viewAccount
+        ? (bankTransactions || [])
+            .filter((transaction) => transaction.bank_account_id === viewAccount.id)
+            .sort((a, b) => new Date(b.booking_date).getTime() - new Date(a.booking_date).getTime())
+        : [];
+
     const filteredAccounts = accounts?.filter((account) => {
         const matchesSearch = search === '' ||
             account.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -282,6 +336,76 @@ export function BankAccountsList() {
                 )}
             </div>
 
+
+            <div className="rounded-lg border bg-white/70 dark:bg-slate-900/70 overflow-hidden">
+                <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Importierte Umsätze</h2>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">Alle aus CSV importierten Bankumsätze kontoübergreifend.</p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Select value={transactionBankAccountFilter} onValueChange={setTransactionBankAccountFilter}>
+                            <SelectTrigger className="w-48"><SelectValue placeholder="Bankkonto" /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">Alle Bankkonten</SelectItem>
+                                {(accounts || []).map((account) => <SelectItem key={account.id} value={String(account.id)}>{account.name}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                        <Select value={transactionSort} onValueChange={(value: any) => setTransactionSort(value)}>
+                            <SelectTrigger className="w-44"><SelectValue placeholder="Sortierung" /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="date_desc">Datum neueste</SelectItem>
+                                <SelectItem value="date_asc">Datum älteste</SelectItem>
+                                <SelectItem value="amount_desc">Betrag absteigend</SelectItem>
+                                <SelectItem value="amount_asc">Betrag aufsteigend</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        {tenant && (
+                            <Link to={`/${tenant}/banking`}>
+                                <Button variant="outline" size="sm">
+                                    <Link2 className="mr-2 h-4 w-4" />
+                                    Zum Bankabgleich
+                                </Button>
+                            </Link>
+                        )}
+                    </div>
+                </div>
+                <div className="overflow-x-auto">
+                    <Table className="min-w-[900px]">
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead className="w-12">#</TableHead>
+                                <TableHead>Bankkonto</TableHead>
+                                <TableHead>Datum</TableHead>
+                                <TableHead>Gegenpartei</TableHead>
+                                <TableHead>Verwendungszweck</TableHead>
+                                <TableHead className="text-right">Betrag</TableHead>
+                                <TableHead>Status</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {isTransactionsLoading ? (
+                                <TableRow><TableCell colSpan={7} className="py-8 text-center text-slate-500">Umsätze werden geladen...</TableCell></TableRow>
+                            ) : visibleBankTransactions.length === 0 ? (
+                                <TableRow><TableCell colSpan={7} className="py-8 text-center text-slate-500">Noch keine importierten Umsätze vorhanden.</TableCell></TableRow>
+                            ) : (
+                                visibleBankTransactions.map((transaction, index) => (
+                                    <TableRow key={transaction.id}>
+                                        <TableCell className="text-slate-500">{index + 1}</TableCell>
+                                        <TableCell>{bankAccountNameById.get(transaction.bank_account_id || 0) || '-'}</TableCell>
+                                        <TableCell>{new Date(transaction.booking_date).toLocaleDateString('de-DE')}</TableCell>
+                                        <TableCell className="max-w-[220px] truncate">{transaction.counterparty || '-'}</TableCell>
+                                        <TableCell className="max-w-[320px] truncate">{transaction.purpose || '-'}</TableCell>
+                                        <TableCell className={`text-right font-semibold ${transaction.amount < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{formatCurrency(transaction.amount / 100)}</TableCell>
+                                        <TableCell><Badge variant={transaction.status === 'matched' ? 'default' : transaction.status === 'ignored' ? 'secondary' : 'outline'}>{transaction.status === 'matched' ? 'Zugeordnet' : transaction.status === 'ignored' ? 'Ignoriert' : 'Offen'}</Badge></TableCell>
+                                    </TableRow>
+                                ))
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
+            </div>
+
             {/* Create Dialog */}
             <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
                 <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
@@ -367,6 +491,33 @@ export function BankAccountsList() {
                                         <div className="whitespace-pre-wrap text-sm bg-slate-50 dark:bg-slate-900 p-2 rounded">{viewAccount.notes}</div>
                                     </div>
                                 )}
+                            </div>
+                            <div className="border-t border-slate-200 dark:border-slate-800 pt-4">
+                                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Importierte Umsätze</h3>
+                                <div className="mt-2 max-h-64 overflow-y-auto rounded-md border">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>Datum</TableHead>
+                                                <TableHead>Gegenpartei</TableHead>
+                                                <TableHead className="text-right">Betrag</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {viewAccountTransactions.length === 0 ? (
+                                                <TableRow><TableCell colSpan={3} className="text-center text-slate-500">Keine importierten Umsätze.</TableCell></TableRow>
+                                            ) : (
+                                                viewAccountTransactions.map((transaction) => (
+                                                    <TableRow key={transaction.id}>
+                                                        <TableCell>{new Date(transaction.booking_date).toLocaleDateString('de-DE')}</TableCell>
+                                                        <TableCell className="max-w-[180px] truncate">{transaction.counterparty || transaction.purpose || '-'}</TableCell>
+                                                        <TableCell className={`text-right font-semibold ${transaction.amount < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{formatCurrency(transaction.amount / 100)}</TableCell>
+                                                    </TableRow>
+                                                ))
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                </div>
                             </div>
                             <DialogFooter>
                                 <Button variant="outline" onClick={() => setViewAccount(null)}>Schließen</Button>
