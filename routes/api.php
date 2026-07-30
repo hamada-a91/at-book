@@ -61,13 +61,14 @@ Route::middleware(['api', 'auth:api', \App\Http\Middleware\SetTenantFromUser::cl
         Route::apiResource('contacts', ContactController::class);
 
         // Reports Routes
-        Route::prefix('reports')->group(function () {
-            Route::get('/trial-balance', [ReportsController::class, 'trialBalance']);
-            Route::get('/profit-loss', [ReportsController::class, 'profitAndLoss']);
-            Route::get('/balance-sheet', [ReportsController::class, 'balanceSheet']);
-            Route::get('/journal-export', [ReportsController::class, 'journalExport']);
-            Route::get('/account-movements', [ReportsController::class, 'accountMovements']);
-            Route::get('/tax-report', [ReportsController::class, 'taxReport']);
+        Route::prefix('reports')->middleware('role:owner|buchhalter,api')->group(function () {
+            Route::get('/quality', [ReportsController::class, 'quality']);
+            Route::get('/{type}/export', [ReportsController::class, 'export'])
+                ->whereIn('type', ['trial-balance', 'profit-loss', 'balance-sheet', 'journal', 'journal-export', 'account-movements', 'vat', 'tax-report']);
+            Route::get('/{type}', [ReportsController::class, 'show'])
+                ->whereIn('type', ['trial-balance', 'profit-loss', 'balance-sheet', 'journal', 'journal-export', 'account-movements', 'vat', 'tax-report']);
+
+            // Bestehende Pfade bleiben wegen Frontend-Kompatibilität über {type} erhalten.
             Route::get('/open-items', \App\Http\Controllers\Api\OpenItemsReportController::class)
                 ->middleware('role:owner|manager|buchhalter,api');
             // SPEC-08 (Teil A)

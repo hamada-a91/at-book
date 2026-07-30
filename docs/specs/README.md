@@ -14,7 +14,7 @@ Jede Datei ist eine eigenständig umsetzbare Spezifikation. Reihenfolge und Abh�
 | [SPEC-08](SPEC-08-projekte-kostenstellen.md) | Feature: Projekte, Kostenstellen & Kostenträger | 3 | ✅ fertig |
 | [SPEC-09](SPEC-09-ocr-belege.md) | Feature: OCR-Belegerfassung | 3 | 🔲 offen |
 | [SPEC-10](SPEC-10-ai-assistent.md) | Feature: AI-Buchungsassistent | 3 | 🔲 offen |
-| [SPEC-11A](SPEC-11A-berichte-exporte.md) | Berichte 2.0, BWA, EÜR & manuelle ELSTER-Übergabe | 3 (vorgezogen) | 🔲 offen |
+| [SPEC-11A](SPEC-11A-berichte-exporte.md) | Berichte 2.0, BWA, EÜR & manuelle ELSTER-Übergabe | 3 (vorgezogen) | 🔨 11A-R Teil 1 (Report-Kern+Exporte) fertig |
 | [SPEC-11B](SPEC-11B-ustva-elster-eric.md) | Zukunft: USt-VA automatisch via ELSTER/ERiC | Zukunft | 🔲 später |
 | [SPEC-12](SPEC-12-bankabgleich-import.md) | Bankabgleich: Kontoauszug-Import & Zuordnung | 3 (vor 09/10) | ✅ umgesetzt |
 | [SPEC-13](SPEC-13-offene-posten-teilzahlungen.md) | Offene Posten & Teilzahlungen (OPOS) | 3 (Fundament) | ✅ umgesetzt |

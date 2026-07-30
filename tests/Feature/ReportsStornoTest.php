@@ -9,6 +9,7 @@ use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Services\BookingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 /**
@@ -47,6 +48,9 @@ class ReportsStornoTest extends TestCase
             'company_name' => 'Report Test GmbH',
             'onboarding_completed' => true,
         ]);
+
+        Role::findOrCreate('owner', 'api');
+        $this->user->assignRole('owner');
 
         $this->bank = Account::create(['code' => '1200', 'name' => 'Bank', 'type' => 'asset']);
         $this->revenue = Account::create(['code' => '8400', 'name' => 'Erlöse 19%', 'type' => 'revenue']);
@@ -92,17 +96,17 @@ class ReportsStornoTest extends TestCase
 
         $token = auth('api')->login($this->user);
         $response = $this->withHeader('Authorization', "Bearer {$token}")
-            ->getJson('/api/reports/profit-loss?from_date=2026-07-01&to_date=2026-07-31');
+            ->getJson('/api/reports/profit-loss?from_date=2026-07-01&to_date=2026-07-30');
 
         $response->assertOk();
         $response->assertJson([
             'total_revenue' => 119000,
-            'total_expense' => 5950,   // Storno-Paar neutralisiert, nur Entwurf bleibt
-            'net_profit' => 113050,    // 1.190,00 − 59,50 = 1.130,50 €
+            'total_expense' => 0,      // basis=posted schließt Entwürfe aus, Storno-Paar neutralisiert
+            'net_profit' => 119000,
         ]);
 
         $expenseRow = collect($response->json('expenses'))->firstWhere('code', '4930');
-        $this->assertSame(5950, $expenseRow['amount']);
+        $this->assertSame(0, $expenseRow['amount']);
         $this->assertSame('debit', $expenseRow['balance_type']);
     }
 
@@ -172,7 +176,7 @@ class ReportsStornoTest extends TestCase
 
         $token = auth('api')->login($this->user);
         $response = $this->withHeader('Authorization', "Bearer {$token}")
-            ->getJson('/api/reports/trial-balance?from_date=2026-07-01&to_date=2026-07-31');
+            ->getJson('/api/reports/trial-balance?from_date=2026-07-01&to_date=2026-07-30');
 
         $response->assertOk();
 

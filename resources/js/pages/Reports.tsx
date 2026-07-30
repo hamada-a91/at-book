@@ -68,6 +68,36 @@ export function Reports() {
         return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(amount / 100);
     };
 
+    const handleDownloadReport = async (formatType: 'pdf' | 'csv') => {
+        if (!activeReport) return;
+
+        const queryParams = new URLSearchParams({
+            from_date: format(dateRange.from, 'yyyy-MM-dd'),
+            to_date: format(dateRange.to, 'yyyy-MM-dd'),
+            format: formatType,
+        });
+
+        try {
+            const response = await axios.get(`/api/reports/${activeReport}/export?${queryParams}`, {
+                responseType: 'blob',
+            });
+            const blob = new Blob([response.data], {
+                type: formatType === 'pdf' ? 'application/pdf' : 'text/csv;charset=utf-8',
+            });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${activeReport}_${format(dateRange.from, 'yyyy-MM-dd')}_${format(dateRange.to, 'yyyy-MM-dd')}.${formatType}`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+        } catch (error: any) {
+            console.error(error);
+            alert(error.response?.data?.message || 'Fehler beim Export des Berichts');
+        }
+    };
+
     const renderReportContent = () => {
         if (!reportData) return null;
 
@@ -374,10 +404,19 @@ export function Reports() {
                             Drucken
                         </Button>
                         <Button
+                            variant="outline"
+                            onClick={() => handleDownloadReport('csv')}
+                            className="shadow-sm hover:shadow-md transition-all duration-300"
+                        >
+                            <Download className="w-4 h-4 mr-2" />
+                            CSV
+                        </Button>
+                        <Button
+                            onClick={() => handleDownloadReport('pdf')}
                             className="shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30 transition-all duration-300 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
                         >
                             <Download className="w-4 h-4 mr-2" />
-                            PDF Export
+                            PDF
                         </Button>
                         <Button
                             variant="outline"
