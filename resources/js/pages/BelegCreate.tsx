@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useParams, Link } from 'react-router-dom';
+import { useNavigate, useParams, Link, useLocation, useSearchParams } from 'react-router-dom';
 import axios from '@/lib/axios';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,7 @@ import { ContactSelector } from '@/components/ContactSelector';
 import { AccountSelector } from '@/components/AccountSelector';
 import { ProductSelector } from '@/components/ProductSelector';
 import { ProjectSelector } from '@/components/ProjectSelector';
+import { CostCenterSelector } from '@/components/CostCenterSelector';
 import { BelegType } from '@/types/beleg';
 
 interface Product {
@@ -32,6 +33,7 @@ interface BelegLine {
     unit: string;
     unit_price: number;
     tax_rate: number;
+    cost_center_id?: string;
 }
 
 interface Contact {
@@ -47,9 +49,23 @@ interface Account {
     type: string;
 }
 
+interface BankTransaction {
+    id: number;
+    booking_date: string;
+    counterparty?: string | null;
+    purpose?: string | null;
+    amount: number;
+    currency: string;
+}
+
 export function BelegCreate() {
     const navigate = useNavigate();
+    const location = useLocation();
+    const [searchParams] = useSearchParams();
     const { tenant, id } = useParams<{ tenant: string; id: string }>();
+    const locationState = location.state as { bankTransaction?: BankTransaction; returnTo?: string } | null;
+    const sourceBankTransactionId = searchParams.get('bank_transaction_id');
+    const returnTo = searchParams.get('return_to') || locationState?.returnTo || `/${tenant}/banking`;
     const queryClient = useQueryClient();
     const isEditMode = !!id;
 
@@ -69,6 +85,7 @@ export function BelegCreate() {
     const [showProductLines, setShowProductLines] = useState(false);
     const [lines, setLines] = useState<BelegLine[]>([]);
     const [projectId, setProjectId] = useState<string | undefined>();
+    const [costCenterId, setCostCenterId] = useState<string | undefined>();
 
     // SPEC-08 (Teil B): Projekt-Feld nur zeigen, wenn das Modul aktiv ist.
     const { data: companySettings } = useQuery({
@@ -92,6 +109,17 @@ export function BelegCreate() {
             return data;
         },
     });
+
+    const { data: fetchedBankTransaction } = useQuery<BankTransaction | null>({
+        queryKey: ['bank-transaction', sourceBankTransactionId],
+        queryFn: async () => {
+            if (!sourceBankTransactionId) return null;
+            const { data } = await axios.get(`/api/bank-transactions/${sourceBankTransactionId}`);
+            return data;
+        },
+        enabled: !!sourceBankTransactionId && !locationState?.bankTransaction,
+    });
+    const sourceBankTransaction = locationState?.bankTransaction || fetchedBankTransaction || null;
 
     // Load existing beleg data if editing
     const { data: existingBeleg } = useQuery({
@@ -133,6 +161,24 @@ export function BelegCreate() {
         }
     }, [existingBeleg]);
 
+    useEffect(() => {
+        if (!sourceBankTransaction || isEditMode) return;
+        const gross = Math.abs(sourceBankTransaction.amount) / 100;
+        const tax = gross - (gross / (1 + taxRate / 100));
+        setDocumentType(sourceBankTransaction.amount > 0 ? 'ausgang' : 'eingang');
+        setTitle(sourceBankTransaction.counterparty || sourceBankTransaction.purpose || 'Bankumsatz');
+        setDocumentDate(sourceBankTransaction.booking_date?.split('T')[0] || new Date().toISOString().split('T')[0]);
+        setAmount(parseFloat(gross.toFixed(2)));
+        setTaxAmount(parseFloat(tax.toFixed(2)));
+        setIsPaid(false);
+        setPaymentAccountId('');
+        setNotes([
+            'Aus Bankumsatz erstellt.',
+            sourceBankTransaction.counterparty ? `Gegenpartei: ${sourceBankTransaction.counterparty}` : '',
+            sourceBankTransaction.purpose ? `Verwendungszweck: ${sourceBankTransaction.purpose}` : '',
+        ].filter(Boolean).join('\n'));
+    }, [sourceBankTransaction?.id, isEditMode, taxRate]);
+
     const createBelegMutation = useMutation({
         mutationFn: async (data: any) => {
             const url = isEditMode ? `/api/belege/${id}` : '/api/belege';
@@ -162,6 +208,21 @@ export function BelegCreate() {
             }
 
             queryClient.invalidateQueries({ queryKey: ['belege'] });
+            if (sourceBankTransactionId && !isEditMode) {
+                try {
+                    await axios.post(`/api/belege/${data.id}/book`);
+                    await axios.post(`/api/bank-transactions/${sourceBankTransactionId}/assign`, {
+                        target_type: 'beleg',
+                        target_id: data.id,
+                        note: 'Automatisch aus neuem Beleg zugeordnet.',
+                    });
+                    queryClient.invalidateQueries({ queryKey: ['bank-transactions'] });
+                    navigate(returnTo);
+                    return;
+                } catch (error: any) {
+                    alert(error.response?.data?.error || 'Beleg wurde erstellt, konnte aber nicht automatisch zugeordnet werden. Bitte prüfen und manuell zuordnen.');
+                }
+            }
             navigate(`/${tenant}/belege/${data.id}`);
         },
         onError: (error: Error) => {
@@ -188,14 +249,28 @@ export function BelegCreate() {
         e.preventDefault();
 
         // Format lines for backend
-        const formattedLines = lines.map((line) => ({
+        const formattedLines: any[] = lines.map((line) => ({
             product_id: line.product_id,
             description: line.description,
             quantity: line.quantity,
             unit: line.unit,
             unit_price: Math.round(line.unit_price * 100),
             tax_rate: line.tax_rate,
+            cost_center_id: line.cost_center_id ? parseInt(line.cost_center_id) : (costCenterId ? parseInt(costCenterId) : undefined),
         }));
+
+        if (sourceBankTransactionId && costCenterId && formattedLines.length === 0) {
+            formattedLines.push({
+                product_id: null,
+                description: title || 'Bankumsatz',
+                quantity: 1,
+                unit: 'Pauschal',
+                unit_price: Math.max(0, Math.round(((amount || 0) - (taxAmount || 0)) * 100)),
+                tax_rate: taxRate,
+                account_id: categoryAccountId ? parseInt(categoryAccountId) : undefined,
+                cost_center_id: parseInt(costCenterId),
+            });
+        }
 
         createBelegMutation.mutate({
             document_type: documentType,
@@ -292,7 +367,7 @@ export function BelegCreate() {
         <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-cyan-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 p-6">
             <div className="max-w-5xl mx-auto space-y-6">
                 <div className="flex items-center gap-4">
-                    <Link to={`/${tenant}/belege`}>
+                    <Link to={sourceBankTransactionId ? returnTo : `/${tenant}/belege`}>
                         <Button variant="ghost" size="icon" className="h-10 w-10 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
                             <ArrowLeft className="w-5 h-5" />
                         </Button>
@@ -306,6 +381,17 @@ export function BelegCreate() {
                         </p>
                     </div>
                 </div>
+
+                {sourceBankTransaction && !isEditMode && (
+                    <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100">
+                        <div className="font-semibold">Aus Bankumsatz erstellt</div>
+                        <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+                            <span>{new Date(sourceBankTransaction.booking_date).toLocaleDateString('de-DE')}</span>
+                            <span>{sourceBankTransaction.counterparty || '-'}</span>
+                            <span>{(sourceBankTransaction.amount / 100).toLocaleString('de-DE', { style: 'currency', currency: sourceBankTransaction.currency || 'EUR' })}</span>
+                        </div>
+                    </div>
+                )}
 
                 <form onSubmit={handleSubmit} className="space-y-6">
                     {/* Document Type */}
@@ -414,11 +500,19 @@ export function BelegCreate() {
                                 />
                             </div>
                             {companySettings?.module_projects_enabled && (
-                                <div className="mt-4">
-                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                                        Projekt (optional)
-                                    </label>
-                                    <ProjectSelector value={projectId} onChange={setProjectId} />
+                                <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                            Projekt (optional)
+                                        </label>
+                                        <ProjectSelector value={projectId} onChange={setProjectId} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                            Kostenstelle (optional)
+                                        </label>
+                                        <CostCenterSelector value={costCenterId} onChange={setCostCenterId} />
+                                    </div>
                                 </div>
                             )}
                         </CardContent>
@@ -435,19 +529,19 @@ export function BelegCreate() {
                         <CardContent>
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                                    {documentType === 'ausgang' ? 'Erlöskonto' : 'Aufwandskonto'} *
+                                    Sachkonto (Gegenkonto) *
                                 </label>
                                 <AccountSelector
                                     accounts={accounts}
                                     value={categoryAccountId}
                                     onChange={setCategoryAccountId}
-                                    filterType={documentType === 'ausgang' ? ['revenue'] : ['expense']}
+                                    filterType={documentType === 'ausgang' ? ['revenue', 'equity'] : ['expense', 'equity']}
                                     placeholder="Sachkonto suchen..."
                                 />
                                 <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
                                     {documentType === 'ausgang'
-                                        ? 'Z.B. Umsatzerlöse 19%, Sonstige Erlöse'
-                                        : 'Z.B. Büromaterial, Reisekosten, Telefon'}
+                                        ? 'Z.B. Umsatzerlöse 19%, Sonstige Erlöse – oder Eigenkapital (z.B. Privateinlage/Kapitalrücklage)'
+                                        : 'Z.B. Büromaterial, Reisekosten, Telefon – oder Eigenkapital (z.B. Privatentnahme)'}
                                 </p>
                             </div>
                         </CardContent>
@@ -720,7 +814,7 @@ export function BelegCreate() {
                         <Button
                             type="button"
                             variant="outline"
-                            onClick={() => navigate(`/${tenant}/belege`)}
+                            onClick={() => navigate(sourceBankTransactionId ? returnTo : `/${tenant}/belege`)}
                             className="gap-2 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white"
                         >
                             <X className="w-4 h-4" />
