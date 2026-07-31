@@ -11,6 +11,7 @@ use App\Models\ProductCategory;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Modules\Accounting\Models\Account;
+use App\Modules\Accounting\Reports\Bwa\BwaMappingService;
 use App\Modules\Accounting\Services\BookingService;
 use App\Modules\Contacts\Models\Contact;
 use App\Modules\Projects\Models\CostCenter;
@@ -113,6 +114,8 @@ class DemoTenantSeeder extends Seeder
                 Account::create($accountData);
             }
         }
+        app(BwaMappingService::class)->ensureDefaults($tenant);
+
         $this->command->info('✅ Kontenplan: '.Account::count().' Konten');
 
         $bank = $this->account('1200', 'asset');      // Bank

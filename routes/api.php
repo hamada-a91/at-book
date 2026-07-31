@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\ContactController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\JournalEntryController;
 use App\Http\Controllers\Api\OnboardingController;
+use App\Http\Controllers\Api\ReportMappingController;
 use App\Http\Controllers\Api\ReportsController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegistrationController;
@@ -64,9 +65,9 @@ Route::middleware(['api', 'auth:api', \App\Http\Middleware\SetTenantFromUser::cl
         Route::prefix('reports')->middleware('role:owner|buchhalter,api')->group(function () {
             Route::get('/quality', [ReportsController::class, 'quality']);
             Route::get('/{type}/export', [ReportsController::class, 'export'])
-                ->whereIn('type', ['trial-balance', 'profit-loss', 'balance-sheet', 'journal', 'journal-export', 'account-movements', 'vat', 'tax-report']);
+                ->whereIn('type', ['trial-balance', 'profit-loss', 'balance-sheet', 'bwa', 'journal', 'journal-export', 'account-movements', 'vat', 'tax-report']);
             Route::get('/{type}', [ReportsController::class, 'show'])
-                ->whereIn('type', ['trial-balance', 'profit-loss', 'balance-sheet', 'journal', 'journal-export', 'account-movements', 'vat', 'tax-report']);
+                ->whereIn('type', ['trial-balance', 'profit-loss', 'balance-sheet', 'bwa', 'journal', 'journal-export', 'account-movements', 'vat', 'tax-report']);
 
             // Bestehende Pfade bleiben wegen Frontend-Kompatibilität über {type} erhalten.
             Route::get('/open-items', \App\Http\Controllers\Api\OpenItemsReportController::class)
@@ -75,6 +76,11 @@ Route::middleware(['api', 'auth:api', \App\Http\Middleware\SetTenantFromUser::cl
             Route::get('/cost-centers', [ReportsController::class, 'costCenters']);
             Route::get('/projects/{project}/profitability', [ReportsController::class, 'projectProfitability']);
         });
+
+        Route::get('/report-mappings/bwa', [ReportMappingController::class, 'index'])
+            ->middleware('role:owner|buchhalter,api');
+        Route::put('/report-mappings/bwa', [ReportMappingController::class, 'update'])
+            ->middleware('role:owner,api');
 
         // Projekte, Kostenstellen & Kostenträger (SPEC-08, Teil A)
         // index/show offen für alle angemeldeten Rollen (u.a. für die

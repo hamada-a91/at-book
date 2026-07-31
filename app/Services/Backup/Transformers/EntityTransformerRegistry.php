@@ -27,6 +27,7 @@ class EntityTransformerRegistry
             'users' => UserTransformer::class,
             'accounts' => AccountTransformer::class,
             'tax_codes' => TaxCodeTransformer::class,
+            'report_account_mappings' => ReportAccountMappingTransformer::class,
             'product_categories' => ProductCategoryTransformer::class,
             'products' => ProductTransformer::class,
             'contacts' => ContactTransformer::class,

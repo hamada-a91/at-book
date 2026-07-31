@@ -14,7 +14,9 @@ class ReportExportService
      */
     public function pdf(array $report): Response
     {
-        $pdf = app('dompdf.wrapper')->loadView('reports.pdf', [
+        $view = $report['report_type'] === 'bwa' ? 'reports.bwa' : 'reports.pdf';
+
+        $pdf = app('dompdf.wrapper')->loadView($view, [
             'report' => $report,
             'settings' => CompanySetting::query()->first(),
         ])->setPaper('a4', 'portrait');
@@ -98,6 +100,19 @@ class ReportExportService
                 'title' => 'USt-Bericht',
                 'headers' => ['Steuerschlüssel', 'Art', 'Basis', 'Steuer', 'Anzahl'],
                 'rows' => array_map(fn (array $row) => [$row['tax_key'], $row['bucket'], $row['base_amount'], $row['tax_amount'], $row['count']], $report['data']['groups']),
+            ]],
+            'bwa' => [[
+                'title' => 'BWA',
+                'headers' => ['Code', 'Bezeichnung', 'Periode', 'Kumuliert Jahr', 'Vorjahr', 'Abweichung', 'Abweichung %'],
+                'rows' => array_map(fn (array $row) => [
+                    $row['code'],
+                    $row['label'],
+                    $row['month_value'],
+                    $row['year_to_date_value'],
+                    $row['previous_year_value'],
+                    $row['deviation_amount'],
+                    $row['deviation_percent'],
+                ], $report['data']['rows']),
             ]],
             default => throw new InvalidArgumentException('Unbekannter Report-Typ.'),
         };

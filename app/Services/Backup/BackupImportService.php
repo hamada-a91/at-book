@@ -22,6 +22,7 @@ class BackupImportService
         'users',
         'accounts',
         'tax_codes',
+        'report_account_mappings',
         'product_categories',
         'products',
         'contacts',
@@ -404,7 +405,7 @@ class BackupImportService
     {
         // Define which entity types have direct tenant_id and which are child tables
         $directTenantTables = [
-            'users', 'accounts', 'tax_codes', 'product_categories', 'products',
+            'users', 'accounts', 'tax_codes', 'report_account_mappings', 'product_categories', 'products',
             'contacts', 'bank_accounts', 'bank_import_batches', 'bank_matching_rules', 'company_settings',
             // SPEC-08 (Teil A): 'projects' referenziert 'cost_objects' per
             // restrictOnDelete (projects.cost_object_id) - muss daher VOR
@@ -761,6 +762,30 @@ class BackupImportService
         // braucht einen eigenen Auflösungspfad.
         if ($entityType === 'audit_logs') {
             return $this->mapAuditLogAuditable($data, $idMapping);
+        }
+
+        if ($entityType === 'report_account_mappings') {
+            $sourcePublicId = $data['source_public_id'] ?? null;
+            $sourceEntityType = match ($data['source_type'] ?? null) {
+                'account' => 'accounts',
+                'tax_code' => 'tax_codes',
+                default => null,
+            };
+            $sourceModelClass = match ($data['source_type'] ?? null) {
+                'account' => \App\Modules\Accounting\Models\Account::class,
+                'tax_code' => \App\Models\TaxCode::class,
+                default => null,
+            };
+
+            if ($sourceEntityType && $sourceModelClass && $sourcePublicId) {
+                $mappedId = $idMapping->get($sourceEntityType, $sourcePublicId);
+                $freshPublicId = $mappedId ? $sourceModelClass::withoutGlobalScopes()->whereKey($mappedId)->value('public_id') : null;
+                if ($freshPublicId) {
+                    $data['source_public_id'] = $freshPublicId;
+                }
+            }
+
+            return $data;
         }
 
         if ($entityType === 'payments' && array_key_exists('payable_public_id', $data)) {
@@ -1277,6 +1302,7 @@ class BackupImportService
             'users' => \App\Models\User::class,
             'accounts' => \App\Modules\Accounting\Models\Account::class,
             'tax_codes' => \App\Models\TaxCode::class,
+            'report_account_mappings' => \App\Modules\Accounting\Models\ReportAccountMapping::class,
             'product_categories' => \App\Models\ProductCategory::class,
             'products' => \App\Models\Product::class,
             'contacts' => \App\Modules\Contacts\Models\Contact::class,

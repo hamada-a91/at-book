@@ -20,6 +20,7 @@ class BackupExportService
         'users',
         'accounts',
         'tax_codes',
+        'report_account_mappings',
         'product_categories',
         'products',
         'contacts',

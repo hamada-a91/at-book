@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Modules\Accounting\Models\JournalEntryLine;
 use App\Modules\Accounting\Reports\AccountMovementsReport;
 use App\Modules\Accounting\Reports\BalanceSheetReport;
+use App\Modules\Accounting\Reports\BwaReport;
 use App\Modules\Accounting\Reports\JournalReport;
 use App\Modules\Accounting\Reports\ProfitLossReport;
 use App\Modules\Accounting\Reports\ReportExportService;
@@ -104,6 +105,7 @@ class ReportsController extends Controller
             'trial-balance' => app(TrialBalanceReport::class)->generate($period),
             'profit-loss' => app(ProfitLossReport::class)->generate($period),
             'balance-sheet' => app(BalanceSheetReport::class)->generate($period),
+            'bwa' => app(BwaReport::class)->generate($period),
             'journal' => app(JournalReport::class)->generate($period),
             'account-movements' => app(AccountMovementsReport::class)->generate($period, $request->integer('account_id') ?: null),
             'vat' => app(VatReport::class)->generate($period),
@@ -117,6 +119,7 @@ class ReportsController extends Controller
             'trial-balance' => 'trial-balance',
             'profit-loss' => 'profit-loss',
             'balance-sheet' => 'balance-sheet',
+            'bwa' => 'bwa',
             'journal', 'journal-export' => 'journal',
             'account-movements' => 'account-movements',
             'vat', 'tax-report' => 'vat',
