@@ -8,6 +8,7 @@ use App\Models\Tenant;
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Models\ReportAccountMapping;
 use App\Modules\Accounting\Reports\Bwa\BwaMappingService;
+use App\Modules\Accounting\Reports\Ustva\UstvaMappingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -21,39 +22,78 @@ class ReportMappingController extends Controller
         $tenant = $this->tenant();
         $formVersion = $request->input('form_version', BwaMappingService::FORM_VERSION);
         $rows = $mappings->mappings($tenant, $formVersion);
+
+        return response()->json([
+            'report_type' => 'bwa',
+            'form_version' => $formVersion,
+            'target_codes' => $mappings->lines(),
+            'mappings' => $this->mappingRows($tenant, $rows),
+        ]);
+    }
+
+    public function update(Request $request, BwaMappingService $mappings): JsonResponse
+    {
+        $formVersion = $request->input('form_version', BwaMappingService::FORM_VERSION);
+        $this->replaceMappings($request, 'bwa', array_keys($mappings->lines()), $formVersion);
+
+        return $this->index($request, $mappings);
+    }
+
+    public function ustvaIndex(Request $request, UstvaMappingService $mappings): JsonResponse
+    {
+        $tenant = $this->tenant();
+        $formVersion = $request->input('form_version', $mappings->formVersionForYear((int) $request->input('year', UstvaMappingService::DEFAULT_YEAR)));
+        $rows = $mappings->mappings($tenant, $formVersion);
+
+        return response()->json([
+            'report_type' => 'ustva',
+            'form_version' => $formVersion,
+            'target_codes' => $mappings->kennziffern(),
+            'mappings' => $this->mappingRows($tenant, $rows),
+        ]);
+    }
+
+    public function ustvaUpdate(Request $request, UstvaMappingService $mappings): JsonResponse
+    {
+        $formVersion = $request->input('form_version', $mappings->formVersionForYear((int) $request->input('year', UstvaMappingService::DEFAULT_YEAR)));
+        $this->replaceMappings($request, 'ustva', array_keys($mappings->kennziffern()), $formVersion);
+
+        return $this->ustvaIndex($request, $mappings);
+    }
+
+    /**
+     * @param  Collection<int, ReportAccountMapping>  $rows
+     */
+    private function mappingRows(Tenant $tenant, $rows): \Illuminate\Support\Collection
+    {
         $accountByPublicId = Account::withoutGlobalScopes()
             ->where('tenant_id', $tenant->id)
             ->whereIn('public_id', $rows->where('source_type', 'account')->pluck('source_public_id')->all())
             ->get()
             ->keyBy('public_id');
 
-        return response()->json([
-            'report_type' => 'bwa',
-            'form_version' => $formVersion,
-            'target_codes' => $mappings->lines(),
-            'mappings' => $rows->map(fn (ReportAccountMapping $mapping) => [
-                'public_id' => $mapping->public_id,
-                'source_type' => $mapping->source_type,
-                'source_public_id' => $mapping->source_public_id,
-                'target_code' => $mapping->target_code,
-                'value_type' => $mapping->value_type,
-                'sign' => $mapping->sign,
-                'valid_from' => $mapping->valid_from?->toDateString(),
-                'valid_until' => $mapping->valid_until?->toDateString(),
-                'source' => $mapping->source_type === 'account' ? [
-                    'code' => $accountByPublicId->get($mapping->source_public_id)?->code,
-                    'name' => $accountByPublicId->get($mapping->source_public_id)?->name,
-                ] : null,
-            ])->values(),
-        ]);
+        return $rows->map(fn (ReportAccountMapping $mapping) => [
+            'public_id' => $mapping->public_id,
+            'source_type' => $mapping->source_type,
+            'source_public_id' => $mapping->source_public_id,
+            'target_code' => $mapping->target_code,
+            'value_type' => $mapping->value_type,
+            'sign' => $mapping->sign,
+            'valid_from' => $mapping->valid_from?->toDateString(),
+            'valid_until' => $mapping->valid_until?->toDateString(),
+            'source' => $mapping->source_type === 'account' ? [
+                'code' => $accountByPublicId->get($mapping->source_public_id)?->code,
+                'name' => $accountByPublicId->get($mapping->source_public_id)?->name,
+            ] : null,
+        ])->values();
     }
 
-    public function update(Request $request, BwaMappingService $mappings): JsonResponse
+    /**
+     * @param  array<int, string>  $targetCodes
+     */
+    private function replaceMappings(Request $request, string $reportType, array $targetCodes, string $formVersion): void
     {
         $tenant = $this->tenant();
-        $formVersion = $request->input('form_version', BwaMappingService::FORM_VERSION);
-        $targetCodes = array_keys($mappings->lines());
-
         $validated = $request->validate([
             'form_version' => ['nullable', 'string', 'max:32'],
             'mappings' => ['required', 'array'],
@@ -78,17 +118,17 @@ class ReportMappingController extends Controller
             }
         }
 
-        DB::transaction(function () use ($tenant, $formVersion, $validated) {
+        DB::transaction(function () use ($tenant, $reportType, $formVersion, $validated) {
             ReportAccountMapping::withoutGlobalScopes()
                 ->where('tenant_id', $tenant->id)
-                ->where('report_type', 'bwa')
+                ->where('report_type', $reportType)
                 ->where('form_version', $formVersion)
                 ->delete();
 
             foreach ($validated['mappings'] as $mapping) {
                 ReportAccountMapping::withoutGlobalScopes()->create([
                     'tenant_id' => $tenant->id,
-                    'report_type' => 'bwa',
+                    'report_type' => $reportType,
                     'form_version' => $formVersion,
                     'source_type' => $mapping['source_type'],
                     'source_public_id' => $mapping['source_public_id'],
@@ -100,8 +140,6 @@ class ReportMappingController extends Controller
                 ]);
             }
         });
-
-        return $this->index($request, $mappings);
     }
 
     private function tenant(): Tenant

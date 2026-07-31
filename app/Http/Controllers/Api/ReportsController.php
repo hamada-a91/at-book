@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\CompanySetting;
+use App\Modules\Accounting\Models\AuditLog;
 use App\Modules\Accounting\Models\JournalEntryLine;
 use App\Modules\Accounting\Reports\AccountMovementsReport;
 use App\Modules\Accounting\Reports\BalanceSheetReport;
@@ -13,10 +15,12 @@ use App\Modules\Accounting\Reports\ReportExportService;
 use App\Modules\Accounting\Reports\ReportPeriod;
 use App\Modules\Accounting\Reports\ReportQualityService;
 use App\Modules\Accounting\Reports\TrialBalanceReport;
+use App\Modules\Accounting\Reports\UstvaReport;
 use App\Modules\Accounting\Reports\VatReport;
 use App\Modules\Projects\Models\CostCenter;
 use App\Modules\Projects\Models\Project;
 use App\Modules\Projects\Services\ProjectReportService;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use InvalidArgumentException;
@@ -63,7 +67,7 @@ class ReportsController extends Controller
     public function show(Request $request, string $type): JsonResponse
     {
         try {
-            return response()->json($this->buildReport($this->canonicalType($type), ReportPeriod::fromRequest($request), $request));
+            return response()->json($this->buildReport($this->canonicalType($type), $this->periodFromRequest($request, $this->canonicalType($type)), $request));
         } catch (InvalidArgumentException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
@@ -72,7 +76,38 @@ class ReportsController extends Controller
     public function export(Request $request, string $type, ReportExportService $exports): Response
     {
         try {
-            $report = $this->buildReport($this->canonicalType($type), ReportPeriod::fromRequest($request), $request);
+            $canonicalType = $this->canonicalType($type);
+            $report = $this->buildReport($canonicalType, $this->periodFromRequest($request, $canonicalType), $request);
+
+            return match ($request->input('format', 'pdf')) {
+                'pdf' => $exports->pdf($report),
+                'csv' => $exports->csv($report),
+                default => response()->json(['message' => 'Ungültiges Exportformat.'], 422),
+            };
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+    }
+
+    public function transferSheet(Request $request, ReportExportService $exports): Response
+    {
+        try {
+            $period = $this->periodFromRequest($request, 'ustva');
+            $report = $this->buildReport('ustva', $period, $request);
+
+            if (($report['quality']['blocking_errors'] ?? []) !== []) {
+                return response()->json([
+                    'message' => 'Der USt-VA-Übertragungsbogen ist wegen blockierender Qualitätsbefunde nicht freigegeben.',
+                    'quality' => $report['quality'],
+                ], 422);
+            }
+
+            if ($settings = CompanySetting::query()->first()) {
+                AuditLog::record($settings, 'vat_transfer_sheet_generated', [], [
+                    'period' => $report['period'],
+                    'format' => $request->input('format', 'pdf'),
+                ]);
+            }
 
             return match ($request->input('format', 'pdf')) {
                 'pdf' => $exports->pdf($report),
@@ -106,11 +141,23 @@ class ReportsController extends Controller
             'profit-loss' => app(ProfitLossReport::class)->generate($period),
             'balance-sheet' => app(BalanceSheetReport::class)->generate($period),
             'bwa' => app(BwaReport::class)->generate($period),
+            'ustva' => app(UstvaReport::class)->generate($period),
             'journal' => app(JournalReport::class)->generate($period),
             'account-movements' => app(AccountMovementsReport::class)->generate($period, $request->integer('account_id') ?: null),
             'vat' => app(VatReport::class)->generate($period),
             default => throw new InvalidArgumentException('Unbekannter Berichtstyp.'),
         };
+    }
+
+    private function periodFromRequest(Request $request, string $type): ReportPeriod
+    {
+        if ($type === 'ustva' && $request->filled(['year', 'month'])) {
+            $month = CarbonImmutable::create((int) $request->integer('year'), (int) $request->integer('month'), 1)->startOfDay();
+
+            return new ReportPeriod($month, $month->endOfMonth()->startOfDay(), $request->input('basis', ReportPeriod::BASIS_POSTED));
+        }
+
+        return ReportPeriod::fromRequest($request);
     }
 
     private function canonicalType(string $type): string
@@ -123,6 +170,7 @@ class ReportsController extends Controller
             'journal', 'journal-export' => 'journal',
             'account-movements' => 'account-movements',
             'vat', 'tax-report' => 'vat',
+            'ustva' => 'ustva',
             default => throw new InvalidArgumentException('Unbekannter Berichtstyp.'),
         };
     }

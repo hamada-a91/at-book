@@ -68,8 +68,30 @@ class ReportQualityService
             }
         }
 
-        if ($reportType === 'vat' && $period->basis !== ReportPeriod::BASIS_POSTED) {
-            $blocking[] = $this->finding('vat_requires_posted_basis', 'error', 'Steuerexporte sind nur mit basis=posted zulässig.', 1);
+        if (in_array($reportType, ['vat', 'ustva'], true) && $period->basis !== ReportPeriod::BASIS_POSTED) {
+            $blocking[] = $this->finding('vat_requires_posted_basis', 'error', 'Steuerberichte sind nur mit basis=posted zulässig.', 1);
+        }
+
+        if ($reportType === 'ustva') {
+            $draftEntries = DB::table('journal_entries')
+                ->whereNull('journal_entries.deleted_at')
+                ->where('journal_entries.tenant_id', $this->queries->tenantId())
+                ->where('journal_entries.status', 'draft')
+                ->whereBetween('journal_entries.booking_date', [$period->from->toDateString(), $period->to->toDateString()])
+                ->count();
+
+            if ($draftEntries > 0) {
+                $blocking[] = $this->finding('ustva_open_drafts', 'error', 'Im Zeitraum liegen Entwürfe. Der Übertragungsbogen ist erst nach Festschreibung zulässig.', $draftEntries);
+            }
+
+            $settings = CompanySetting::query()->first();
+            if ($settings && (! $settings->books_locked_until || $settings->books_locked_until->lt($period->to))) {
+                $warnings[] = $this->finding('ustva_period_not_locked', 'warning', 'Die Periode ist noch nicht vollständig festgeschrieben.', 1);
+            }
+
+            if (! $settings || blank($settings->tax_number)) {
+                $warnings[] = $this->finding('missing_tax_number', 'warning', 'Steuernummer fehlt in den Firmendaten.', 1);
+            }
         }
 
         if (! CompanySetting::query()->exists()) {

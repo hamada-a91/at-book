@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Models\ReportAccountMapping;
 use App\Modules\Accounting\Reports\Bwa\BwaMappingService;
+use App\Modules\Accounting\Reports\Ustva\UstvaMappingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -22,6 +23,7 @@ class ReportAccountMappingBackupTest extends TestCase
     {
         $dataA = TenantTestDataFactory::create('bwa-backup-a');
         app(BwaMappingService::class)->ensureDefaults($dataA->tenant);
+        app(UstvaMappingService::class)->ensureDefaults($dataA->tenant);
         $sourceRevenueAccount = Account::withoutGlobalScopes()
             ->where('tenant_id', $dataA->tenant->id)
             ->where('code', '8400')
@@ -32,6 +34,13 @@ class ReportAccountMappingBackupTest extends TestCase
             'report_type' => 'bwa',
             'source_public_id' => $sourceRevenueAccount->public_id,
             'target_code' => 'revenue',
+        ]);
+        $this->assertDatabaseHas('report_account_mappings', [
+            'tenant_id' => $dataA->tenant->id,
+            'report_type' => 'ustva',
+            'source_public_id' => $sourceRevenueAccount->public_id,
+            'target_code' => '81',
+            'value_type' => 'base_amount',
         ]);
 
         $exportA = BackupTestHelper::exportToArray($dataA->tenant, $dataA->user);
@@ -62,5 +71,14 @@ class ReportAccountMappingBackupTest extends TestCase
 
         $this->assertNotNull($targetMapping);
         $this->assertNotSame($sourceRevenueAccount->public_id, $targetMapping->source_public_id);
+
+        $targetUstvaMapping = ReportAccountMapping::withoutGlobalScopes()
+            ->where('tenant_id', $tenantB->id)
+            ->where('report_type', 'ustva')
+            ->where('target_code', '81')
+            ->where('value_type', 'base_amount')
+            ->where('source_public_id', $targetRevenueAccount->public_id)
+            ->first();
+        $this->assertNotNull($targetUstvaMapping);
     }
 }

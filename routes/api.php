@@ -64,10 +64,11 @@ Route::middleware(['api', 'auth:api', \App\Http\Middleware\SetTenantFromUser::cl
         // Reports Routes
         Route::prefix('reports')->middleware('role:owner|buchhalter,api')->group(function () {
             Route::get('/quality', [ReportsController::class, 'quality']);
+            Route::get('/ustva/transfer-sheet', [ReportsController::class, 'transferSheet']);
             Route::get('/{type}/export', [ReportsController::class, 'export'])
-                ->whereIn('type', ['trial-balance', 'profit-loss', 'balance-sheet', 'bwa', 'journal', 'journal-export', 'account-movements', 'vat', 'tax-report']);
+                ->whereIn('type', ['trial-balance', 'profit-loss', 'balance-sheet', 'bwa', 'ustva', 'journal', 'journal-export', 'account-movements', 'vat', 'tax-report']);
             Route::get('/{type}', [ReportsController::class, 'show'])
-                ->whereIn('type', ['trial-balance', 'profit-loss', 'balance-sheet', 'bwa', 'journal', 'journal-export', 'account-movements', 'vat', 'tax-report']);
+                ->whereIn('type', ['trial-balance', 'profit-loss', 'balance-sheet', 'bwa', 'ustva', 'journal', 'journal-export', 'account-movements', 'vat', 'tax-report']);
 
             // Bestehende Pfade bleiben wegen Frontend-Kompatibilität über {type} erhalten.
             Route::get('/open-items', \App\Http\Controllers\Api\OpenItemsReportController::class)
@@ -80,6 +81,10 @@ Route::middleware(['api', 'auth:api', \App\Http\Middleware\SetTenantFromUser::cl
         Route::get('/report-mappings/bwa', [ReportMappingController::class, 'index'])
             ->middleware('role:owner|buchhalter,api');
         Route::put('/report-mappings/bwa', [ReportMappingController::class, 'update'])
+            ->middleware('role:owner,api');
+        Route::get('/report-mappings/ustva', [ReportMappingController::class, 'ustvaIndex'])
+            ->middleware('role:owner,api');
+        Route::put('/report-mappings/ustva', [ReportMappingController::class, 'ustvaUpdate'])
             ->middleware('role:owner,api');
 
         // Projekte, Kostenstellen & Kostenträger (SPEC-08, Teil A)

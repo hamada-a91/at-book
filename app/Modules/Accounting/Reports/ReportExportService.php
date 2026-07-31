@@ -14,7 +14,11 @@ class ReportExportService
      */
     public function pdf(array $report): Response
     {
-        $view = $report['report_type'] === 'bwa' ? 'reports.bwa' : 'reports.pdf';
+        $view = match ($report['report_type']) {
+            'bwa' => 'reports.bwa',
+            'ustva' => 'reports.ustva',
+            default => 'reports.pdf',
+        };
 
         $pdf = app('dompdf.wrapper')->loadView($view, [
             'report' => $report,
@@ -113,6 +117,17 @@ class ReportExportService
                     $row['deviation_amount'],
                     $row['deviation_percent'],
                 ], $report['data']['rows']),
+            ]],
+            'ustva' => [[
+                'title' => 'USt-VA Eingabehilfe',
+                'headers' => ['Kennziffer', 'Bezeichnung', 'Betrag', 'USt', 'Herleitung'],
+                'rows' => array_map(fn (array $row) => [
+                    $row['kennziffer'],
+                    $row['label'],
+                    $row['amount'],
+                    $row['tax_amount'] ?? 0,
+                    implode('; ', array_map(fn (array $source) => trim(($source['account_code'] ?? '').' '.($source['account_name'] ?? '')).'='.$source['amount'], array_merge($row['herleitung'] ?? [], $row['tax_herleitung'] ?? []))),
+                ], $report['data']['kennziffern']),
             ]],
             default => throw new InvalidArgumentException('Unbekannter Report-Typ.'),
         };
