@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Beleg;
 use App\Models\CompanySetting;
 use App\Models\Tenant;
 use App\Models\User;
@@ -153,6 +154,60 @@ class UstvaReportTest extends TestCase
         $response->assertOk();
         $rows = collect($response->json('data.kennziffern'))->keyBy('kennziffer');
         $this->assertSame(10000, $rows['81']['amount']);
+    }
+
+    public function test_unbooked_draft_beleg_triggers_completeness_warning(): void
+    {
+        $this->bookSale19($this->user, 10000, 1900);
+        $this->lockPeriod($this->user);
+        app()->instance('currentTenant', $this->user->tenant);
+        Beleg::create([
+            'document_number' => 'E-2026-0001',
+            'document_type' => 'eingang',
+            'title' => 'Ungebuchter Entwurf',
+            'document_date' => '2026-01-15',
+            'amount' => 5000,
+            'tax_amount' => 950,
+            'status' => 'draft',
+        ]);
+        $token = auth('api')->login($this->user);
+
+        $response = $this->withHeader('Authorization', "Bearer {$token}")
+            ->getJson('/api/reports/ustva?year=2026&month=1');
+
+        $response->assertOk();
+        // Nicht gebuchter Beleg blockiert NICHT (kann in anderen Zeitraum gehören),
+        // erzeugt aber eine Vollständigkeitswarnung.
+        $this->assertSame([], $response->json('quality.blocking_errors'));
+        $warning = collect($response->json('quality.warnings'))->firstWhere('code', 'unbooked_documents');
+        $this->assertNotNull($warning);
+        $this->assertSame(1, $warning['affected_count']);
+        $this->assertSame(1, collect($warning['drilldown'])->firstWhere('type', 'belege')['count']);
+    }
+
+    public function test_preview_basis_warning_reflects_actual_draft_bookings(): void
+    {
+        $this->bookSale19($this->user, 10000, 1900);
+        $token = auth('api')->login($this->user);
+
+        // Keine Buchungs-Entwürfe -> keine preview_basis-Warnung (früher hartcodiert).
+        $clean = $this->withHeader('Authorization', "Bearer {$token}")
+            ->getJson('/api/reports/profit-loss?from_date=2026-01-01&to_date=2026-01-31&basis=preview');
+        $clean->assertOk();
+        $this->assertNull(collect($clean->json('quality.warnings'))->firstWhere('code', 'preview_basis'));
+
+        // Ein Buchungs-Entwurf -> Warnung mit echter Anzahl.
+        $this->book($this->user, '2026-01-20', [
+            ['account_id' => $this->accounts['bank']->id, 'type' => 'debit', 'amount' => 5000],
+            ['account_id' => $this->accounts['revenue19']->id, 'type' => 'credit', 'amount' => 5000],
+        ], autoLock: false);
+
+        $withDraft = $this->withHeader('Authorization', "Bearer {$token}")
+            ->getJson('/api/reports/profit-loss?from_date=2026-01-01&to_date=2026-01-31&basis=preview');
+        $withDraft->assertOk();
+        $warning = collect($withDraft->json('quality.warnings'))->firstWhere('code', 'preview_basis');
+        $this->assertNotNull($warning);
+        $this->assertSame(1, $warning['affected_count']);
     }
 
     private function lockPeriod(User $user): void
