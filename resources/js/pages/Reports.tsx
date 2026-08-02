@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from '@/lib/axios';
 import { format } from 'date-fns';
 import {
@@ -64,6 +64,13 @@ export function Reports() {
     const [selectedSign, setSelectedSign] = useState<number>(1);
     const [isSavingMappings, setIsSavingMappings] = useState(false);
 
+    // Search queries for filtering accounts
+    const [accountSearchQuery, setAccountSearchQuery] = useState('');
+    const [mappingAccountSearchQuery, setMappingAccountSearchQuery] = useState('');
+
+    // Selected account for Kontobewegungen report
+    const [selectedMovementAccountId, setSelectedMovementAccountId] = useState<number | null>(null);
+
     // Fetch current user details to check for 'owner' role
     const { data: currentUser } = useQuery({
         queryKey: ['currentUser'],
@@ -75,9 +82,50 @@ export function Reports() {
 
     const isOwner = currentUser?.roles?.some((role: any) => role.name === 'owner') || false;
 
-    const handleGenerateReport = async (type: ReportType) => {
+    // Filter accounts based on search query for Kontobewegungen (defensive)
+    const filteredAccounts = accounts.filter(acc => {
+        const code = acc.code || '';
+        const name = acc.name || '';
+        return code.toLowerCase().includes(accountSearchQuery.toLowerCase()) ||
+               name.toLowerCase().includes(accountSearchQuery.toLowerCase());
+    });
+
+    // Filter accounts based on search query for Mapping Editor (defensive)
+    const filteredMappingAccounts = accounts.filter(acc => {
+        const code = acc.code || '';
+        const name = acc.name || '';
+        return code.toLowerCase().includes(mappingAccountSearchQuery.toLowerCase()) ||
+               name.toLowerCase().includes(mappingAccountSearchQuery.toLowerCase());
+    });
+
+    // Update selected mapping account if the current one is filtered out
+    useEffect(() => {
+        if (filteredMappingAccounts.length > 0) {
+            const stillExists = filteredMappingAccounts.some(acc => acc.public_id === selectedAccountPublicId);
+            if (!stillExists) {
+                setSelectedAccountPublicId(filteredMappingAccounts[0].public_id);
+            }
+        } else {
+            setSelectedAccountPublicId('');
+        }
+    }, [mappingAccountSearchQuery, accounts]);
+
+    const handleGenerateReport = async (type: ReportType, accountId?: number) => {
         setIsLoading(true);
         setActiveReport(type);
+        
+        // Fetch accounts list if not already populated (needed for account-movements or mapping editor)
+        if ((type === 'account-movements' || mappingEditorOpen) && accounts.length === 0) {
+            await loadAccounts();
+        }
+
+        const idToUse = accountId || selectedMovementAccountId;
+        if (type === 'account-movements' && !idToUse) {
+            setReportData(null);
+            setIsLoading(false);
+            return;
+        }
+
         setReportData(null);
         setExpandedKzs({});
 
@@ -95,6 +143,10 @@ export function Reports() {
                 queryParams.append('basis', basis);
             }
 
+            if (type === 'account-movements' && idToUse) {
+                queryParams.append('account_id', String(idToUse));
+            }
+
             const { data } = await axios.get(`/api/reports/${type}?${queryParams}`);
             setReportData(data);
         } catch (error: any) {
@@ -108,6 +160,12 @@ export function Reports() {
 
     const handleRegenerateReport = async (newBasis: 'posted' | 'preview') => {
         if (!activeReport) return;
+        
+        const idToUse = selectedMovementAccountId;
+        if (activeReport === 'account-movements' && !idToUse) {
+            return;
+        }
+
         setIsLoading(true);
         try {
             const queryParams = new URLSearchParams();
@@ -121,6 +179,10 @@ export function Reports() {
                 queryParams.append('from_date', format(dateRange.from, 'yyyy-MM-dd'));
                 queryParams.append('to_date', format(dateRange.to, 'yyyy-MM-dd'));
                 queryParams.append('basis', newBasis);
+            }
+
+            if (activeReport === 'account-movements' && idToUse) {
+                queryParams.append('account_id', String(idToUse));
             }
 
             const { data } = await axios.get(`/api/reports/${activeReport}?${queryParams}`);
@@ -157,6 +219,15 @@ export function Reports() {
             queryParams.append('to_date', format(dateRange.to, 'yyyy-MM-dd'));
             queryParams.append('basis', basis);
         }
+
+        if (activeReport === 'account-movements') {
+            if (!selectedMovementAccountId) {
+                alert('Bitte wählen Sie zuerst ein Konto aus.');
+                return;
+            }
+            queryParams.append('account_id', String(selectedMovementAccountId));
+        }
+
         queryParams.append('format', formatType);
 
         try {
@@ -543,8 +614,111 @@ export function Reports() {
         );
     };
 
+    const renderAccountMovementsReport = () => {
+        return (
+            <div className="space-y-6">
+                {/* Account Search & Select List */}
+                <div className="flex flex-col gap-2 bg-slate-50 dark:bg-slate-900 p-4 border rounded-lg">
+                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Konto suchen und auswählen:</label>
+                    <input
+                        type="text"
+                        placeholder="Konto filtern nach Nummer oder Name (z.B. 1200 oder Bank)..."
+                        value={accountSearchQuery}
+                        onChange={(e) => setAccountSearchQuery(e.target.value)}
+                        className="text-xs p-2.5 rounded border bg-background border-slate-300 dark:border-slate-700 w-full h-9 mb-1"
+                    />
+                    <div className="border rounded-md max-h-48 overflow-y-auto bg-white dark:bg-slate-950 divide-y shadow-inner">
+                        {filteredAccounts.map(acc => (
+                            <button
+                                key={acc.id}
+                                type="button"
+                                onClick={() => {
+                                    setSelectedMovementAccountId(acc.id);
+                                    handleGenerateReport('account-movements', acc.id);
+                                }}
+                                className={`w-full text-left p-2.5 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors text-xs flex justify-between items-center ${
+                                    selectedMovementAccountId === acc.id
+                                        ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-semibold'
+                                        : 'text-slate-700 dark:text-slate-300'
+                                }`}
+                            >
+                                <span>{acc.code} - {acc.name}</span>
+                                {selectedMovementAccountId === acc.id && <Check className="w-4 h-4 text-blue-500" />}
+                            </button>
+                        ))}
+                        {filteredAccounts.length === 0 && (
+                            <div className="p-3 text-slate-500 text-center text-xs">
+                                Keine Konten gefunden
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {reportData ? (
+                    <div className="space-y-4">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-slate-100 dark:bg-slate-800 rounded-lg text-sm">
+                            <div>
+                                <div className="text-slate-500 dark:text-slate-400 text-xs">Anfangssaldo</div>
+                                <div className="font-bold text-base mt-0.5">{formatCurrency(reportData.totals.opening_balance)}</div>
+                            </div>
+                            <div>
+                                <div className="text-slate-500 dark:text-slate-400 text-xs">Soll gesamt</div>
+                                <div className="font-bold text-base mt-0.5 text-blue-600 dark:text-blue-400">{formatCurrency(reportData.totals.debit)}</div>
+                            </div>
+                            <div>
+                                <div className="text-slate-500 dark:text-slate-400 text-xs">Haben gesamt</div>
+                                <div className="font-bold text-base mt-0.5 text-emerald-600 dark:text-emerald-400">{formatCurrency(reportData.totals.credit)}</div>
+                            </div>
+                            <div>
+                                <div className="text-slate-500 dark:text-slate-400 text-xs">Endsaldo</div>
+                                <div className="font-bold text-base mt-0.5">{formatCurrency(reportData.totals.closing_balance)}</div>
+                            </div>
+                        </div>
+
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Datum</TableHead>
+                                    <TableHead>Beleg-Nr.</TableHead>
+                                    <TableHead>Beschreibung</TableHead>
+                                    <TableHead className="text-right">Soll</TableHead>
+                                    <TableHead className="text-right">Haben</TableHead>
+                                    <TableHead className="text-right">Laufender Saldo</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {reportData.data.movements.length === 0 ? (
+                                    <TableRow>
+                                        <TableCell colSpan={6} className="text-center text-slate-500 py-6 text-sm">
+                                            Keine Bewegungen im gewählten Zeitraum vorhanden.
+                                        </TableCell>
+                                    </TableRow>
+                                ) : (
+                                    reportData.data.movements.map((move: any, idx: number) => (
+                                        <TableRow key={idx} className="hover:bg-slate-50/50">
+                                            <TableCell className="text-xs">{format(new Date(move.booking_date), 'dd.MM.yyyy')}</TableCell>
+                                            <TableCell className="font-mono text-xs">#{move.entry_id}</TableCell>
+                                            <TableCell className="text-xs">{move.description}</TableCell>
+                                            <TableCell className="text-right text-xs text-blue-600 dark:text-blue-400">{move.debit > 0 ? formatCurrency(move.debit) : ''}</TableCell>
+                                            <TableCell className="text-right text-xs text-emerald-600 dark:text-emerald-400">{move.credit > 0 ? formatCurrency(move.credit) : ''}</TableCell>
+                                            <TableCell className="text-right font-mono text-xs font-semibold">{formatCurrency(move.running_balance)}</TableCell>
+                                        </TableRow>
+                                    ))
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
+                ) : (
+                    <div className="text-center text-slate-500 py-12 text-sm border border-dashed rounded-lg bg-slate-50/50">
+                        Bitte filtern und wählen Sie ein Konto aus der obigen Liste aus, um die Kontobewegungen anzuzeigen.
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     const renderReportContent = () => {
-        if (!reportData) return null;
+        if (!reportData && activeReport !== 'account-movements') return null;
 
         switch (activeReport) {
             case 'trial-balance':
@@ -746,6 +920,9 @@ export function Reports() {
             case 'ustva':
                 return renderUstvaReport();
 
+            case 'account-movements':
+                return renderAccountMovementsReport();
+
             default:
                 return <p>Bericht wird geladen...</p>;
         }
@@ -836,7 +1013,7 @@ export function Reports() {
                     description="Detaillierte Ansicht aller Buchungen auf einem spezifischen Konto."
                     icon={Activity}
                     color="text-indigo-600"
-                    onClick={() => alert('Bitte wählen Sie ein Konto aus der Kontenliste, um Bewegungen zu sehen.')}
+                    onClick={() => handleGenerateReport('account-movements')}
                 />
                 <ReportCard
                     title="USt-Voranmeldung"
@@ -916,22 +1093,22 @@ export function Reports() {
                         <Button
                             variant="outline"
                             onClick={() => handleDownloadReport('csv')}
-                            disabled={activeReport === 'ustva' && hasBlockingErrors}
-                            className={`shadow-sm hover:shadow-md transition-all duration-300 ${activeReport === 'ustva' && hasBlockingErrors ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            title={activeReport === 'ustva' && hasBlockingErrors ? 'Übertragungsbogen gesperrt wegen blockierender Fehler' : ''}
+                            disabled={(activeReport === 'ustva' && hasBlockingErrors) || (activeReport === 'account-movements' && !selectedMovementAccountId)}
+                            className={`shadow-sm hover:shadow-md transition-all duration-300 ${((activeReport === 'ustva' && hasBlockingErrors) || (activeReport === 'account-movements' && !selectedMovementAccountId)) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            title={activeReport === 'ustva' && hasBlockingErrors ? 'Übertragungsbogen gesperrt wegen blockierender Fehler' : activeReport === 'account-movements' && !selectedMovementAccountId ? 'Bitte wählen Sie ein Konto' : ''}
                         >
                             <Download className="w-4 h-4 mr-2" />
                             {activeReport === 'ustva' ? 'Übertragungsbogen (CSV)' : 'CSV'}
                         </Button>
                         <Button
                             onClick={() => handleDownloadReport('pdf')}
-                            disabled={activeReport === 'ustva' && hasBlockingErrors}
+                            disabled={(activeReport === 'ustva' && hasBlockingErrors) || (activeReport === 'account-movements' && !selectedMovementAccountId)}
                             className={`shadow-lg transition-all duration-300 ${
-                                activeReport === 'ustva' && hasBlockingErrors
+                                ((activeReport === 'ustva' && hasBlockingErrors) || (activeReport === 'account-movements' && !selectedMovementAccountId))
                                     ? 'bg-slate-300 dark:bg-slate-800 text-slate-500 dark:text-slate-400 shadow-none cursor-not-allowed opacity-50'
-                                    : 'shadow-blue-500/20 hover:shadow-blue-500/30 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700'
+                                    : 'shadow-blue-500/20 hover:shadow-blue-500/30 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 font-semibold'
                             }`}
-                            title={activeReport === 'ustva' && hasBlockingErrors ? 'Übertragungsbogen gesperrt wegen blockierender Fehler' : ''}
+                            title={activeReport === 'ustva' && hasBlockingErrors ? 'Übertragungsbogen gesperrt wegen blockierender Fehler' : activeReport === 'account-movements' && !selectedMovementAccountId ? 'Bitte wählen Sie ein Konto' : ''}
                         >
                             <Download className="w-4 h-4 mr-2" />
                             {activeReport === 'ustva' ? 'Übertragungsbogen (PDF)' : 'PDF'}
@@ -980,76 +1157,109 @@ export function Reports() {
 
                     <div className="flex-1 overflow-y-auto py-4 space-y-4">
                         {/* New Mapping Form */}
-                        <div className="p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg space-y-3">
+                        <div className="p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg space-y-4">
                             <h4 className="font-semibold text-sm">Neue Zuordnung hinzufügen</h4>
-                            <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {/* Left column: Search and Select Account */}
                                 <div className="space-y-1">
-                                    <label className="text-xs font-semibold text-slate-500">Konto</label>
-                                    <select
-                                        value={selectedAccountPublicId}
-                                        onChange={(e) => setSelectedAccountPublicId(e.target.value)}
-                                        className="w-full text-xs p-2 rounded border bg-background border-slate-300 dark:border-slate-700 h-9"
-                                    >
-                                        {accounts.map(acc => (
-                                            <option key={acc.public_id} value={acc.public_id}>
-                                                {acc.code} - {acc.name}
-                                            </option>
+                                    <label className="text-xs font-semibold text-slate-500">1. Konto suchen & auswählen</label>
+                                    <input 
+                                        type="text"
+                                        placeholder="Konto filtern nach Nummer oder Name..."
+                                        value={mappingAccountSearchQuery}
+                                        onChange={(e) => setMappingAccountSearchQuery(e.target.value)}
+                                        className="w-full text-xs p-2 rounded border bg-background border-slate-300 dark:border-slate-700 h-9 mb-1"
+                                    />
+                                    <div className="border rounded-md max-h-40 overflow-y-auto bg-white dark:bg-slate-950 divide-y shadow-inner">
+                                        {filteredMappingAccounts.map(acc => (
+                                            <button
+                                                key={acc.public_id}
+                                                type="button"
+                                                onClick={() => setSelectedAccountPublicId(acc.public_id)}
+                                                className={`w-full text-left p-2 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors text-xs flex justify-between items-center ${
+                                                    selectedAccountPublicId === acc.public_id 
+                                                        ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-semibold' 
+                                                        : 'text-slate-700 dark:text-slate-300'
+                                                }`}
+                                            >
+                                                <span>{acc.code} - {acc.name}</span>
+                                                {selectedAccountPublicId === acc.public_id && <Check className="w-3.5 h-3.5 text-blue-500" />}
+                                            </button>
                                         ))}
-                                    </select>
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="text-xs font-semibold text-slate-500">Ziel-Kategorie</label>
-                                    <select
-                                        value={selectedTargetCode}
-                                        onChange={(e) => setSelectedTargetCode(e.target.value)}
-                                        className="w-full text-xs p-2 rounded border bg-background border-slate-300 dark:border-slate-700 h-9"
-                                    >
-                                        {mappingData && Object.entries(mappingData.target_codes).map(([code, def]: any) => (
-                                            <option key={code} value={code}>
-                                                {code} ({def.label})
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="text-xs font-semibold text-slate-500">Werttyp</label>
-                                    <select
-                                        value={selectedValueType}
-                                        onChange={(e) => setSelectedValueType(e.target.value)}
-                                        className="w-full text-xs p-2 rounded border bg-background border-slate-300 dark:border-slate-700 h-9"
-                                    >
-                                        {mappingReportType === 'ustva' ? (
-                                            <>
-                                                <option value="base_amount">Bemessungsgrundlage (base_amount)</option>
-                                                <option value="tax_amount">Steuerbetrag (tax_amount)</option>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <option value="balance">Saldo (balance)</option>
-                                                <option value="debit">Soll (debit)</option>
-                                                <option value="credit">Haben (credit)</option>
-                                            </>
+                                        {filteredMappingAccounts.length === 0 && (
+                                            <div className="p-3 text-slate-500 text-center text-xs">
+                                                Keine Konten gefunden
+                                            </div>
                                         )}
-                                    </select>
+                                    </div>
                                 </div>
-                                <div className="space-y-1">
-                                    <label className="text-xs font-semibold text-slate-500">Vorzeichen</label>
-                                    <select
-                                        value={selectedSign}
-                                        onChange={(e) => setSelectedSign(Number(e.target.value))}
-                                        className="w-full text-xs p-2 rounded border bg-background border-slate-300 dark:border-slate-700 h-9"
-                                    >
-                                        <option value={1}>Normal (+1)</option>
-                                        <option value={-1}>Invertiert (-1)</option>
-                                    </select>
+
+                                {/* Right column: Target settings and Action */}
+                                <div className="space-y-3 flex flex-col justify-between">
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                        <div className="space-y-1">
+                                            <label className="text-xs font-semibold text-slate-500">Ziel-Kategorie</label>
+                                            <select
+                                                value={selectedTargetCode}
+                                                onChange={(e) => setSelectedTargetCode(e.target.value)}
+                                                className="w-full text-xs p-2 rounded border bg-background border-slate-300 dark:border-slate-700 h-9"
+                                            >
+                                                {mappingData && Object.entries(mappingData.target_codes).map(([code, def]: any) => (
+                                                    <option key={code} value={code}>
+                                                        {code} ({def.label})
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-xs font-semibold text-slate-500">Werttyp</label>
+                                            <select
+                                                value={selectedValueType}
+                                                onChange={(e) => setSelectedValueType(e.target.value)}
+                                                className="w-full text-xs p-2 rounded border bg-background border-slate-300 dark:border-slate-700 h-9"
+                                            >
+                                                {mappingReportType === 'ustva' ? (
+                                                    <>
+                                                        <option value="base_amount">Bemessungsgrundlage (base_amount)</option>
+                                                        <option value="tax_amount">Steuerbetrag (tax_amount)</option>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <option value="balance">Saldo (balance)</option>
+                                                        <option value="debit">Soll (debit)</option>
+                                                        <option value="credit">Haben (credit)</option>
+                                                    </>
+                                                )}
+                                            </select>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-xs font-semibold text-slate-500">Vorzeichen</label>
+                                            <select
+                                                value={selectedSign}
+                                                onChange={(e) => setSelectedSign(Number(e.target.value))}
+                                                className="w-full text-xs p-2 rounded border bg-background border-slate-300 dark:border-slate-700 h-9"
+                                            >
+                                                <option value={1}>Normal (+1)</option>
+                                                <option value={-1}>Invertiert (-1)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="flex justify-end pt-2">
+                                        <Button
+                                            onClick={handleAddMappingLocal}
+                                            type="button"
+                                            disabled={!selectedAccountPublicId}
+                                            className={`flex justify-center items-center gap-1 text-xs h-9 font-semibold px-4 ${
+                                                !selectedAccountPublicId
+                                                    ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                                                    : 'bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:hover:bg-slate-200 dark:text-slate-900'
+                                            }`}
+                                        >
+                                            <Plus className="w-4 h-4" /> Zuordnung hinzufügen
+                                        </Button>
+                                    </div>
                                 </div>
-                                <Button
-                                    onClick={handleAddMappingLocal}
-                                    type="button"
-                                    className="flex justify-center items-center gap-1 text-xs h-9 bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:hover:bg-slate-200 dark:text-slate-900 font-semibold"
-                                >
-                                    <Plus className="w-4 h-4" /> Hinzufügen
-                                </Button>
                             </div>
                         </div>
 
@@ -1122,7 +1332,7 @@ export function Reports() {
                         <Button
                             onClick={handleSaveMappings}
                             disabled={isSavingMappings}
-                            className="shadow-lg shadow-blue-500/20 bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700"
+                            className="shadow-lg shadow-blue-500/20 bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 font-semibold"
                         >
                             {isSavingMappings ? 'Wird gespeichert...' : 'Zuordnungen speichern'}
                         </Button>
