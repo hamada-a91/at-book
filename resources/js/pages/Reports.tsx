@@ -40,7 +40,7 @@ import { ReportCard } from '@/components/reports/ReportCard';
 import { Badge } from '@/components/ui/badge';
 import { useQuery } from '@tanstack/react-query';
 
-type ReportType = 'trial-balance' | 'profit-loss' | 'balance-sheet' | 'journal-export' | 'account-movements' | 'tax-report' | 'bwa' | 'ustva';
+type ReportType = 'trial-balance' | 'profit-loss' | 'balance-sheet' | 'journal-export' | 'account-movements' | 'tax-report' | 'bwa' | 'ustva' | 'euer';
 
 export function Reports() {
     const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
@@ -55,7 +55,7 @@ export function Reports() {
 
     // Mappings Editor State
     const [mappingEditorOpen, setMappingEditorOpen] = useState(false);
-    const [mappingReportType, setMappingReportType] = useState<'bwa' | 'ustva'>('bwa');
+    const [mappingReportType, setMappingReportType] = useState<'bwa' | 'ustva' | 'euer'>('bwa');
     const [mappingData, setMappingData] = useState<any>(null);
     const [accounts, setAccounts] = useState<any[]>([]);
     const [selectedAccountPublicId, setSelectedAccountPublicId] = useState('');
@@ -214,6 +214,11 @@ export function Reports() {
             downloadUrl = `/api/reports/ustva/transfer-sheet`;
             queryParams.append('year', format(dateRange.from, 'yyyy'));
             queryParams.append('month', format(dateRange.from, 'M'));
+        } else if (activeReport === 'euer') {
+            downloadUrl = `/api/reports/euer/transfer-sheet`;
+            queryParams.append('from_date', format(dateRange.from, 'yyyy-MM-dd'));
+            queryParams.append('to_date', format(dateRange.to, 'yyyy-MM-dd'));
+            queryParams.append('basis', basis);
         } else {
             queryParams.append('from_date', format(dateRange.from, 'yyyy-MM-dd'));
             queryParams.append('to_date', format(dateRange.to, 'yyyy-MM-dd'));
@@ -268,7 +273,7 @@ export function Reports() {
     };
 
     // Mappings Management Actions
-    const loadMappings = async (type: 'bwa' | 'ustva') => {
+    const loadMappings = async (type: 'bwa' | 'ustva' | 'euer') => {
         try {
             const { data } = await axios.get(`/api/report-mappings/${type}`);
             setMappingData(data);
@@ -614,6 +619,136 @@ export function Reports() {
         );
     };
 
+    const renderEuerReport = () => {
+        if (!reportData?.data?.rows) return null;
+
+        return (
+            <div className="space-y-6">
+                <div className="p-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-900 rounded-lg flex items-start gap-3 mb-4">
+                    <Info className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5" />
+                    <div>
+                        <h4 className="font-semibold text-amber-900 dark:text-amber-400">EÜR-Eingabehilfe</h4>
+                        <p className="text-sm text-amber-800 dark:text-amber-300">
+                            Keine elektronische Abgabe. Werte manuell in Mein ELSTER (Anlage EÜR) übernehmen.
+                        </p>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div className="p-4 bg-slate-50 dark:bg-slate-900 border rounded-lg shadow-sm">
+                        <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">Betriebseinnahmen gesamt</div>
+                        <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
+                            {formatCurrency(reportData.totals.total_revenue)}
+                        </div>
+                    </div>
+                    <div className="p-4 bg-slate-50 dark:bg-slate-900 border rounded-lg shadow-sm">
+                        <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">Betriebsausgaben gesamt</div>
+                        <div className="text-2xl font-bold text-rose-600 dark:text-rose-400 mt-1">
+                            {formatCurrency(reportData.totals.total_expense)}
+                        </div>
+                    </div>
+                    <div className="p-4 bg-slate-50 dark:bg-slate-900 border rounded-lg shadow-sm">
+                        <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">Gewinn / Verlust (Ergebnis)</div>
+                        <div className={`text-2xl font-bold mt-1 ${reportData.totals.net_profit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                            {formatCurrency(reportData.totals.net_profit)}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="border rounded-md overflow-hidden">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead className="w-24">Zeile</TableHead>
+                                <TableHead>Bezeichnung</TableHead>
+                                <TableHead className="text-right w-64">Betrag</TableHead>
+                                <TableHead className="w-24"></TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {reportData.data.rows.map((row: any) => {
+                                const hasHerleitung = row.herleitung && row.herleitung.length > 0;
+                                const isExpanded = expandedKzs[row.zeile];
+                                const isCalculated = row.type === 'calculated';
+                                const amountColor = isCalculated 
+                                    ? (row.amount >= 0 ? 'text-emerald-600 dark:text-emerald-400 text-lg font-bold' : 'text-rose-600 dark:text-rose-400 text-lg font-bold') 
+                                    : 'font-semibold';
+
+                                return (
+                                    <React.Fragment key={row.zeile}>
+                                        <TableRow className={`${isCalculated ? "bg-slate-50 dark:bg-slate-800 font-bold" : ""} hover:bg-slate-100/50 dark:hover:bg-slate-800/50`}>
+                                            <TableCell className="font-mono text-slate-700 dark:text-slate-300">{row.zeile}</TableCell>
+                                            <TableCell className={isCalculated ? "font-bold" : ""}>{row.label}</TableCell>
+                                            <TableCell className="text-right">
+                                                <span className={amountColor}>{formatCurrency(row.amount)}</span>
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                                {hasHerleitung && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => toggleKz(row.zeile)}
+                                                        className="h-8 w-8 p-0"
+                                                    >
+                                                        {isExpanded ? '▲' : '▼'}
+                                                    </Button>
+                                                )}
+                                            </TableCell>
+                                        </TableRow>
+
+                                        {hasHerleitung && isExpanded && (
+                                            <TableRow className="bg-slate-50/50 dark:bg-slate-900/30">
+                                                <TableCell colSpan={4} className="p-4 border-t border-b">
+                                                    <div className="space-y-4 pl-8">
+                                                        <div>
+                                                            <div className="text-xs font-semibold text-muted-foreground uppercase mb-2">Herleitung Zuordnungen / Zahlungszuordnung:</div>
+                                                            <Table className="bg-white dark:bg-slate-950 border rounded-md">
+                                                                <TableHeader>
+                                                                    <TableRow className="h-8">
+                                                                        <TableHead className="text-xs h-8">Datum</TableHead>
+                                                                        <TableHead className="text-xs h-8">Dokument</TableHead>
+                                                                        <TableHead className="text-xs h-8">Beschreibung</TableHead>
+                                                                        <TableHead className="text-xs h-8">Konto</TableHead>
+                                                                        <TableHead className="text-right text-xs h-8">Betrag</TableHead>
+                                                                    </TableRow>
+                                                                </TableHeader>
+                                                                <TableBody>
+                                                                    {row.herleitung.map((hl: any, idx: number) => (
+                                                                        <TableRow key={idx} className="h-8 hover:bg-slate-50/50">
+                                                                            <TableCell className="text-xs py-1">
+                                                                                {hl.date ? format(new Date(hl.date), 'dd.MM.yyyy') : '-'}
+                                                                            </TableCell>
+                                                                            <TableCell className="text-xs py-1">
+                                                                                {hl.document_type ? <Badge variant="outline" className="text-[10px] uppercase py-0 px-1">{hl.document_type}</Badge> : ''} {hl.document_number}
+                                                                            </TableCell>
+                                                                            <TableCell className="text-xs py-1 max-w-[200px] truncate" title={hl.document_title}>
+                                                                                {hl.document_title}
+                                                                            </TableCell>
+                                                                            <TableCell className="font-mono text-xs py-1">
+                                                                                {hl.account_code} {hl.account_name}
+                                                                            </TableCell>
+                                                                            <TableCell className="text-right text-xs py-1 font-semibold">
+                                                                                {formatCurrency(hl.amount)}
+                                                                            </TableCell>
+                                                                        </TableRow>
+                                                                    ))}
+                                                                </TableBody>
+                                                            </Table>
+                                                        </div>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        )}
+                                    </React.Fragment>
+                                );
+                            })}
+                        </TableBody>
+                    </Table>
+                </div>
+            </div>
+        );
+    };
+
     const renderAccountMovementsReport = () => {
         return (
             <div className="space-y-6">
@@ -923,6 +1058,9 @@ export function Reports() {
             case 'account-movements':
                 return renderAccountMovementsReport();
 
+            case 'euer':
+                return renderEuerReport();
+
             default:
                 return <p>Bericht wird geladen...</p>;
         }
@@ -938,6 +1076,7 @@ export function Reports() {
             case 'tax-report': return 'USt-Voranmeldung (Alt)';
             case 'bwa': return 'Betriebswirtschaftliche Auswertung (BWA)';
             case 'ustva': return 'USt-Voranmeldung';
+            case 'euer': return 'Einnahmen-Überschuss-Rechnung (EÜR)';
             default: return 'Bericht';
         }
     };
@@ -1022,6 +1161,13 @@ export function Reports() {
                     color="text-rose-600"
                     onClick={() => handleGenerateReport('ustva')}
                 />
+                <ReportCard
+                    title="EÜR (Einnahmen-Überschuss-Rechnung)"
+                    description="Einnahmen-Überschuss-Rechnung auf Zu-/Abflussbasis für Freelancer."
+                    icon={Scale}
+                    color="text-emerald-600"
+                    onClick={() => handleGenerateReport('euer')}
+                />
             </div>
 
             {/* Report Dialog */}
@@ -1093,25 +1239,25 @@ export function Reports() {
                         <Button
                             variant="outline"
                             onClick={() => handleDownloadReport('csv')}
-                            disabled={(activeReport === 'ustva' && hasBlockingErrors) || (activeReport === 'account-movements' && !selectedMovementAccountId)}
-                            className={`shadow-sm hover:shadow-md transition-all duration-300 ${((activeReport === 'ustva' && hasBlockingErrors) || (activeReport === 'account-movements' && !selectedMovementAccountId)) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            title={activeReport === 'ustva' && hasBlockingErrors ? 'Übertragungsbogen gesperrt wegen blockierender Fehler' : activeReport === 'account-movements' && !selectedMovementAccountId ? 'Bitte wählen Sie ein Konto' : ''}
+                            disabled={((activeReport === 'ustva' || activeReport === 'euer') && hasBlockingErrors) || (activeReport === 'account-movements' && !selectedMovementAccountId)}
+                            className={`shadow-sm hover:shadow-md transition-all duration-300 ${(((activeReport === 'ustva' || activeReport === 'euer') && hasBlockingErrors) || (activeReport === 'account-movements' && !selectedMovementAccountId)) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            title={(activeReport === 'ustva' || activeReport === 'euer') && hasBlockingErrors ? 'Übertragungsbogen gesperrt wegen blockierender Fehler' : activeReport === 'account-movements' && !selectedMovementAccountId ? 'Bitte wählen Sie ein Konto' : ''}
                         >
                             <Download className="w-4 h-4 mr-2" />
-                            {activeReport === 'ustva' ? 'Übertragungsbogen (CSV)' : 'CSV'}
+                            {activeReport === 'ustva' || activeReport === 'euer' ? 'Übertragungsbogen (CSV)' : 'CSV'}
                         </Button>
                         <Button
                             onClick={() => handleDownloadReport('pdf')}
-                            disabled={(activeReport === 'ustva' && hasBlockingErrors) || (activeReport === 'account-movements' && !selectedMovementAccountId)}
+                            disabled={((activeReport === 'ustva' || activeReport === 'euer') && hasBlockingErrors) || (activeReport === 'account-movements' && !selectedMovementAccountId)}
                             className={`shadow-lg transition-all duration-300 ${
-                                ((activeReport === 'ustva' && hasBlockingErrors) || (activeReport === 'account-movements' && !selectedMovementAccountId))
+                                (((activeReport === 'ustva' || activeReport === 'euer') && hasBlockingErrors) || (activeReport === 'account-movements' && !selectedMovementAccountId))
                                     ? 'bg-slate-300 dark:bg-slate-800 text-slate-500 dark:text-slate-400 shadow-none cursor-not-allowed opacity-50'
                                     : 'shadow-blue-500/20 hover:shadow-blue-500/30 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 font-semibold'
                             }`}
-                            title={activeReport === 'ustva' && hasBlockingErrors ? 'Übertragungsbogen gesperrt wegen blockierender Fehler' : activeReport === 'account-movements' && !selectedMovementAccountId ? 'Bitte wählen Sie ein Konto' : ''}
+                            title={(activeReport === 'ustva' || activeReport === 'euer') && hasBlockingErrors ? 'Übertragungsbogen gesperrt wegen blockierender Fehler' : activeReport === 'account-movements' && !selectedMovementAccountId ? 'Bitte wählen Sie ein Konto' : ''}
                         >
                             <Download className="w-4 h-4 mr-2" />
-                            {activeReport === 'ustva' ? 'Übertragungsbogen (PDF)' : 'PDF'}
+                            {activeReport === 'ustva' || activeReport === 'euer' ? 'Übertragungsbogen (PDF)' : 'PDF'}
                         </Button>
                         <Button
                             variant="outline"
@@ -1152,6 +1298,13 @@ export function Reports() {
                             className="text-xs"
                         >
                             USt-VA Mappings
+                        </Button>
+                        <Button
+                            variant={mappingReportType === 'euer' ? 'default' : 'outline'}
+                            onClick={() => { setMappingReportType('euer'); loadMappings('euer'); }}
+                            className="text-xs"
+                        >
+                            EÜR Mappings
                         </Button>
                     </div>
 
