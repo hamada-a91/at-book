@@ -13,7 +13,7 @@ class EuerMappingService
 
     public function formVersionForYear(int $year): string
     {
-        return 'euer-' . $year;
+        return 'euer-'.$year;
     }
 
     /**
@@ -90,7 +90,7 @@ class EuerMappingService
 
         foreach ($this->defaultAccountMappings() as $default) {
             $account = $accounts->get($default['code']);
-            if (!$account) {
+            if (! $account) {
                 continue;
             }
 

@@ -47,7 +47,7 @@ class EuerReport
                 ? \App\Models\Invoice::withoutGlobalScopes()->find($payment->payable_id)
                 : \App\Models\Beleg::withoutGlobalScopes()->find($payment->payable_id);
 
-            if (!$payable || !$payable->journal_entry_id) {
+            if (! $payable || ! $payable->journal_entry_id) {
                 continue;
             }
 
@@ -82,7 +82,7 @@ class EuerReport
                 }
 
                 $account = $accountsById->get($line->account_id);
-                if (!$account) {
+                if (! $account) {
                     continue;
                 }
 
@@ -117,7 +117,7 @@ class EuerReport
             ->get();
 
         foreach ($directCashBelege as $beleg) {
-            if (!$beleg->journal_entry_id) {
+            if (! $beleg->journal_entry_id) {
                 continue;
             }
 
@@ -135,7 +135,7 @@ class EuerReport
 
             foreach ($valueLines as $line) {
                 $account = $accountsById->get($line->account_id);
-                if (!$account) {
+                if (! $account) {
                     continue;
                 }
 
@@ -258,7 +258,7 @@ class EuerReport
             $firstAlloc = $accAllocs->first();
             $accType = $firstAlloc['account_type'];
 
-            if (in_array($accType, ['revenue', 'expense'], true) && !in_array($publicId, $mappedPublicIds, true)) {
+            if (in_array($accType, ['revenue', 'expense'], true) && ! in_array($publicId, $mappedPublicIds, true)) {
                 $unmappedActiveAccounts[] = [
                     'account_code' => $firstAlloc['account_code'],
                     'account_name' => $firstAlloc['account_name'],
@@ -307,7 +307,7 @@ class EuerReport
     private function tenant(): Tenant
     {
         $tenant = app('currentTenant');
-        if (!$tenant instanceof Tenant) {
+        if (! $tenant instanceof Tenant) {
             $tenant = Tenant::findOrFail($this->queries->tenantId());
         }
 
