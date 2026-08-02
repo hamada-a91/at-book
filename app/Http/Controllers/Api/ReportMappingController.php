@@ -9,6 +9,7 @@ use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Models\ReportAccountMapping;
 use App\Modules\Accounting\Reports\Bwa\BwaMappingService;
 use App\Modules\Accounting\Reports\Ustva\UstvaMappingService;
+use App\Modules\Accounting\Reports\Euer\EuerMappingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -59,6 +60,28 @@ class ReportMappingController extends Controller
         $this->replaceMappings($request, 'ustva', array_keys($mappings->kennziffern()), $formVersion);
 
         return $this->ustvaIndex($request, $mappings);
+    }
+
+    public function euerIndex(Request $request, EuerMappingService $mappings): JsonResponse
+    {
+        $tenant = $this->tenant();
+        $formVersion = $request->input('form_version', $mappings->formVersionForYear((int) $request->input('year', EuerMappingService::DEFAULT_YEAR)));
+        $rows = $mappings->mappings($tenant, $formVersion);
+
+        return response()->json([
+            'report_type' => 'euer',
+            'form_version' => $formVersion,
+            'target_codes' => $mappings->lines(),
+            'mappings' => $this->mappingRows($tenant, $rows),
+        ]);
+    }
+
+    public function euerUpdate(Request $request, EuerMappingService $mappings): JsonResponse
+    {
+        $formVersion = $request->input('form_version', $mappings->formVersionForYear((int) $request->input('year', EuerMappingService::DEFAULT_YEAR)));
+        $this->replaceMappings($request, 'euer', array_keys($mappings->lines()), $formVersion);
+
+        return $this->euerIndex($request, $mappings);
     }
 
     /**

@@ -17,6 +17,7 @@ class ReportExportService
         $view = match ($report['report_type']) {
             'bwa' => 'reports.bwa',
             'ustva' => 'reports.ustva',
+            'euer' => 'reports.euer',
             default => 'reports.pdf',
         };
 
@@ -128,6 +129,16 @@ class ReportExportService
                     $row['tax_amount'] ?? 0,
                     implode('; ', array_map(fn (array $source) => trim(($source['account_code'] ?? '').' '.($source['account_name'] ?? '')).'='.$source['amount'], array_merge($row['herleitung'] ?? [], $row['tax_herleitung'] ?? []))),
                 ], $report['data']['kennziffern']),
+            ]],
+            'euer' => [[
+                'title' => 'EÜR Eingabehilfe',
+                'headers' => ['Zeile', 'Bezeichnung', 'Betrag', 'Herleitung'],
+                'rows' => array_map(fn (array $row) => [
+                    $row['zeile'],
+                    $row['label'],
+                    $row['amount'],
+                    implode('; ', array_map(fn (array $source) => trim(($source['account_code'] ?? '').' '.($source['account_name'] ?? '')).'='.$source['amount'], $row['herleitung'] ?? [])),
+                ], $report['data']['rows']),
             ]],
             default => throw new InvalidArgumentException('Unbekannter Report-Typ.'),
         };

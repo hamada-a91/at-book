@@ -117,6 +117,7 @@ class DemoTenantSeeder extends Seeder
         }
         app(BwaMappingService::class)->ensureDefaults($tenant);
         app(UstvaMappingService::class)->ensureDefaults($tenant);
+        app(\App\Modules\Accounting\Reports\Euer\EuerMappingService::class)->ensureDefaults($tenant);
 
         $this->command->info('✅ Kontenplan: '.Account::count().' Konten');
 

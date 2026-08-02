@@ -78,8 +78,8 @@ class ReportQualityService
         // Vollständigkeitshinweis: nicht gebuchte Belege/Rechnungen (Entwürfe) im Zeitraum
         // tauchen mangels Buchung in KEINER Auswertung auf. Nur eine Warnung - Entwürfe
         // können legitim in einen anderen Zeitraum gehören -, aber wichtig, damit keine
-        // unvollständige USt-VA/BWA/GuV entsteht.
-        if (in_array($reportType, ['ustva', 'bwa', 'profit_loss'], true)) {
+        // unvollständige USt-VA/BWA/GuV/EÜR entsteht.
+        if (in_array($reportType, ['ustva', 'bwa', 'profit_loss', 'euer'], true)) {
             $unbooked = $this->unbookedDocumentCounts($period);
             if ($unbooked['total'] > 0) {
                 $warnings[] = [
@@ -106,9 +106,42 @@ class ReportQualityService
             if ($settings && (! $settings->books_locked_until || $settings->books_locked_until->lt($period->to))) {
                 $warnings[] = $this->finding('ustva_period_not_locked', 'warning', 'Die Periode ist noch nicht vollständig festgeschrieben.', 1);
             }
+        }
 
+        if (in_array($reportType, ['ustva', 'euer'], true)) {
+            $settings = CompanySetting::query()->first();
             if (! $settings || blank($settings->tax_number)) {
                 $warnings[] = $this->finding('missing_tax_number', 'warning', 'Steuernummer fehlt in den Firmendaten.', 1);
+            }
+        }
+
+        if ($reportType === 'euer') {
+            // AVEÜR Blocker: Bewegung auf Anlagekonten (SKR03 Klasse 0)
+            $assetMovements = DB::table('journal_entry_lines')
+                ->join('journal_entries', 'journal_entries.id', '=', 'journal_entry_lines.journal_entry_id')
+                ->join('accounts', 'accounts.id', '=', 'journal_entry_lines.account_id')
+                ->whereNull('journal_entries.deleted_at')
+                ->where('journal_entries.tenant_id', $this->queries->tenantId())
+                ->whereIn('journal_entries.status', $period->statuses())
+                ->whereBetween('journal_entries.booking_date', [$period->from->toDateString(), $period->to->toDateString()])
+                ->where('accounts.code', 'like', '0%') // SKR03 Klasse 0
+                ->count();
+
+            if ($assetMovements > 0) {
+                $blocking[] = $this->finding('aveur_missing_asset_register', 'error', 'Anlagevermögen relevant, aber kein geprüftes Anlagenverzeichnis vorhanden.', $assetMovements);
+            }
+
+            // Unmatched bank transactions in period
+            if (\Illuminate\Support\Facades\Schema::hasTable('bank_transactions')) {
+                $unmatchedBankTx = DB::table('bank_transactions')
+                    ->where('tenant_id', $this->queries->tenantId())
+                    ->where('status', 'unmatched')
+                    ->whereBetween('booking_date', [$period->from->toDateString(), $period->to->toDateString()])
+                    ->count();
+
+                if ($unmatchedBankTx > 0) {
+                    $blocking[] = $this->finding('euer_unmatched_bank_transactions', 'error', 'Es gibt nicht zugeordnete Bankumsätze im Zeitraum.', $unmatchedBankTx);
+                }
             }
         }
 

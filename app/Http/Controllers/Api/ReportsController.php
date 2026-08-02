@@ -16,6 +16,7 @@ use App\Modules\Accounting\Reports\ReportPeriod;
 use App\Modules\Accounting\Reports\ReportQualityService;
 use App\Modules\Accounting\Reports\TrialBalanceReport;
 use App\Modules\Accounting\Reports\UstvaReport;
+use App\Modules\Accounting\Reports\EuerReport;
 use App\Modules\Accounting\Reports\VatReport;
 use App\Modules\Projects\Models\CostCenter;
 use App\Modules\Projects\Models\Project;
@@ -119,6 +120,36 @@ class ReportsController extends Controller
         }
     }
 
+    public function euerTransferSheet(Request $request, ReportExportService $exports): Response
+    {
+        try {
+            $period = $this->periodFromRequest($request, 'euer');
+            $report = $this->buildReport('euer', $period, $request);
+
+            if (($report['quality']['blocking_errors'] ?? []) !== []) {
+                return response()->json([
+                    'message' => 'Der EÜR-Übertragungsbogen ist wegen blockierender Qualitätsbefunde nicht freigegeben.',
+                    'quality' => $report['quality'],
+                ], 422);
+            }
+
+            if ($settings = CompanySetting::query()->first()) {
+                AuditLog::record($settings, 'euer_transfer_sheet_generated', [], [
+                    'period' => $report['period'],
+                    'format' => $request->input('format', 'pdf'),
+                ]);
+            }
+
+            return match ($request->input('format', 'pdf')) {
+                'pdf' => $exports->pdf($report),
+                'csv' => $exports->csv($report),
+                default => response()->json(['message' => 'Ungültiges Exportformat.'], 422),
+            };
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+    }
+
     public function quality(Request $request, ReportQualityService $quality): JsonResponse
     {
         try {
@@ -142,6 +173,7 @@ class ReportsController extends Controller
             'balance-sheet' => app(BalanceSheetReport::class)->generate($period),
             'bwa' => app(BwaReport::class)->generate($period),
             'ustva' => app(UstvaReport::class)->generate($period),
+            'euer' => app(EuerReport::class)->generate($period),
             'journal' => app(JournalReport::class)->generate($period),
             'account-movements' => app(AccountMovementsReport::class)->generate($period, $request->integer('account_id') ?: null),
             'vat' => app(VatReport::class)->generate($period),
@@ -171,6 +203,7 @@ class ReportsController extends Controller
             'account-movements' => 'account-movements',
             'vat', 'tax-report' => 'vat',
             'ustva' => 'ustva',
+            'euer' => 'euer',
             default => throw new InvalidArgumentException('Unbekannter Berichtstyp.'),
         };
     }
