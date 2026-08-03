@@ -20,6 +20,7 @@ class BackupImportService
      */
     public const ENTITY_ORDER = [
         'users',
+        'report_exports',
         'accounts',
         'tax_codes',
         'report_account_mappings',
@@ -925,6 +926,9 @@ class BackupImportService
                 'contact_public_id' => ['contacts', 'contact_id'],
                 'cost_object_public_id' => ['cost_objects', 'cost_object_id'],
             ],
+            'report_exports' => [
+                'created_by_public_id' => ['users', 'created_by'],
+            ],
         ];
 
         if (! isset($mappings[$entityType])) {
@@ -1030,8 +1034,23 @@ class BackupImportService
         unset($data['updated_at']);
         if ($entityType === 'audit_logs' && isset($data['created_at'])) {
             $data['created_at'] = \Carbon\Carbon::parse($data['created_at']);
+        } elseif ($entityType === 'report_exports' && isset($data['created_at'])) {
+            $data['created_at'] = \Carbon\Carbon::parse($data['created_at']);
         } else {
             unset($data['created_at']);
+        }
+
+        if ($entityType === 'report_exports') {
+            $data['file_path'] = null;
+            if (isset($data['expires_at'])) {
+                $data['expires_at'] = \Carbon\Carbon::parse($data['expires_at']);
+            }
+            if (isset($data['period_from'])) {
+                $data['period_from'] = \Carbon\Carbon::parse($data['period_from'])->toDateString();
+            }
+            if (isset($data['period_to'])) {
+                $data['period_to'] = \Carbon\Carbon::parse($data['period_to'])->toDateString();
+            }
         }
 
         // Kompatibilität: Backups vor dem status-Fix im JournalEntryTransformer
@@ -1329,6 +1348,7 @@ class BackupImportService
             'journal_entry_lines' => \App\Modules\Accounting\Models\JournalEntryLine::class,
             'payments' => \App\Models\Payment::class,
             'inventory_transactions' => \App\Models\InventoryTransaction::class,
+            'report_exports' => \App\Models\ReportExport::class,
             // Note: 'documents' excluded - uses morph relationship without direct tenant_id
             'audit_logs' => AuditLog::class,
         ];

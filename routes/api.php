@@ -77,6 +77,14 @@ Route::middleware(['api', 'auth:api', \App\Http\Middleware\SetTenantFromUser::cl
             // SPEC-08 (Teil A)
             Route::get('/cost-centers', [ReportsController::class, 'costCenters']);
             Route::get('/projects/{project}/profitability', [ReportsController::class, 'projectProfitability']);
+
+            // SPEC-11A-R TEIL 5: Report Exports (XLSX & Queue)
+            Route::get('/exports', [ReportsController::class, 'exportsIndex']);
+            Route::post('/{type}/exports', [ReportsController::class, 'createExport'])
+                ->whereIn('type', ['trial-balance', 'profit-loss', 'balance-sheet', 'bwa', 'ustva', 'euer', 'journal', 'journal-export', 'account-movements', 'vat', 'tax-report']);
+            Route::get('/exports/{export}', [ReportsController::class, 'showExport']);
+            Route::get('/exports/{export}/download', [ReportsController::class, 'downloadExport']);
+            Route::delete('/exports/{export}', [ReportsController::class, 'deleteExport']);
         });
 
         Route::get('/report-mappings/bwa', [ReportMappingController::class, 'index'])

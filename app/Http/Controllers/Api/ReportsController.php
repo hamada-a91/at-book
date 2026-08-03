@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\GenerateReportExportJob;
 use App\Models\CompanySetting;
+use App\Models\ReportExport;
 use App\Modules\Accounting\Models\AuditLog;
 use App\Modules\Accounting\Models\JournalEntryLine;
 use App\Modules\Accounting\Reports\AccountMovementsReport;
@@ -24,6 +26,8 @@ use App\Modules\Projects\Services\ProjectReportService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use InvalidArgumentException;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -276,5 +280,90 @@ class ReportsController extends Controller
                 'balance' => $data->sum('balance'),
             ],
         ]);
+    }
+
+    public function createExport(Request $request, string $type): JsonResponse
+    {
+        $request->validate([
+            'format' => ['required', 'string', 'in:pdf,csv,xlsx'],
+            'from_date' => ['nullable', 'date'],
+            'to_date' => ['nullable', 'date'],
+            'year' => ['nullable', 'integer'],
+            'month' => ['nullable', 'integer'],
+            'basis' => ['nullable', 'string', 'in:posted,preview'],
+            'account_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('accounts', 'id')->where('tenant_id', tenant()->id),
+            ],
+        ]);
+
+        $canonicalType = $this->canonicalType($type);
+        $period = $this->periodFromRequest($request, $canonicalType);
+
+        $export = ReportExport::create([
+            'tenant_id' => tenant()->id,
+            'report_type' => $canonicalType,
+            'format' => $request->input('format'),
+            'period_from' => $period->from->toDateString(),
+            'period_to' => $period->to->toDateString(),
+            'basis' => $period->basis,
+            'params' => $request->only(['account_id', 'year', 'month']),
+            'status' => 'pending',
+            'created_by' => auth()->id(),
+        ]);
+
+        GenerateReportExportJob::dispatch($export);
+
+        return response()->json([
+            'public_id' => $export->public_id,
+            'status' => $export->status,
+        ], 202);
+    }
+
+    public function exportsIndex(): JsonResponse
+    {
+        $exports = ReportExport::orderBy('created_at', 'desc')->get();
+
+        return response()->json($exports);
+    }
+
+    public function showExport(string $export): JsonResponse
+    {
+        $exportModel = ReportExport::where('public_id', $export)->firstOrFail();
+
+        return response()->json($exportModel);
+    }
+
+    public function downloadExport(string $export)
+    {
+        $exportModel = ReportExport::where('public_id', $export)->firstOrFail();
+
+        if (in_array($exportModel->status, ['pending', 'processing'], true)) {
+            return response()->json(['message' => 'Der Export wird noch verarbeitet.'], 409);
+        }
+
+        if ($exportModel->status === 'failed') {
+            return response()->json(['message' => 'Der Export ist fehlgeschlagen: '.$exportModel->error_message], 400);
+        }
+
+        if (! $exportModel->file_path || ! Storage::disk('local')->exists($exportModel->file_path) || ($exportModel->expires_at && $exportModel->expires_at->isPast())) {
+            return response()->json(['message' => 'Die Exportdatei ist abgelaufen oder nicht verfügbar.'], 410);
+        }
+
+        return Storage::disk('local')->download($exportModel->file_path);
+    }
+
+    public function deleteExport(string $export): JsonResponse
+    {
+        $exportModel = ReportExport::where('public_id', $export)->firstOrFail();
+
+        if ($exportModel->file_path) {
+            Storage::disk('local')->delete($exportModel->file_path);
+        }
+
+        $exportModel->delete();
+
+        return response()->json(null, 204);
     }
 }

@@ -18,6 +18,7 @@ class BackupExportService
     public const ENTITY_ORDER = [
         'tenants',
         'users',
+        'report_exports',
         'accounts',
         'tax_codes',
         'report_account_mappings',

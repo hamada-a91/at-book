@@ -25,6 +25,7 @@ class EntityTransformerRegistry
         $this->transformers = [
             'tenants' => TenantTransformer::class,
             'users' => UserTransformer::class,
+            'report_exports' => ReportExportTransformer::class,
             'accounts' => AccountTransformer::class,
             'tax_codes' => TaxCodeTransformer::class,
             'report_account_mappings' => ReportAccountMappingTransformer::class,

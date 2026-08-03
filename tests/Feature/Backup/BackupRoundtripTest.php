@@ -140,6 +140,21 @@ class BackupRoundtripTest extends TestCase
         // dass die Periodensperre den Roundtrip überlebt (CompanySettingTransformer).
         $dataA->companySetting->update(['books_locked_until' => now()->subDays(20)->toDateString()]);
 
+        // SPEC-11A-R TEIL 5: ReportExport in Tenant A erzeugen, um Roundtrip explizit zu verifizieren
+        \App\Models\ReportExport::create([
+            'tenant_id' => $tenantA->id,
+            'report_type' => 'bwa',
+            'format' => 'xlsx',
+            'period_from' => '2026-01-01',
+            'period_to' => '2026-07-31',
+            'basis' => 'posted',
+            'status' => 'ready',
+            'file_path' => 'report-exports/'.$tenantA->id.'/some-uuid.xlsx',
+            'file_size' => 12345,
+            'expires_at' => now()->addDays(30),
+            'created_by' => $userA->id,
+        ]);
+
         // Counts VOR dem Export einfrieren, um später "Tenant A unverändert" zu prüfen.
         $countsBeforeA = $this->tenantModelCounts($tenantA->id);
 
