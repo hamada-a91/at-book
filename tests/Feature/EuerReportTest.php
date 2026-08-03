@@ -246,6 +246,40 @@ class EuerReportTest extends TestCase
             ->assertStatus(422);
     }
 
+    public function test_euer_equity_class0_account_does_not_trigger_aveur_blocker(): void
+    {
+        $data = TenantTestDataFactory::create('euer-equity');
+        $token = auth('api')->login($data->user);
+        $headers = ['Authorization' => "Bearer {$token}"];
+
+        app(EuerMappingService::class)->ensureDefaults($data->tenant);
+
+        // SKR03-Kapitalkonto in Klasse 0, aber type=equity (KEIN Anlagevermögen)
+        $equityAccount = Account::withoutGlobalScopes()->firstOrCreate(
+            ['tenant_id' => $data->tenant->id, 'code' => '0820'],
+            ['name' => 'Kapitalrücklage', 'type' => 'equity']
+        );
+
+        Auth::setUser($data->user);
+        (new BookingService)->createBooking([
+            'date' => '2026-03-10',
+            'description' => 'Kapitaleinlage',
+            'lines' => [
+                ['account_id' => $data->accountBank->id, 'type' => 'debit', 'amount' => 500000],
+                ['account_id' => $equityAccount->id, 'type' => 'credit', 'amount' => 500000],
+            ],
+        ], autoLock: true);
+
+        $response = $this->withHeaders($headers)
+            ->getJson('/api/reports/euer?from_date=2026-01-01&to_date=2026-07-31');
+        $response->assertOk();
+
+        // Eigenkapital-Buchung darf den AVEÜR-Blocker NICHT auslösen
+        $this->assertFalse(
+            collect($response->json('quality.blocking_errors'))->contains('code', 'aveur_missing_asset_register')
+        );
+    }
+
     public function test_euer_unmatched_bank_transactions_blocker(): void
     {
         $data = TenantTestDataFactory::create('euer-bank');

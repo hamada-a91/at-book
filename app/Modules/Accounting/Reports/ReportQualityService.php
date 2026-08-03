@@ -116,7 +116,10 @@ class ReportQualityService
         }
 
         if ($reportType === 'euer') {
-            // AVEÜR Blocker: Bewegung auf Anlagekonten (SKR03 Klasse 0)
+            // AVEÜR-Blocker: Bewegung auf Anlagevermögen (SKR03-Klasse 0, aber NUR
+            // type=asset). Die SKR03-Kapital-/Eigenkapitalkonten (0800-0999) liegen
+            // ebenfalls in Klasse 0 - eine Kapitaleinlage/-rücklage ist aber KEIN
+            // abschreibungsfähiges Anlagevermögen und darf die EÜR nicht blockieren.
             $assetMovements = DB::table('journal_entry_lines')
                 ->join('journal_entries', 'journal_entries.id', '=', 'journal_entry_lines.journal_entry_id')
                 ->join('accounts', 'accounts.id', '=', 'journal_entry_lines.account_id')
@@ -124,11 +127,12 @@ class ReportQualityService
                 ->where('journal_entries.tenant_id', $this->queries->tenantId())
                 ->whereIn('journal_entries.status', $period->statuses())
                 ->whereBetween('journal_entries.booking_date', [$period->from->toDateString(), $period->to->toDateString()])
-                ->where('accounts.code', 'like', '0%') // SKR03 Klasse 0
+                ->where('accounts.type', 'asset')
+                ->where('accounts.code', 'like', '0%') // SKR03-Klasse 0 = Anlagevermögen
                 ->count();
 
             if ($assetMovements > 0) {
-                $blocking[] = $this->finding('aveur_missing_asset_register', 'error', 'Anlagevermögen relevant, aber kein geprüftes Anlagenverzeichnis vorhanden.', $assetMovements);
+                $blocking[] = $this->finding('aveur_missing_asset_register', 'error', 'Im Zeitraum wurde auf Anlagevermögen gebucht, aber es liegt noch kein geprüftes Anlagenverzeichnis vor. Abschreibungen (AfA) können daher nicht automatisch berücksichtigt werden – die EÜR ist noch unvollständig.', $assetMovements);
             }
 
             // Unmatched bank transactions in period
@@ -140,7 +144,7 @@ class ReportQualityService
                     ->count();
 
                 if ($unmatchedBankTx > 0) {
-                    $blocking[] = $this->finding('euer_unmatched_bank_transactions', 'error', 'Es gibt nicht zugeordnete Bankumsätze im Zeitraum.', $unmatchedBankTx);
+                    $blocking[] = $this->finding('euer_unmatched_bank_transactions', 'error', 'Es gibt noch nicht zugeordnete Bankumsätze im Zeitraum. Bitte diese im Bankabgleich einer Rechnung, einem Beleg oder einer Kategorie zuordnen, bevor die EÜR erstellt wird.', $unmatchedBankTx);
                 }
             }
         }
