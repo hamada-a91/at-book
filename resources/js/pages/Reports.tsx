@@ -71,7 +71,10 @@ export function Reports() {
     // Selected account for Kontobewegungen report
     const [selectedMovementAccountId, setSelectedMovementAccountId] = useState<number | null>(null);
 
-    // Fetch current user details to check for 'owner' role
+    // report_exports States
+    const [exportsHistoryOpen, setExportsHistoryOpen] = useState(false);
+
+    // Fetch current user details to check for roles
     const { data: currentUser } = useQuery({
         queryKey: ['currentUser'],
         queryFn: async () => {
@@ -81,6 +84,22 @@ export function Reports() {
     });
 
     const isOwner = currentUser?.roles?.some((role: any) => role.name === 'owner') || false;
+    const isOwnerOrBuchhalter = currentUser?.roles?.some((role: any) => role.name === 'owner' || role.name === 'buchhalter') || false;
+
+    // Fetch exports history
+    const { data: exportsList, isLoading: isLoadingExports, refetch: refetchExports } = useQuery({
+        queryKey: ['reportsExports'],
+        queryFn: async () => {
+            const response = await axios.get('/api/reports/exports');
+            return response.data;
+        },
+        enabled: isOwnerOrBuchhalter,
+        refetchInterval: (query) => {
+            const exports = query.state.data as any[];
+            const hasActive = exports?.some((exp: any) => exp.status === 'pending' || exp.status === 'processing') || false;
+            return hasActive ? 2000 : false;
+        },
+    });
 
     // Filter accounts based on search query for Kontobewegungen (defensive)
     const filteredAccounts = accounts.filter(acc => {
@@ -270,6 +289,126 @@ export function Reports() {
                 alert(error.response?.data?.message || 'Fehler beim Export des Berichts');
             }
         }
+    };
+
+    const handleCreateBackgroundExport = async (formatType: 'pdf' | 'csv' | 'xlsx') => {
+        if (!activeReport) return;
+
+        const payload: any = {
+            format: formatType,
+        };
+
+        if (activeReport === 'ustva') {
+            payload.year = format(dateRange.from, 'yyyy');
+            payload.month = format(dateRange.from, 'M');
+            payload.basis = 'posted';
+        } else {
+            payload.from_date = format(dateRange.from, 'yyyy-MM-dd');
+            payload.to_date = format(dateRange.to, 'yyyy-MM-dd');
+            payload.basis = basis;
+        }
+
+        if (activeReport === 'account-movements') {
+            if (!selectedMovementAccountId) {
+                alert('Bitte wählen Sie zuerst ein Konto aus.');
+                return;
+            }
+            payload.account_id = selectedMovementAccountId;
+        }
+
+        try {
+            await axios.post(`/api/reports/${activeReport}/exports`, payload);
+            alert('Export-Auftrag wurde im Hintergrund gestartet.');
+            refetchExports();
+            setExportsHistoryOpen(true);
+        } catch (error: any) {
+            console.error(error);
+            alert(error.response?.data?.message || 'Fehler beim Starten des Exports.');
+        }
+    };
+
+    const handleDownloadExportFile = async (exportItem: any) => {
+        try {
+            const response = await axios.get(`/api/reports/exports/${exportItem.public_id}/download`, {
+                responseType: 'blob',
+            });
+            
+            const formatType = exportItem.format.toLowerCase();
+            const mimeType = formatType === 'xlsx' 
+                ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                : (formatType === 'pdf' ? 'application/pdf' : 'text/csv;charset=utf-8');
+                
+            const blob = new Blob([response.data], { type: mimeType });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            
+            const filename = `${exportItem.report_type}_${exportItem.period_from || 'export'}_${exportItem.period_to || 'date'}.${formatType}`;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+        } catch (error: any) {
+            console.error(error);
+            if (error.response?.data instanceof Blob) {
+                try {
+                    const text = await error.response.data.text();
+                    const errData = JSON.parse(text);
+                    alert(errData.message || 'Fehler beim Herunterladen des Exports');
+                } catch (e) {
+                    alert('Fehler beim Herunterladen des Exports');
+                }
+            } else {
+                alert(error.response?.data?.message || 'Fehler beim Herunterladen des Exports');
+            }
+        }
+    };
+
+    const handleDeleteExport = async (publicId: string) => {
+        if (!window.confirm('Möchten Sie diesen Bericht-Export wirklich dauerhaft löschen? Dies löscht auch die Datei vom Server.')) {
+            return;
+        }
+
+        try {
+            await axios.delete(`/api/reports/exports/${publicId}`);
+            refetchExports();
+        } catch (error: any) {
+            console.error(error);
+            alert(error.response?.data?.message || 'Fehler beim Löschen des Exports.');
+        }
+    };
+
+    const formatExportDate = (dateStr: string | null) => {
+        if (!dateStr) return '-';
+        try {
+            return format(new Date(dateStr), 'dd.MM.yyyy');
+        } catch (e) {
+            return dateStr;
+        }
+    };
+
+    const formatExportDateTime = (dateStr: string | null) => {
+        if (!dateStr) return '-';
+        try {
+            return format(new Date(dateStr), 'dd.MM.yyyy HH:mm');
+        } catch (e) {
+            return dateStr;
+        }
+    };
+
+    const formatExportSize = (bytes: number | null) => {
+        if (bytes === null || bytes === undefined) return '-';
+        if (bytes < 1024) return `${bytes} B`;
+        const kb = bytes / 1024;
+        if (kb < 1024) return `${kb.toFixed(1)} KB`;
+        const mb = kb / 1024;
+        return `${mb.toFixed(1)} MB`;
+    };
+
+    const getExportReportTitle = (type: string) => {
+        const mappedType = type === 'journal' ? 'journal-export' : (type === 'vat' ? 'tax-report' : type);
+        return getReportTitle(mappedType as ReportType);
     };
 
     // Mappings Management Actions
@@ -1096,14 +1235,24 @@ export function Reports() {
                         <Button
                             variant="outline"
                             onClick={() => {
-                                setMappingEditorOpen(true);
-                                loadAccounts();
-                                loadMappings(mappingReportType);
+                                  setMappingEditorOpen(true);
+                                  loadAccounts();
+                                  loadMappings(mappingReportType);
                             }}
                             className="flex items-center gap-2 border-slate-300 dark:border-slate-600 shadow-sm"
                         >
                             <SlidersHorizontal className="w-4 h-4" />
                             Zuordnungen verwalten
+                        </Button>
+                    )}
+                    {isOwnerOrBuchhalter && (
+                        <Button
+                            variant="outline"
+                            onClick={() => setExportsHistoryOpen(true)}
+                            className="flex items-center gap-2 border-slate-300 dark:border-slate-600 shadow-sm"
+                        >
+                            <Download className="w-4 h-4 text-emerald-500" />
+                            Meine Exporte
                         </Button>
                     )}
                     <DateRangeSelector onRangeChange={(from, to) => setDateRange({ from, to })} />
@@ -1236,6 +1385,18 @@ export function Reports() {
                             <Printer className="w-4 h-4 mr-2" />
                             Drucken
                         </Button>
+                        {isOwnerOrBuchhalter && (
+                            <Button
+                                variant="outline"
+                                onClick={() => handleCreateBackgroundExport('xlsx')}
+                                disabled={((activeReport === 'ustva' || activeReport === 'euer') && hasBlockingErrors) || (activeReport === 'account-movements' && !selectedMovementAccountId)}
+                                className="shadow-sm hover:shadow-md transition-all duration-300 hover:border-slate-300 dark:hover:border-slate-600 text-blue-600 dark:text-blue-400"
+                                title={(activeReport === 'ustva' || activeReport === 'euer') && hasBlockingErrors ? 'Übertragungsbogen gesperrt wegen blockierender Fehler' : activeReport === 'account-movements' && !selectedMovementAccountId ? 'Bitte wählen Sie ein Konto' : ''}
+                            >
+                                <Activity className="w-4 h-4 mr-2" />
+                                Hintergrund-Export (XLSX)
+                            </Button>
+                        )}
                         <Button
                             variant="outline"
                             onClick={() => handleDownloadReport('csv')}
@@ -1263,6 +1424,148 @@ export function Reports() {
                             variant="outline"
                             onClick={() => setActiveReport(null)}
                             className="shadow-sm hover:shadow-md transition-all duration-300"
+                        >
+                            Schließen
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Reports Export History Dialog */}
+            <Dialog open={exportsHistoryOpen} onOpenChange={(open) => !open && setExportsHistoryOpen(false)}>
+                <DialogContent className="max-w-[75vw] h-[80vh] flex flex-col">
+                    <DialogHeader>
+                        <DialogTitle className="text-2xl font-bold flex items-center gap-2">
+                            <span>Meine Berichts-Exporte</span>
+                            <Badge variant="outline" className="text-xs">Historie</Badge>
+                        </DialogTitle>
+                        <DialogDescription>
+                            Übersicht aller asynchron erstellten Berichts-Exporte. Dateien stehen für 30 Tage zum Download bereit.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="flex-1 overflow-y-auto py-4">
+                        {isLoadingExports ? (
+                            <div className="flex items-center justify-center h-48">
+                                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+                            </div>
+                        ) : !exportsList || exportsList.length === 0 ? (
+                            <div className="text-center py-12 text-slate-500">
+                                <FileText className="w-12 h-12 mx-auto mb-4 opacity-30" />
+                                <p>Es wurden noch keine Hintergrund-Exporte für diesen Mandanten erzeugt.</p>
+                            </div>
+                        ) : (
+                            <div className="border border-slate-200 dark:border-slate-800 rounded-md overflow-hidden">
+                                <Table>
+                                    <TableHeader className="bg-slate-50 dark:bg-slate-900">
+                                        <TableRow>
+                                            <TableHead>Bericht</TableHead>
+                                            <TableHead className="w-20">Format</TableHead>
+                                            <TableHead>Zeitraum</TableHead>
+                                            <TableHead>Grundlage</TableHead>
+                                            <TableHead>Status</TableHead>
+                                            <TableHead className="text-right">Größe</TableHead>
+                                            <TableHead>Erstellt am</TableHead>
+                                            <TableHead>Ablaufdatum</TableHead>
+                                            <TableHead className="w-24 text-right pr-4">Aktionen</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {exportsList.map((exp: any) => {
+                                            const isExpired = exp.expires_at ? new Date(exp.expires_at) < new Date() : false;
+                                            const isPendingOrProcessing = exp.status === 'pending' || exp.status === 'processing';
+                                            
+                                            // Determine badge color
+                                            let statusBadge = null;
+                                            if (isPendingOrProcessing) {
+                                                statusBadge = (
+                                                    <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/50 flex items-center gap-1 w-fit">
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping"></span>
+                                                        {exp.status === 'pending' ? 'Wartend' : 'In Arbeit'}
+                                                    </Badge>
+                                                );
+                                            } else if (exp.status === 'ready') {
+                                                if (isExpired) {
+                                                    statusBadge = (
+                                                        <Badge variant="secondary" className="bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 flex items-center gap-1 w-fit">
+                                                            Abgelaufen
+                                                        </Badge>
+                                                    );
+                                                } else {
+                                                    statusBadge = (
+                                                        <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/50 flex items-center gap-1 w-fit">
+                                                            Bereit
+                                                        </Badge>
+                                                    );
+                                                }
+                                            } else {
+                                                statusBadge = (
+                                                    <Badge 
+                                                        variant="outline" 
+                                                        className="bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/50 flex items-center gap-1 w-fit cursor-help"
+                                                        title={exp.error_message || 'Unbekannter Fehler'}
+                                                    >
+                                                        Fehlgeschlagen
+                                                    </Badge>
+                                                );
+                                            }
+
+                                            return (
+                                                <TableRow key={exp.id}>
+                                                    <TableCell className="font-semibold">{getExportReportTitle(exp.report_type)}</TableCell>
+                                                    <TableCell>
+                                                        <Badge variant="outline" className="uppercase">{exp.format}</Badge>
+                                                    </TableCell>
+                                                    <TableCell className="text-xs">
+                                                        {formatExportDate(exp.period_from)} - {formatExportDate(exp.period_to)}
+                                                    </TableCell>
+                                                    <TableCell className="text-xs capitalize">
+                                                        {exp.basis === 'posted' ? 'Ist-Werte' : 'Ist+Vorschau'}
+                                                    </TableCell>
+                                                    <TableCell>{statusBadge}</TableCell>
+                                                    <TableCell className="text-right text-xs">{formatExportSize(exp.file_size)}</TableCell>
+                                                    <TableCell className="text-xs">{formatExportDateTime(exp.created_at)}</TableCell>
+                                                    <TableCell className="text-xs">{formatExportDate(exp.expires_at)}</TableCell>
+                                                    <TableCell className="text-right py-1 pr-4">
+                                                        <div className="flex justify-end gap-1">
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                disabled={exp.status !== 'ready' || isExpired}
+                                                                onClick={() => handleDownloadExportFile(exp)}
+                                                                title={
+                                                                    exp.status !== 'ready' 
+                                                                        ? (exp.status === 'failed' ? 'Export fehlgeschlagen' : 'Wird noch generiert...') 
+                                                                        : (isExpired ? 'Abgelaufen' : 'Herunterladen')
+                                                                }
+                                                                className="h-8 w-8 p-0"
+                                                            >
+                                                                <Download className="w-4 h-4" />
+                                                            </Button>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                onClick={() => handleDeleteExport(exp.public_id)}
+                                                                className="text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/20 h-8 w-8 p-0"
+                                                            >
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </Button>
+                                                        </div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            );
+                                        })}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800 mt-auto">
+                        <Button
+                            variant="outline"
+                            onClick={() => setExportsHistoryOpen(false)}
+                            className="shadow-sm"
                         >
                             Schließen
                         </Button>
