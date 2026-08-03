@@ -32,6 +32,10 @@ Route::middleware(['api', 'auth:api', \App\Http\Middleware\SetTenantFromUser::cl
     Route::get('/onboarding/status', [OnboardingController::class, 'status']);
     Route::post('/onboarding/complete', [OnboardingController::class, 'complete']);
 
+    // Support Mail Route (rate-limited gegen Spam: 5 Anfragen pro Stunde je User/IP)
+    Route::post('/support/send', [\App\Http\Controllers\Api\SupportMailController::class, 'send'])
+        ->middleware('throttle:5,60');
+
     // Company Settings (needed for onboarding)
     Route::get('/settings', [CompanySettingController::class, 'show']);
     Route::post('/settings', [CompanySettingController::class, 'update']);

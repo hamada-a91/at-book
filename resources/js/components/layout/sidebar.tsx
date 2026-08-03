@@ -27,9 +27,11 @@ import {
     FolderKanban,
     SlidersHorizontal,
     CircleDollarSign,
+    LifeBuoy,
 } from "lucide-react"
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
+import { SupportModal } from "@/components/SupportModal"
 
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {
     onItemClick?: () => void;
@@ -42,6 +44,7 @@ export function Sidebar({ className, onItemClick }: SidebarProps) {
     // Pro Kategorie: true/false = vom Nutzer umgeschaltet; undefined = Default
     // (aktive Kategorie offen, siehe renderGroup).
     const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({})
+    const [supportOpen, setSupportOpen] = useState(false)
 
     const tenantUrl = (path: string) => {
         return tenant ? `/${tenant}${path}` : path
@@ -254,13 +257,24 @@ export function Sidebar({ className, onItemClick }: SidebarProps) {
                     </div>
                 </div>
 
-                {!isAdmin && (
-                    <div className="px-3 py-2 mt-auto">
+                <div className="px-3 py-2 mt-auto space-y-2">
+                    {!isAdmin && (
                         <div className="border-t border-blue-200 dark:border-blue-800 pt-2">
                             {renderGroup(settingsGroup)}
                         </div>
+                    )}
+                    <div className="pt-2 border-t border-blue-200 dark:border-blue-800 flex justify-center">
+                        <button
+                            type="button"
+                            onClick={() => setSupportOpen(true)}
+                            className="w-full flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold text-blue-700 dark:text-blue-200 bg-blue-100/80 hover:bg-blue-200 dark:bg-blue-900/40 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 rounded-full transition-all duration-200 shadow-sm cursor-pointer"
+                        >
+                            <LifeBuoy className="h-4 w-4 animate-pulse text-blue-600 dark:text-blue-400" />
+                            <span>Support kontaktieren</span>
+                        </button>
                     </div>
-                )}
+                </div>
+                <SupportModal open={supportOpen} onOpenChange={setSupportOpen} />
             </div>
         </div >
     )
