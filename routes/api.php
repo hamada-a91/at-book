@@ -91,6 +91,8 @@ Route::middleware(['api', 'auth:api', \App\Http\Middleware\SetTenantFromUser::cl
             Route::delete('/exports/{export}', [ReportsController::class, 'deleteExport']);
         });
 
+        Route::get('/report-mappings/accounts', [ReportMappingController::class, 'mappableAccounts'])
+            ->middleware('role:owner,api');
         Route::get('/report-mappings/bwa', [ReportMappingController::class, 'index'])
             ->middleware('role:owner|buchhalter,api');
         Route::put('/report-mappings/bwa', [ReportMappingController::class, 'update'])

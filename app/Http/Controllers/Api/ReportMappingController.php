@@ -85,6 +85,40 @@ class ReportMappingController extends Controller
     }
 
     /**
+     * Konten, die in einer Berichts-Zuordnung sinnvoll wählbar sind.
+     * Personenkonten (Debitoren/Kreditoren, an Kontakten hängend) werden immer
+     * ausgeschlossen. Für die BWA nur Erfolgskonten (revenue/expense); für USt-VA
+     * und EÜR zusätzlich Steuer-/Bestandskonten (asset/liability, z.B. USt/Vorsteuer).
+     */
+    public function mappableAccounts(Request $request): JsonResponse
+    {
+        $tenant = $this->tenant();
+        $reportType = $request->input('report_type', 'bwa');
+
+        $personalAccountIds = DB::table('contacts')
+            ->where('tenant_id', $tenant->id)
+            ->get(['customer_account_id', 'vendor_account_id'])
+            ->flatMap(fn ($c) => [$c->customer_account_id, $c->vendor_account_id])
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $types = $reportType === 'bwa'
+            ? ['revenue', 'expense']
+            : ['revenue', 'expense', 'asset', 'liability'];
+
+        $accounts = Account::withoutGlobalScopes()
+            ->where('tenant_id', $tenant->id)
+            ->whereIn('type', $types)
+            ->whereNotIn('id', $personalAccountIds ?: [0])
+            ->orderBy('code')
+            ->get(['id', 'public_id', 'code', 'name', 'type']);
+
+        return response()->json($accounts);
+    }
+
+    /**
      * @param  Collection<int, ReportAccountMapping>  $rows
      */
     private function mappingRows(Tenant $tenant, $rows): \Illuminate\Support\Collection

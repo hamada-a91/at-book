@@ -17,7 +17,8 @@ import {
     X,
     AlertTriangle,
     AlertCircle,
-    Info
+    Info,
+    HelpCircle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -58,6 +59,8 @@ export function Reports() {
     const [mappingReportType, setMappingReportType] = useState<'bwa' | 'ustva' | 'euer'>('bwa');
     const [mappingData, setMappingData] = useState<any>(null);
     const [accounts, setAccounts] = useState<any[]>([]);
+    const [mappingAccounts, setMappingAccounts] = useState<any[]>([]);
+    const [showMappingHelp, setShowMappingHelp] = useState(false);
     const [selectedAccountPublicId, setSelectedAccountPublicId] = useState('');
     const [selectedTargetCode, setSelectedTargetCode] = useState('');
     const [selectedValueType, setSelectedValueType] = useState<string>('balance');
@@ -109,8 +112,10 @@ export function Reports() {
                name.toLowerCase().includes(accountSearchQuery.toLowerCase());
     });
 
-    // Filter accounts based on search query for Mapping Editor (defensive)
-    const filteredMappingAccounts = accounts.filter(acc => {
+    // Filter accounts based on search query for Mapping Editor (defensive).
+    // Quelle ist mappingAccounts (nur sinnvoll zuordenbare Sachkonten je Berichtstyp,
+    // OHNE Personenkonten) - NICHT die vollständige Kontenliste der Kontobewegungen.
+    const filteredMappingAccounts = mappingAccounts.filter(acc => {
         const code = acc.code || '';
         const name = acc.name || '';
         return code.toLowerCase().includes(mappingAccountSearchQuery.toLowerCase()) ||
@@ -127,7 +132,7 @@ export function Reports() {
         } else {
             setSelectedAccountPublicId('');
         }
-    }, [mappingAccountSearchQuery, accounts]);
+    }, [mappingAccountSearchQuery, mappingAccounts]);
 
     const handleGenerateReport = async (type: ReportType, accountId?: number) => {
         setIsLoading(true);
@@ -442,6 +447,18 @@ export function Reports() {
             }
         } catch (error) {
             console.error('Error loading accounts:', error);
+        }
+    };
+
+    // Nur sinnvoll zuordenbare Konten je Berichtstyp laden (ohne Personenkonten;
+    // BWA nur Erfolgskonten, USt-VA/EÜR zusätzlich Steuer-/Bestandskonten).
+    const loadMappingAccounts = async (type: 'bwa' | 'ustva' | 'euer') => {
+        try {
+            const { data } = await axios.get(`/api/report-mappings/accounts?report_type=${type}`);
+            setMappingAccounts(data);
+            setSelectedAccountPublicId(data.length > 0 ? data[0].public_id : '');
+        } catch (error) {
+            console.error('Error loading mapping accounts:', error);
         }
     };
 
@@ -1236,7 +1253,7 @@ export function Reports() {
                             variant="outline"
                             onClick={() => {
                                   setMappingEditorOpen(true);
-                                  loadAccounts();
+                                  loadMappingAccounts(mappingReportType);
                                   loadMappings(mappingReportType);
                             }}
                             className="flex items-center gap-2 border-slate-300 dark:border-slate-600 shadow-sm"
@@ -1255,7 +1272,7 @@ export function Reports() {
                             Meine Exporte
                         </Button>
                     )}
-                    <DateRangeSelector onRangeChange={(from, to) => setDateRange({ from, to })} />
+                    <DateRangeSelector defaultPreset="lastMonth" onRangeChange={(from, to) => setDateRange({ from, to })} />
                 </div>
             </div>
 
@@ -1321,7 +1338,7 @@ export function Reports() {
 
             {/* Report Dialog */}
             <Dialog open={!!activeReport} onOpenChange={(open) => !open && setActiveReport(null)}>
-                <DialogContent className="max-w-[90vw] h-[90vh] flex flex-col">
+                <DialogContent className="w-full max-w-[95vw] md:max-w-[90vw] h-[95vh] md:h-[90vh] flex flex-col">
                     <DialogHeader className="border-b pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div>
                             <DialogTitle className="flex items-center gap-2 text-2xl">
@@ -1376,11 +1393,11 @@ export function Reports() {
                         )}
                     </div>
 
-                    <div className="flex justify-end gap-3 pt-6 border-t border-slate-200 dark:border-slate-700 mt-auto">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-2 pt-4 md:pt-6 border-t border-slate-200 dark:border-slate-700 mt-auto">
                         <Button
                             variant="outline"
                             onClick={() => window.print()}
-                            className="shadow-sm hover:shadow-md transition-all duration-300 hover:border-slate-300 dark:hover:border-slate-600"
+                            className="w-full sm:w-auto justify-center shadow-sm hover:shadow-md transition-all duration-300 hover:border-slate-300 dark:hover:border-slate-600"
                         >
                             <Printer className="w-4 h-4 mr-2" />
                             Drucken
@@ -1390,7 +1407,7 @@ export function Reports() {
                                 variant="outline"
                                 onClick={() => handleCreateBackgroundExport('xlsx')}
                                 disabled={((activeReport === 'ustva' || activeReport === 'euer') && hasBlockingErrors) || (activeReport === 'account-movements' && !selectedMovementAccountId)}
-                                className="shadow-sm hover:shadow-md transition-all duration-300 hover:border-slate-300 dark:hover:border-slate-600 text-blue-600 dark:text-blue-400"
+                                className="w-full sm:w-auto justify-center shadow-sm hover:shadow-md transition-all duration-300 hover:border-slate-300 dark:hover:border-slate-600 text-blue-600 dark:text-blue-400"
                                 title={(activeReport === 'ustva' || activeReport === 'euer') && hasBlockingErrors ? 'Übertragungsbogen gesperrt wegen blockierender Fehler' : activeReport === 'account-movements' && !selectedMovementAccountId ? 'Bitte wählen Sie ein Konto' : ''}
                             >
                                 <Activity className="w-4 h-4 mr-2" />
@@ -1401,7 +1418,7 @@ export function Reports() {
                             variant="outline"
                             onClick={() => handleDownloadReport('csv')}
                             disabled={((activeReport === 'ustva' || activeReport === 'euer') && hasBlockingErrors) || (activeReport === 'account-movements' && !selectedMovementAccountId)}
-                            className={`shadow-sm hover:shadow-md transition-all duration-300 ${(((activeReport === 'ustva' || activeReport === 'euer') && hasBlockingErrors) || (activeReport === 'account-movements' && !selectedMovementAccountId)) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            className={`w-full sm:w-auto justify-center shadow-sm hover:shadow-md transition-all duration-300 ${(((activeReport === 'ustva' || activeReport === 'euer') && hasBlockingErrors) || (activeReport === 'account-movements' && !selectedMovementAccountId)) ? 'opacity-50 cursor-not-allowed' : ''}`}
                             title={(activeReport === 'ustva' || activeReport === 'euer') && hasBlockingErrors ? 'Übertragungsbogen gesperrt wegen blockierender Fehler' : activeReport === 'account-movements' && !selectedMovementAccountId ? 'Bitte wählen Sie ein Konto' : ''}
                         >
                             <Download className="w-4 h-4 mr-2" />
@@ -1410,10 +1427,10 @@ export function Reports() {
                         <Button
                             onClick={() => handleDownloadReport('pdf')}
                             disabled={((activeReport === 'ustva' || activeReport === 'euer') && hasBlockingErrors) || (activeReport === 'account-movements' && !selectedMovementAccountId)}
-                            className={`shadow-lg transition-all duration-300 ${
+                            className={`w-full sm:w-auto justify-center shadow-lg transition-all duration-300 ${
                                 (((activeReport === 'ustva' || activeReport === 'euer') && hasBlockingErrors) || (activeReport === 'account-movements' && !selectedMovementAccountId))
                                     ? 'bg-slate-300 dark:bg-slate-800 text-slate-500 dark:text-slate-400 shadow-none cursor-not-allowed opacity-50'
-                                    : 'shadow-blue-500/20 hover:shadow-blue-500/30 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 font-semibold'
+                                    : 'shadow-blue-500/20 hover:shadow-blue-500/30 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 font-semibold text-white'
                             }`}
                             title={(activeReport === 'ustva' || activeReport === 'euer') && hasBlockingErrors ? 'Übertragungsbogen gesperrt wegen blockierender Fehler' : activeReport === 'account-movements' && !selectedMovementAccountId ? 'Bitte wählen Sie ein Konto' : ''}
                         >
@@ -1423,7 +1440,7 @@ export function Reports() {
                         <Button
                             variant="outline"
                             onClick={() => setActiveReport(null)}
-                            className="shadow-sm hover:shadow-md transition-all duration-300"
+                            className="w-full sm:w-auto justify-center shadow-sm hover:shadow-md transition-all duration-300"
                         >
                             Schließen
                         </Button>
@@ -1433,7 +1450,7 @@ export function Reports() {
 
             {/* Reports Export History Dialog */}
             <Dialog open={exportsHistoryOpen} onOpenChange={(open) => !open && setExportsHistoryOpen(false)}>
-                <DialogContent className="max-w-[75vw] h-[80vh] flex flex-col">
+                <DialogContent className="w-full max-w-[95vw] md:max-w-[75vw] h-[90vh] md:h-[80vh] flex flex-col">
                     <DialogHeader>
                         <DialogTitle className="text-2xl font-bold flex items-center gap-2">
                             <span>Meine Berichts-Exporte</span>
@@ -1575,36 +1592,72 @@ export function Reports() {
 
             {/* Mappings Editor Dialog */}
             <Dialog open={mappingEditorOpen} onOpenChange={(open) => !open && setMappingEditorOpen(false)}>
-                <DialogContent className="max-w-[80vw] h-[85vh] flex flex-col">
+                <DialogContent className="w-full max-w-[95vw] md:max-w-[80vw] h-[90vh] md:h-[85vh] flex flex-col">
                     <DialogHeader>
-                        <DialogTitle className="text-2xl font-bold flex items-center gap-2">
+                        <DialogTitle className="text-2xl font-bold flex items-center gap-2 flex-wrap">
                             <span>Bericht-Kontenzuordnung verwalten</span>
                             <Badge variant="outline" className="text-xs">{mappingReportType.toUpperCase()}</Badge>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setShowMappingHelp(v => !v)}
+                                className="ml-auto flex items-center gap-1 text-xs font-normal"
+                                aria-expanded={showMappingHelp}
+                            >
+                                <HelpCircle className="w-4 h-4" />
+                                {showMappingHelp ? 'Hilfe ausblenden' : 'Wie funktioniert das?'}
+                            </Button>
                         </DialogTitle>
                         <DialogDescription>
-                            Ordne aktive Sachkonten den verschiedenen Zeilen der BWA oder den USt-VA-Kennziffern zu.
+                            Ordne aktive Sachkonten den Zeilen der BWA, den USt-VA-Kennziffern oder den EÜR-Zeilen zu.
                         </DialogDescription>
                     </DialogHeader>
+
+                    {showMappingHelp && (
+                        <div className="rounded-lg border border-blue-200 dark:border-blue-900/50 bg-blue-50/60 dark:bg-blue-950/20 p-4 text-sm space-y-3 text-slate-700 dark:text-slate-300">
+                            <p>
+                                Berichte wie <strong>BWA</strong>, <strong>USt-VA</strong> und <strong>EÜR</strong> werden aus deinen
+                                Sachkonten zusammengebaut. Hier legst du fest, <strong>welches Konto in welche Zeile/Kennziffer</strong> fließt.
+                                Beim Erstellen summiert das System alle Konten je Zeile und rechnet die jeweilige Berichtslogik
+                                (z.&nbsp;B. BWA: <em>Umsatz − Kosten = Ergebnis</em>).
+                            </p>
+                            <ul className="list-disc list-inside space-y-1">
+                                <li><strong>Ziel-Kategorie</strong> – in welche Berichtszeile bzw. Kennziffer das Konto einfließt.</li>
+                                <li><strong>Werttyp</strong> – <em>Saldo</em> (normaler Kontostand, Standard) oder nur <em>Soll</em>/<em>Haben</em> für Sonderfälle.</li>
+                                <li><strong>Vorzeichen</strong> – <em>Normal (+1)</em> nimmt den natürlichen Saldo; <em>Invertiert (−1)</em> nur für Ausnahmen (Korrektur-/Minderungskonten).</li>
+                            </ul>
+                            <p>
+                                <strong>Warum haben Erlöse und Aufwände beide „+"?</strong> Jedes Konto wird mit seinem natürlichen,
+                                positiven Betrag gezählt (Erlöse als +Umsatz, Aufwände als +Kosten). Das <strong>Minus steckt bereits
+                                in der Berichtsformel</strong> (Kosten werden automatisch abgezogen) – deshalb bleiben fast alle Konten
+                                auf „+". Ein „−" würde die Kosten fälschlich zum Gewinn addieren.
+                            </p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                                Tipp: Es werden nur sinnvoll zuordenbare Konten angeboten (bei der BWA nur Erfolgskonten; Debitoren/Kreditoren-Personenkonten sind ausgeblendet).
+                            </p>
+                        </div>
+                    )}
 
                     {/* Report Type Selector */}
                     <div className="flex gap-2 border-b pb-4">
                         <Button
                             variant={mappingReportType === 'bwa' ? 'default' : 'outline'}
-                            onClick={() => { setMappingReportType('bwa'); loadMappings('bwa'); }}
+                            onClick={() => { setMappingReportType('bwa'); loadMappings('bwa'); loadMappingAccounts('bwa'); }}
                             className="text-xs"
                         >
                             BWA Mappings
                         </Button>
                         <Button
                             variant={mappingReportType === 'ustva' ? 'default' : 'outline'}
-                            onClick={() => { setMappingReportType('ustva'); loadMappings('ustva'); }}
+                            onClick={() => { setMappingReportType('ustva'); loadMappings('ustva'); loadMappingAccounts('ustva'); }}
                             className="text-xs"
                         >
                             USt-VA Mappings
                         </Button>
                         <Button
                             variant={mappingReportType === 'euer' ? 'default' : 'outline'}
-                            onClick={() => { setMappingReportType('euer'); loadMappings('euer'); }}
+                            onClick={() => { setMappingReportType('euer'); loadMappings('euer'); loadMappingAccounts('euer'); }}
                             className="text-xs"
                         >
                             EÜR Mappings
