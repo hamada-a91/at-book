@@ -29,6 +29,9 @@ class Beleg extends Model
         'file_name',
         'notes',
         'status',
+        'ocr_status',
+        'ocr_data',
+        'ocr_provider',
         'due_date',
         'is_paid',
         'payment_account_id',
@@ -38,6 +41,8 @@ class Beleg extends Model
         'document_date' => 'datetime:Y-m-d',
         'due_date' => 'datetime:Y-m-d',
         'is_paid' => 'boolean',
+        'ocr_data' => 'array',
+        'ocr_status' => 'string',
         'amount_paid' => 'integer',
     ];
 

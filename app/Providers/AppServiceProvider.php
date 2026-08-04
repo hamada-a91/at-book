@@ -15,6 +15,8 @@ use App\Modules\Projects\Models\Project;
 use App\Services\Backup\BackupExportService;
 use App\Services\Backup\BackupImportService;
 use App\Services\Backup\Transformers\EntityTransformerRegistry;
+use App\Services\Ocr\DocumentExtractor;
+use App\Services\Ocr\TesseractBelegExtractor;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
@@ -41,6 +43,8 @@ class AppServiceProvider extends ServiceProvider
                 $app->make(BackupExportService::class)
             );
         });
+
+        $this->app->bind(DocumentExtractor::class, TesseractBelegExtractor::class);
     }
 
     /**

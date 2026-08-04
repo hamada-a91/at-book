@@ -58,6 +58,26 @@ interface BankTransaction {
     currency: string;
 }
 
+interface OcrField<T = any> {
+    value: T | null;
+    confidence: number;
+    source?: string | null;
+}
+
+interface BelegOcrData {
+    fields?: Record<string, OcrField>;
+    confidence?: number;
+    source?: string;
+    error?: string;
+}
+
+interface BelegResponse {
+    id: number;
+    ocr_status?: 'none' | 'pending' | 'processing' | 'done' | 'failed';
+    ocr_data?: BelegOcrData | null;
+    [key: string]: any;
+}
+
 export function BelegCreate() {
     const navigate = useNavigate();
     const location = useLocation();
@@ -86,6 +106,9 @@ export function BelegCreate() {
     const [lines, setLines] = useState<BelegLine[]>([]);
     const [projectId, setProjectId] = useState<string | undefined>();
     const [costCenterId, setCostCenterId] = useState<string | undefined>();
+    const [ocrDraftId, setOcrDraftId] = useState<string>('');
+    const [ocrApplied, setOcrApplied] = useState(false);
+    const activeBelegId = id || ocrDraftId;
 
     // SPEC-08 (Teil B): Projekt-Feld nur zeigen, wenn das Modul aktiv ist.
     const { data: companySettings } = useQuery({
@@ -122,14 +145,18 @@ export function BelegCreate() {
     const sourceBankTransaction = locationState?.bankTransaction || fetchedBankTransaction || null;
 
     // Load existing beleg data if editing
-    const { data: existingBeleg } = useQuery({
-        queryKey: ['beleg', id],
+    const { data: existingBeleg } = useQuery<BelegResponse | null>({
+        queryKey: ['beleg', activeBelegId],
         queryFn: async () => {
-            if (!id) return null;
-            const { data } = await axios.get(`/api/belege/${id}`);
+            if (!activeBelegId) return null;
+            const { data } = await axios.get(`/api/belege/${activeBelegId}`);
             return data;
         },
-        enabled: !!id,
+        enabled: !!activeBelegId,
+        refetchInterval: (query) => {
+            const status = (query.state.data as BelegResponse | null | undefined)?.ocr_status;
+            return ocrDraftId && status !== 'done' && status !== 'failed' ? 1500 : false;
+        },
     });
 
     // Populate form when beleg data loads
@@ -162,6 +189,42 @@ export function BelegCreate() {
     }, [existingBeleg]);
 
     useEffect(() => {
+        if (existingBeleg?.ocr_status !== 'done' || ocrApplied) return;
+
+        const fields = existingBeleg.ocr_data?.fields || {};
+        const value = <T,>(name: string): T | null => (fields[name]?.value as T | null | undefined) ?? null;
+        const grossAmount = value<number>('gross_amount');
+        const tax = value<number>('tax_amount');
+        const detectedTaxRate = value<number>('tax_rate');
+        const detectedContactId = value<number>('contact_id');
+        const detectedAccountId = value<number>('category_account_id');
+        const supplierName = value<string>('supplier_name');
+        const invoiceNumber = value<string>('invoice_number');
+
+        setDocumentType('eingang');
+        setTitle([supplierName, invoiceNumber ? `Rechnung ${invoiceNumber}` : ''].filter(Boolean).join(' - ') || existingBeleg.title || 'OCR-Beleg');
+
+        const detectedDate = value<string>('document_date');
+        if (detectedDate) setDocumentDate(detectedDate);
+
+        const detectedDueDate = value<string>('due_date');
+        if (detectedDueDate) setDueDate(detectedDueDate);
+
+        if (typeof grossAmount === 'number') setAmount(grossAmount / 100);
+        if (typeof tax === 'number') setTaxAmount(tax / 100);
+        if (typeof detectedTaxRate === 'number') setTaxRate(detectedTaxRate);
+        if (detectedContactId) setContactId(detectedContactId.toString());
+        if (detectedAccountId) setCategoryAccountId(detectedAccountId.toString());
+
+        setNotes([
+            existingBeleg.notes || '',
+            invoiceNumber ? `OCR-Rechnungsnummer: ${invoiceNumber}` : '',
+            supplierName && !detectedContactId ? `OCR-Lieferant: ${supplierName}` : '',
+        ].filter(Boolean).join('\n'));
+        setOcrApplied(true);
+    }, [existingBeleg?.ocr_status, existingBeleg?.ocr_data, existingBeleg?.title, existingBeleg?.notes, ocrApplied]);
+
+    useEffect(() => {
         if (!sourceBankTransaction || isEditMode) return;
         const gross = Math.abs(sourceBankTransaction.amount) / 100;
         const tax = gross - (gross / (1 + taxRate / 100));
@@ -181,8 +244,8 @@ export function BelegCreate() {
 
     const createBelegMutation = useMutation({
         mutationFn: async (data: any) => {
-            const url = isEditMode ? `/api/belege/${id}` : '/api/belege';
-            const method = isEditMode ? 'put' : 'post';
+            const url = activeBelegId ? `/api/belege/${activeBelegId}` : '/api/belege';
+            const method = activeBelegId ? 'put' : 'post';
 
             try {
                 // @ts-ignore
@@ -198,7 +261,7 @@ export function BelegCreate() {
             console.log('Beleg created/updated successfully:', data);
 
             // Upload file if selected
-            if (selectedFile && !isEditMode) {
+            if (selectedFile && !activeBelegId) {
                 try {
                     await uploadFileMutation.mutateAsync({ belegId: data.id, file: selectedFile });
                 } catch (error) {
@@ -242,6 +305,28 @@ export function BelegCreate() {
                 },
             });
             return data;
+        },
+    });
+
+    const ocrUploadMutation = useMutation({
+        mutationFn: async (file: File) => {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const { data } = await axios.post('/api/belege/ocr-upload', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                },
+            });
+            return data;
+        },
+        onSuccess: (data) => {
+            setOcrDraftId(data.id.toString());
+            setOcrApplied(false);
+            queryClient.invalidateQueries({ queryKey: ['belege'] });
+        },
+        onError: (error: any) => {
+            alert(error.response?.data?.message || 'OCR-Upload fehlgeschlagen. Bitte manuell erfassen.');
         },
     });
 
@@ -293,6 +378,18 @@ export function BelegCreate() {
         if (e.target.files && e.target.files[0]) {
             setSelectedFile(e.target.files[0]);
         }
+    };
+
+    const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+            setSelectedFile(e.dataTransfer.files[0]);
+        }
+    };
+
+    const startOcrUpload = () => {
+        if (!selectedFile) return;
+        ocrUploadMutation.mutate(selectedFile);
     };
 
     const addLine = () => {
@@ -363,6 +460,23 @@ export function BelegCreate() {
         sonstige: 'Sonstige Geschäftsbelege und Dokumente',
     };
 
+    const ocrStatus = existingBeleg?.ocr_status;
+    const ocrFields = existingBeleg?.ocr_data?.fields || {};
+    const isLowConfidence = (name: string) => {
+        const field = ocrFields[name];
+        return field?.value !== null && field?.value !== undefined && (field.confidence ?? 0) < 0.8;
+    };
+    const lowConfidenceLabels = Object.entries({
+        document_date: 'Belegdatum',
+        invoice_number: 'Rechnungsnummer',
+        due_date: 'Faelligkeit',
+        gross_amount: 'Bruttobetrag',
+        tax_amount: 'Steuerbetrag',
+        supplier_name: 'Lieferant',
+        contact_id: 'Kontakt',
+        category_account_id: 'Sachkonto',
+    }).filter(([key]) => isLowConfidence(key)).map(([, label]) => label);
+
     return (
         <div className="max-w-5xl mx-auto space-y-6 p-0 md:p-4 pb-12">
                 <div className="flex items-center gap-4">
@@ -389,6 +503,20 @@ export function BelegCreate() {
                             <span>{sourceBankTransaction.counterparty || '-'}</span>
                             <span>{(sourceBankTransaction.amount / 100).toLocaleString('de-DE', { style: 'currency', currency: sourceBankTransaction.currency || 'EUR' })}</span>
                         </div>
+                    </div>
+                )}
+
+                {ocrDraftId && (
+                    <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-950 dark:border-indigo-900 dark:bg-indigo-950/30 dark:text-indigo-100">
+                        <div className="font-semibold">
+                            {ocrStatus === 'done' ? 'OCR abgeschlossen' : ocrStatus === 'failed' ? 'OCR fehlgeschlagen' : 'Beleg wird ausgelesen ...'}
+                        </div>
+                        {ocrStatus === 'done' && lowConfidenceLabels.length > 0 && (
+                            <div className="mt-1 text-amber-800 dark:text-amber-200">Bitte pruefen: {lowConfidenceLabels.join(', ')}</div>
+                        )}
+                        {ocrStatus === 'failed' && (
+                            <div className="mt-1">{existingBeleg?.ocr_data?.error || 'Bitte erfassen Sie den Beleg manuell.'}</div>
+                        )}
                     </div>
                 )}
 
@@ -774,17 +902,36 @@ export function BelegCreate() {
                                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                                     Beleg-Datei (PDF, JPG, PNG)
                                 </label>
-                                <Input
-                                    type="file"
-                                    accept=".pdf,.jpg,.jpeg,.png"
-                                    onChange={handleFileChange}
-                                    className="bg-white dark:bg-slate-950"
-                                />
-                                {selectedFile && (
-                                    <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-2">
-                                        ✓ {selectedFile.name} ausgewählt
-                                    </p>
-                                )}
+                                <div
+                                    onDragOver={(e) => e.preventDefault()}
+                                    onDrop={handleDrop}
+                                    className="rounded-lg border border-dashed border-slate-300 p-4 dark:border-slate-700"
+                                >
+                                    <Input
+                                        type="file"
+                                        accept="image/*,application/pdf"
+                                        capture="environment"
+                                        onChange={handleFileChange}
+                                        className="bg-white dark:bg-slate-950"
+                                    />
+                                    {selectedFile && (
+                                        <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-2">
+                                            {selectedFile.name} ausgewaehlt
+                                        </p>
+                                    )}
+                                    {!isEditMode && (
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            onClick={startOcrUpload}
+                                            disabled={!selectedFile || ocrUploadMutation.isPending || ocrStatus === 'pending' || ocrStatus === 'processing'}
+                                            className="mt-3 gap-2"
+                                        >
+                                            <Upload className="w-4 h-4" />
+                                            {ocrUploadMutation.isPending || ocrStatus === 'pending' || ocrStatus === 'processing' ? 'OCR laeuft ...' : 'Beleg scannen/hochladen'}
+                                        </Button>
+                                    )}
+                                </div>
                             </div>
                         </CardContent>
                     </Card>
@@ -821,7 +968,7 @@ export function BelegCreate() {
                         </Button>
                         <Button
                             type="submit"
-                            disabled={createBelegMutation.isPending || uploadFileMutation.isPending}
+                            disabled={createBelegMutation.isPending || uploadFileMutation.isPending || ocrStatus === 'pending' || ocrStatus === 'processing'}
                             className="gap-2 bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-700 hover:to-cyan-700 text-white shadow-lg shadow-indigo-500/30"
                         >
                             <Save className="w-4 h-4" />

@@ -16,7 +16,9 @@
         "laravel/sanctum": "^4.2",
         "laravel/tinker": "^2.10.1",
         "phpoffice/phpspreadsheet": "^5.9",
+        "smalot/pdfparser": "^2.12",
         "spatie/laravel-permission": "^6.24",
+        "thiagoalessio/tesseract_ocr": "^2.13",
         "tymon/jwt-auth": "^2.2"
     },
     "require-dev": {

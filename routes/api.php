@@ -149,6 +149,7 @@ Route::middleware(['api', 'auth:api', \App\Http\Middleware\SetTenantFromUser::cl
         Route::get('/invoices/{invoice}/pdf', [\App\Http\Controllers\Api\InvoiceController::class, 'downloadPDF']);
 
         // Belege (Documents/Receipts)
+        Route::post('/belege/ocr-upload', [\App\Http\Controllers\Api\BelegController::class, 'ocrUpload']);
         Route::apiResource('belege', \App\Http\Controllers\Api\BelegController::class)->parameters(['belege' => 'beleg']);
         Route::post('/belege/{beleg}/book', [\App\Http\Controllers\Api\BelegController::class, 'book']);
         Route::get('/belege/{beleg}/payments', [\App\Http\Controllers\Api\PaymentController::class, 'indexBeleg'])

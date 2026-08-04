@@ -1,56 +1,67 @@
-# SPEC-09 – Feature: OCR-Belegerfassung
+# SPEC-09 - Feature: OCR-Belegerfassung
 
-**Phase:** 3 · **Aufwand:** ~2–3 Wochen · **Abhängigkeiten:** SPEC-04 (transaktionales Buchen), SPEC-05 (Nummern), SPEC-06 (Audit) · **Design-Basis:** [../09-roadmap.md](../09-roadmap.md)
+**Phase:** 3 - **Status:** in Arbeit / Phase 1 umgesetzt - **Engine Phase 1:** lokal gehostetes Tesseract-OCR
+**Abhaengigkeiten:** SPEC-04 (transaktionales Buchen), SPEC-05 (Nummern), SPEC-06 (Audit) - **Design-Basis:** [../09-roadmap.md](../09-roadmap.md)
 
 ## Ziel
-Beleg hochladen → automatische Datenextraktion → vorbefüllter Buchungsvorschlag → User bestätigt → Buchung. **Nie autonom buchen ohne Bestätigung** (GoBD + Vertrauen).
+Beleg hochladen -> automatische Datenextraktion -> vorbefuellter Buchungsvorschlag -> User prueft/korrigiert -> User bestaetigt -> Buchung. **Nie autonom buchen ohne Bestaetigung** (GoBD + Vertrauen).
 
-## Extraktions-Pipeline (Reihenfolge wichtig)
+## Extraktions-Pipeline Phase 1
 
 ```
 Upload (PDF/JPG/PNG, max 20 MB)
-  1) ZUGFeRD/XRechnung-Check: eingebettetes XML im PDF?  → strukturierte Daten, KEIN OCR nötig
-     (E-Rechnungs-Pflicht in DE seit 2025 → deckt zunehmend die Mehrheit ab)
-  2) Fallback Vision-LLM: Claude API, PDF/Bild → strukturiertes JSON (Tool-Use/JSON-Schema)
-  3) Fallback manuell: Status 'ocr_failed', User erfasst wie bisher
+  1) PDF mit Textebene? -> Text direkt per smalot/pdfparser extrahieren, KEIN OCR noetig
+  2) Sonst Foto/Scan-PDF -> PDF-Seiten per poppler/pdftoppm rendern -> Tesseract OCR lokal mit Sprache deu
+  3) Heuristik-Parser -> strukturierte Vorschlagsdaten mit Konfidenz je Feld
+  4) Fehlerfall -> Status failed, Beleg bleibt manuell nutzbar
 ```
 
-Extrahierte Felder: Lieferant (Name, USt-ID, IBAN), Belegdatum, Rechnungsnummer, Fälligkeit, Positionen (Beschreibung, Menge, Einzelpreis), Netto/USt/Brutto je Steuersatz, Währung + **Konfidenz je Feld**.
+Wichtig: In Phase 1 werden **keine externen APIs** verwendet und keine Belegdaten nach aussen gesendet. Der bisherige Abschnitt zur Claude-API ist durch self-hosted Tesseract ersetzt.
 
-## Umsetzung
+## Extrahierte Felder
+- Lieferant: Name, Kontaktvorschlag ueber tenant-scoped Matching gegen `contacts.tax_number`, `contacts.bank_account` und Namens-Fuzzy.
+- Belegdatum, Rechnungsnummer, Faelligkeit.
+- Netto/USt/Brutto je erkannter Rechnung, Steuersatz 19%/7%, Waehrung (Default EUR).
+- Optionaler Sachkonto-Vorschlag per Stichwort-Heuristik, z.B. Telekom/Telefon/Internet -> Telekommunikationskosten.
+- Alle Betraege in `ocr_data` werden als Integer-Cents gespeichert.
+- Jedes Feld enthaelt `value`, `confidence` und `source`; unsichere Werte werden im Frontend zur Pruefung markiert.
 
-### 9.1 Schema-Erweiterung `belege`
+## 9.1 Schema-Erweiterung `belege`
+
 ```php
-+ ocr_status enum('none','pending','processing','done','failed') default 'none'
-+ ocr_data jsonb nullable          # Roh-Extraktion inkl. Konfidenzen
-+ ocr_provider string nullable     # 'zugferd' | 'claude' | …
++ ocr_status string default 'none' // none|pending|processing|done|failed
++ ocr_data jsonb nullable          // Rohtext + strukturierte Extraktion + Konfidenzen
++ ocr_provider string nullable     // 'tesseract'
 ```
 
-### 9.2 Ablauf
-1. `POST /api/belege/ocr-upload` (neuer Endpoint): legt Beleg-Draft mit Datei an, `ocr_status=pending`, dispatcht `ProcessBelegOcrJob` auf Queue `ocr`.
-2. Job (setzt Tenant-Kontext explizit! Muster `ProcessBackupExportJob`): Pipeline ausführen → `ocr_data` speichern, `ocr_status=done`.
-3. **Vorschlagslogik** (`BelegSuggestionService`):
-   - Kontakt-Matching: USt-ID → IBAN → Namens-Fuzzy (in dieser Reihenfolge); kein Treffer → „Neuen Lieferanten anlegen?“-Vorschlag.
-   - Kontenvorschlag: historische Buchungen desselben Lieferanten (häufigstes Gegenkonto), sonst Kategorie-Heuristik; ab SPEC-10 per AI verfeinert.
-4. Frontend `BelegCreate.tsx`: bei `ocr_status=done` Formular vorbefüllt, Konfidenz < 0.8 gelb markiert; Polling/Refetch via React Query auf den Belegstatus. User prüft → speichert → bucht wie bisher.
-5. Original-Datei bleibt **unverändert** gespeichert (GoBD); `ocr_data` ist nur Vorschlag. Audit-Log-Events: `ocr_extracted`, `ocr_applied`.
+## 9.2 Ablauf
+1. `POST /api/belege/ocr-upload`: nimmt PDF/JPG/PNG bis 20 MB an, speichert die Originaldatei unveraendert, legt einen Beleg-Draft an, setzt `ocr_status=pending`, dispatcht `ProcessBelegOcrJob` auf Queue `ocr` und antwortet mit HTTP 202.
+2. `ProcessBelegOcrJob`: setzt den Tenant-Kontext explizit per `app()->instance('currentTenant', $tenant)`, setzt `processing`, fuehrt PDF-Textlayer-Extraktion oder Tesseract aus, parst die Felder, schreibt `ocr_data`, setzt `done` oder im Fehlerfall `failed`.
+3. `GET /api/belege/{beleg}` liefert `ocr_status`, `ocr_provider` und `ocr_data`; das Frontend pollt bis `done` oder `failed`.
+4. Frontend `BelegCreate.tsx`: Upload per Kamera/File/Drag-and-drop, Polling via React Query, Vorbefuellung der vorhandenen Belegmaske, Markierung niedriger Konfidenzen. User speichert/korrigiert und bucht danach ueber den bestehenden `book`-Flow.
+5. Audit-Log-Event: `beleg_ocr_extracted` nach erfolgreicher Extraktion.
 
-### 9.3 Claude-API-Anbindung
-- `app/Services/Ocr/` mit Interface `DocumentExtractor` + Implementierungen `ZugferdExtractor`, `ClaudeVisionExtractor` (austauschbar, Config `services.ocr.driver`).
-- API-Key über `.env` (`ANTHROPIC_API_KEY`), nie committen. Timeout/Retry im Job (`tries=3`, Backoff), Kosten-Log je Aufruf (tenant_id, Tokens) für spätere Abrechnung.
-- Prompt liefert JSON-Schema; Antwort validieren (zod-ähnlich serverseitig: `justinrainbow/json-schema` o.ä. oder manuelle Validierung) – **LLM-Ausgabe nie ungeprüft speichern**.
-- Datenschutz: AVV mit Anthropic prüfen, Feature pro Tenant abschaltbar: `company_settings.module_ocr_enabled`.
+## 9.3 Lokale Tesseract-Anbindung
+- Composer: `thiagoalessio/tesseract_ocr`, `smalot/pdfparser`.
+- Containerpakete: `tesseract-ocr`, `tesseract-ocr-deu`, `poppler-utils` in Sail- und Produktions-Dockerfile.
+- Runtime prueft defensiv, ob `tesseract` bzw. `pdftoppm` verfuegbar sind; falls nicht, wird OCR sauber auf `failed` gesetzt.
+- Tests trennen Parser und OCR-Ausfuehrung, damit Parser-Tests ohne lokale Binaries laufen.
 
-## Akzeptanzkriterien
-- [ ] ZUGFeRD-Testrechnung → Felder ohne LLM-Aufruf korrekt extrahiert
-- [ ] Bild-Rechnung → Vorschlag mit Konfidenzen; UI markiert unsichere Felder
-- [ ] Lieferanten-Matching über USt-ID nachweisbar (Test mit 2 ähnlichen Kontakten)
-- [ ] OCR-Fehler (Provider down) → Beleg bleibt nutzbar, Status `failed`, manuelle Erfassung möglich
-- [ ] Kein automatisches Buchen: `book` erfordert expliziten User-Request
-- [ ] Job ohne HTTP-Kontext setzt Tenant korrekt (Isolationstest: 2 Tenants parallel)
-- [ ] Extraktion erscheint im Audit-Log
+## 9.4 Backup-Impact
+- `BelegTransformer` exportiert/importiert `ocr_status`, `ocr_data`, `ocr_provider`.
+- Alte Backups ohne OCR-Felder bleiben importierbar; DB-Defaults setzen `ocr_status=none`.
+- Beleg-Dateien sind im bestehenden Backup-Modul bereits als `files/belege/{public_id}/...` im Manifest enthalten und werden beim Import wiederhergestellt.
+- Roundtrip-Test deckt einen OCR-Beleg ab.
 
-## Backup-Impact ⚠️
-- Neue `belege`-Spalten → `BelegTransformer` erweitern (`ocr_status`, `ocr_data`, `ocr_provider`), Felder optional für Alt-Backups.
-- **Beleg-Dateien:** klären, ob `file_path`-Dateien im Backup-Export enthalten sind (aktuell laut Modul-Doku prüfen!). Falls nein: als bekannte Lücke in `backup-module.md` dokumentieren und Datei-Export als Folgepaket einplanen – mit OCR steigt die Bedeutung der Original-Dateien (GoBD-Aufbewahrung).
-- Roundtrip-Test um OCR-Beleg erweitern.
+## Akzeptanzkriterien Phase 1
+- [x] PDF mit Textebene -> Felder ohne OCR-Aufruf extrahierbar.
+- [x] Bild/Scan-PDF -> lokale Tesseract-Pipeline vorbereitet.
+- [x] OCR-Fehler -> Beleg bleibt Draft/manuell nutzbar, Status `failed`.
+- [x] Kein automatisches Buchen: `book` erfordert expliziten User-Request.
+- [x] Job setzt Tenant-Kontext explizit.
+- [x] Backup-Transformer und Roundtrip-Test um OCR-Felder erweitert.
+
+## Folgepakete
+- ZUGFeRD/XRechnung-XML-Erkennung vor PDF/OCR.
+- Intelligentere Konto-/Kategorie-Vorschlaege in SPEC-10.
+- Optionaler KI-Provider nur mit expliziter Datenschutz-/Mandantenfreigabe, nicht Bestandteil von Phase 1.

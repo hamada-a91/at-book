@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Concerns\HasTenantScope;
 use App\Http\Controllers\Controller;
+use App\Jobs\ProcessBelegOcrJob;
 use App\Models\Beleg;
 use App\Models\Product;
 use App\Models\TaxCode;
@@ -14,6 +15,7 @@ use App\Services\InventoryService;
 use App\Services\NumberSequenceService;
 use DomainException;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
@@ -482,6 +484,52 @@ class BelegController extends Controller
         }
 
         return response()->json($beleg->load(['contact', 'journalEntry', 'lines.product']));
+    }
+
+    /**
+     * Upload a receipt/invoice file and start local OCR extraction.
+     */
+    public function ocrUpload(Request $request)
+    {
+        $tenant = $this->getTenantOrFail();
+
+        $validated = $request->validate([
+            'file' => 'required|file|mimes:pdf,jpg,jpeg,png|max:20480',
+        ]);
+
+        /** @var UploadedFile $file */
+        $file = $validated['file'];
+        $fileName = $file->getClientOriginalName();
+        $filePath = $file->store('belege', 'public');
+
+        $beleg = DB::transaction(function () use ($tenant, $fileName, $filePath) {
+            $documentNumber = $this->numberSequenceService->next('beleg');
+
+            return Beleg::create([
+                'tenant_id' => $tenant->id,
+                'document_number' => $documentNumber,
+                'document_type' => 'eingang',
+                'title' => pathinfo($fileName, PATHINFO_FILENAME) ?: 'OCR-Beleg',
+                'document_date' => now()->toDateString(),
+                'amount' => 0,
+                'tax_amount' => 0,
+                'amount_paid' => 0,
+                'file_path' => $filePath,
+                'file_name' => $fileName,
+                'status' => 'draft',
+                'ocr_status' => 'pending',
+                'ocr_provider' => 'tesseract',
+            ]);
+        });
+
+        ProcessBelegOcrJob::dispatch($beleg->id, $tenant->id);
+
+        return response()->json([
+            'id' => $beleg->id,
+            'public_id' => $beleg->public_id,
+            'ocr_status' => $beleg->ocr_status,
+            'ocr_provider' => $beleg->ocr_provider,
+        ], 202);
     }
 
     /**

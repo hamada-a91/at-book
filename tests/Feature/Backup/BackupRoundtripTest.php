@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Backup;
 
+use App\Models\Beleg;
 use App\Models\CompanySetting;
 use App\Models\Concerns\BelongsToTenant;
 use App\Models\Invoice;
@@ -565,6 +566,47 @@ class BackupRoundtripTest extends TestCase
         $this->assertNotNull($lineB);
         $this->assertSame($largeUnitPrice, $lineB->unit_price);
         $this->assertSame($largeUnitPrice, $lineB->line_total);
+    }
+
+    public function test_roundtrip_preserves_beleg_ocr_fields(): void
+    {
+        $dataA = TenantTestDataFactory::create('ocr-backup');
+
+        $dataA->beleg->update([
+            'ocr_status' => 'done',
+            'ocr_provider' => 'tesseract',
+            'ocr_data' => [
+                'provider' => 'tesseract',
+                'source' => 'pdf-text-layer',
+                'fields' => [
+                    'invoice_number' => ['value' => 'OCR-2026-42', 'confidence' => 0.91, 'source' => 'test'],
+                    'gross_amount' => ['value' => 11900, 'confidence' => 0.93, 'source' => 'test'],
+                ],
+            ],
+        ]);
+
+        $export = BackupTestHelper::exportToArray($dataA->tenant, $dataA->user);
+
+        $tenantB = Tenant::create(['name' => 'OCR Backup Ziel-Tenant', 'slug' => 'ocr-backup-ziel-'.uniqid()]);
+        $userB = User::create([
+            'name' => 'OCR Backup Importeur',
+            'email' => 'ocr-backup-'.uniqid().'@at-book.test',
+            'password' => Hash::make('password'),
+            'tenant_id' => $tenantB->id,
+        ]);
+
+        BackupTestHelper::importZip($export['zip_path'], $tenantB, $userB);
+
+        $imported = Beleg::withoutGlobalScopes()
+            ->where('tenant_id', $tenantB->id)
+            ->where('document_number', $dataA->beleg->document_number)
+            ->first();
+
+        $this->assertNotNull($imported);
+        $this->assertSame('done', $imported->ocr_status);
+        $this->assertSame('tesseract', $imported->ocr_provider);
+        $this->assertSame('OCR-2026-42', $imported->ocr_data['fields']['invoice_number']['value']);
+        $this->assertSame(11900, $imported->ocr_data['fields']['gross_amount']['value']);
     }
 
     /**
