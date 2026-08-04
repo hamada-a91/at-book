@@ -408,7 +408,7 @@ export function BankingList() {
             </div>
 
             <div className={selectedTx ? "grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_420px]" : "grid min-w-0 gap-4"}>
-                <div className="min-w-0 overflow-hidden rounded-lg border bg-background p-4">
+                <div className="min-w-0 rounded-lg border bg-background p-4">
                     <Tabs defaultValue="suggestions">
                         <TabsList>
                             <TabsTrigger value="suggestions">Vorschläge</TabsTrigger>

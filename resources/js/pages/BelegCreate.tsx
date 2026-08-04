@@ -364,8 +364,7 @@ export function BelegCreate() {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-cyan-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 p-6">
-            <div className="max-w-5xl mx-auto space-y-6">
+        <div className="max-w-5xl mx-auto space-y-6 p-0 md:p-4 pb-12">
                 <div className="flex items-center gap-4">
                     <Link to={sourceBankTransactionId ? returnTo : `/${tenant}/belege`}>
                         <Button variant="ghost" size="icon" className="h-10 w-10 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
@@ -833,7 +832,6 @@ export function BelegCreate() {
                         </Button>
                     </div>
                 </form>
-            </div>
         </div>
     );
 }

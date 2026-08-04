@@ -8,12 +8,43 @@ import { Label } from '@/components/ui/label';
 interface DateRangeSelectorProps {
     onRangeChange: (from: Date, to: Date) => void;
     className?: string;
+    defaultPreset?: 'thisMonth' | 'lastMonth' | 'thisQuarter' | 'thisYear';
 }
 
-export function DateRangeSelector({ onRangeChange, className }: DateRangeSelectorProps) {
-    const [fromDate, setFromDate] = useState<string>(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
-    const [toDate, setToDate] = useState<string>(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
-    const [activePreset, setActivePreset] = useState<string>('thisMonth');
+export function DateRangeSelector({ onRangeChange, className, defaultPreset = 'thisMonth' }: DateRangeSelectorProps) {
+    const getInitialRange = (preset: string) => {
+        const now = new Date();
+        switch (preset) {
+            case 'lastMonth':
+                const lastMonth = subMonths(now, 1);
+                return {
+                    from: format(startOfMonth(lastMonth), 'yyyy-MM-dd'),
+                    to: format(endOfMonth(lastMonth), 'yyyy-MM-dd')
+                };
+            case 'thisQuarter':
+                return {
+                    from: format(startOfQuarter(now), 'yyyy-MM-dd'),
+                    to: format(endOfQuarter(now), 'yyyy-MM-dd')
+                };
+            case 'thisYear':
+                return {
+                    from: format(startOfYear(now), 'yyyy-MM-dd'),
+                    to: format(endOfYear(now), 'yyyy-MM-dd')
+                };
+            case 'thisMonth':
+            default:
+                return {
+                    from: format(startOfMonth(now), 'yyyy-MM-dd'),
+                    to: format(endOfMonth(now), 'yyyy-MM-dd')
+                };
+        }
+    };
+
+    const initialRange = getInitialRange(defaultPreset);
+
+    const [fromDate, setFromDate] = useState<string>(initialRange.from);
+    const [toDate, setToDate] = useState<string>(initialRange.to);
+    const [activePreset, setActivePreset] = useState<string>(defaultPreset);
 
     useEffect(() => {
         if (fromDate && toDate) {

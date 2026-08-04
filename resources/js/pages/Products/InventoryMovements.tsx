@@ -256,8 +256,7 @@ export default function InventoryMovements() {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-cyan-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 p-4 md:p-6 pb-20 md:pb-6">
-            <div className="max-w-7xl mx-auto space-y-6">
+        <div className="max-w-7xl mx-auto space-y-6 p-0 md:p-4 pb-12">
                 {/* Header */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <div className="flex items-center gap-4 w-full md:w-auto">
@@ -730,7 +729,6 @@ export default function InventoryMovements() {
                         )}
                     </CardContent>
                 </Card>
-            </div>
         </div>
     );
 }

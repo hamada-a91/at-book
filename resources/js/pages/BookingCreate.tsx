@@ -609,8 +609,7 @@ export function BookingCreate() {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-cyan-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 p-3 md:p-6 pb-24 md:pb-6">
-            <div className="max-w-7xl mx-auto space-y-6">
+        <div className="max-w-5xl mx-auto space-y-6 p-0 md:p-4 pb-12">
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
@@ -1057,7 +1056,7 @@ export function BookingCreate() {
                                         </div>
                                     </div>
 
-                                    <div className="mt-4 flex items-center justify-between">
+                                    <div className="mt-4 flex flex-wrap items-center gap-2">
                                         <div className="flex items-center space-x-2">
                                             <Checkbox
                                                 id="is_paid"
@@ -1071,18 +1070,18 @@ export function BookingCreate() {
                                             >
                                                 Als "Bezahlt" markieren
                                             </label>
-                                            {quickEntry.is_paid && (
-                                                <div className="w-[200px] ml-4">
-                                                    <AccountSelector
-                                                        accounts={accounts}
-                                                        value={quickEntry.payment_account_id}
-                                                        onChange={(value) => setQuickEntry(prev => ({ ...prev, payment_account_id: value }))}
-                                                        filterType={['asset']}
-                                                        placeholder="Kasse/Bank..."
-                                                    />
-                                                </div>
-                                            )}
                                         </div>
+                                        {quickEntry.is_paid && (
+                                            <div className="w-full sm:w-[200px] shrink-0">
+                                                <AccountSelector
+                                                    accounts={accounts}
+                                                    value={quickEntry.payment_account_id}
+                                                    onChange={(value) => setQuickEntry(prev => ({ ...prev, payment_account_id: value }))}
+                                                    filterType={['asset']}
+                                                    placeholder="Kasse/Bank..."
+                                                />
+                                            </div>
+                                        )}
                                         <Button
                                             type="button"
                                             onClick={handleQuickEntry}
@@ -1493,7 +1492,6 @@ export function BookingCreate() {
                         </div>
                     </DialogContent>
                 </Dialog>
-            </div>
         </div>
     );
 }

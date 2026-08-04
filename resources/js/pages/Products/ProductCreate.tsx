@@ -152,8 +152,7 @@ export default function ProductCreate() {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-cyan-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 p-6">
-            <div className="max-w-4xl mx-auto space-y-6">
+        <div className="max-w-4xl mx-auto space-y-6 p-0 md:p-4 pb-12">
                 <CategoryManager open={categoryManagerOpen} onOpenChange={setCategoryManagerOpen} />
                 {/* Header */}
                 <div className="flex items-center gap-4">
@@ -427,7 +426,6 @@ export default function ProductCreate() {
                         </Button>
                     </div>
                 </form>
-            </div>
         </div>
     );
 }

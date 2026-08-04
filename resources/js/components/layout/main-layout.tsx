@@ -13,7 +13,7 @@ export function MainLayout({ children }: MainLayoutProps) {
                 <div className="hidden bg-gradient-to-b from-blue-50 to-blue-100 dark:from-blue-950 dark:to-slate-950 md:block print:hidden">
                     <Sidebar className="fixed w-[240px] lg:w-[280px]" />
                 </div>
-                <div className="flex flex-col">
+                <div className="flex flex-col min-w-0">
                     <div className="print:hidden">
                         <Header />
                     </div>

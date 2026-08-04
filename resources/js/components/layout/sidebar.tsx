@@ -263,14 +263,93 @@ export function Sidebar({ className, onItemClick }: SidebarProps) {
                             {renderGroup(settingsGroup)}
                         </div>
                     )}
-                    <div className="pt-2 border-t border-blue-200 dark:border-blue-800 flex justify-center">
+                    <div className="pt-2 border-t border-blue-200 dark:border-blue-800 flex flex-col items-center justify-center space-y-1">
                         <button
                             type="button"
                             onClick={() => setSupportOpen(true)}
-                            className="w-full flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold text-blue-700 dark:text-blue-200 bg-blue-100/80 hover:bg-blue-200 dark:bg-blue-900/40 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 rounded-full transition-all duration-200 shadow-sm cursor-pointer"
+                            className="focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-xl p-1 transition-all duration-300 w-full flex flex-col items-center group cursor-pointer"
+                            aria-label="Support kontaktieren"
                         >
-                            <LifeBuoy className="h-4 w-4 animate-pulse text-blue-600 dark:text-blue-400" />
-                            <span>Support kontaktieren</span>
+                            {/* Speech Bubble / Tooltip */}
+                            <div className="bg-blue-600 text-white dark:bg-blue-800 dark:text-white text-[10px] font-bold px-2.5 py-1 rounded-lg shadow-sm mb-1 animate-bounce">
+                                Fragen? Klick mich!
+                            </div>
+                            
+                            {/* Animated SVG Cloud Mascot */}
+                            <svg viewBox="0 0 100 100" className="w-16 h-16 drop-shadow-md hover:drop-shadow-lg transition-transform hover:scale-105 active:scale-95">
+                                <style>
+                                    {`
+                                        @keyframes sideFloat {
+                                            0% { transform: translateY(0px); }
+                                            50% { transform: translateY(-4px); }
+                                            100% { transform: translateY(0px); }
+                                        }
+                                        @keyframes sideBlink {
+                                            0%, 90%, 100% { transform: scaleY(1); }
+                                            95% { transform: scaleY(0.1); }
+                                        }
+                                        @keyframes sideWave {
+                                            0%, 100% { transform: rotate(0deg); }
+                                            50% { transform: rotate(12deg); }
+                                        }
+                                        .side-floating {
+                                            animation: sideFloat 4s ease-in-out infinite;
+                                        }
+                                        .side-eyes {
+                                            transform-origin: center;
+                                            animation: sideBlink 4.5s infinite;
+                                        }
+                                        .side-arm-l {
+                                            transform-origin: 30px 65px;
+                                            animation: sideWave 3s ease-in-out infinite;
+                                        }
+                                        .side-arm-r {
+                                            transform-origin: 70px 65px;
+                                            animation: sideWave 3s ease-in-out infinite;
+                                            animation-delay: 1.5s;
+                                        }
+                                    `}
+                                </style>
+
+                                <g className="side-floating">
+                                    {/* Legs */}
+                                    <rect x="38" y="75" width="8" height="12" rx="4" fill="#3b82f6" />
+                                    <rect x="54" y="75" width="8" height="12" rx="4" fill="#3b82f6" />
+
+                                    {/* Arms */}
+                                    <path className="side-arm-l" d="M30 65 C 20 68, 20 76, 24 78" stroke="#3b82f6" strokeWidth="6" strokeLinecap="round" fill="none" />
+                                    <path className="side-arm-r" d="M70 65 C 80 68, 80 76, 76 78" stroke="#3b82f6" strokeWidth="6" strokeLinecap="round" fill="none" />
+
+                                    {/* Body */}
+                                    <rect x="32" y="55" width="36" height="24" rx="10" fill="#3b82f6" stroke="#2563eb" strokeWidth="0.5" />
+                                    {/* prompt sign on chest */}
+                                    <path d="M 44 63 L 48 66 L 44 69" stroke="#ffffff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                                    <line x1="51" y1="69" x2="56" y2="69" stroke="#ffffff" strokeWidth="2.2" strokeLinecap="round" />
+
+                                    {/* Cloud Head shape */}
+                                    <path d="M 50 18 
+                                             A 14 14 0 0 1 68 24 
+                                             A 14 14 0 0 1 82 40 
+                                             A 12 12 0 0 1 76 56 
+                                             A 10 10 0 0 1 64 58 
+                                             L 36 58 
+                                             A 10 10 0 0 1 24 56 
+                                             A 12 12 0 0 1 18 40 
+                                             A 14 14 0 0 1 32 24
+                                             A 14 14 0 0 1 50 18 Z" 
+                                          fill="#60a5fa" stroke="#3b82f6" strokeWidth="0.5" />
+
+                                    {/* Dark screen face */}
+                                    <rect x="30" y="30" width="40" height="24" rx="8" fill="#1e293b" stroke="#0f172a" strokeWidth="1" />
+
+                                    {/* Cyan Curved Eyes */}
+                                    <path className="side-eyes" d="M 37 42 C 37 45, 43 45, 43 42" stroke="#22d3ee" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+                                    <path className="side-eyes" d="M 57 42 C 57 45, 63 45, 63 42" stroke="#22d3ee" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+                                </g>
+                            </svg>
+                            <span className="text-[10px] font-bold text-blue-700 dark:text-blue-300 mt-1 uppercase tracking-wider group-hover:text-blue-900 dark:group-hover:text-blue-100 transition-colors">
+                                Support kontaktieren
+                            </span>
                         </button>
                     </div>
                 </div>

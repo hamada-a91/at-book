@@ -201,7 +201,7 @@ export function BankAccountsList() {
                 </div>
 
                 <Button
-                    className="shadow-lg shadow-emerald-100/20 hover:shadow-emerald-200/30 transition-all duration-300 bg-gradient-to-r from-emerald-300 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600"
+                    className="w-full sm:w-auto shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 transition-all duration-300 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white gap-2 font-semibold"
                     onClick={() => setIsCreateOpen(true)}
                 >
                     <Plus className="w-4 h-4" />
@@ -494,7 +494,7 @@ export function BankAccountsList() {
                             </div>
                             <div className="border-t border-slate-200 dark:border-slate-800 pt-4">
                                 <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Importierte Umsätze</h3>
-                                <div className="mt-2 max-h-64 overflow-y-auto rounded-md border">
+                                <div className="mt-2 max-h-64 overflow-auto rounded-md border">
                                     <Table>
                                         <TableHeader>
                                             <TableRow>

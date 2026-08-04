@@ -108,7 +108,7 @@ export default function ProductList() {
     };
 
     return (
-        <div className="p-6 space-y-6 bg-gradient-to-br from-indigo-50 via-white to-cyan-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 min-h-screen">
+        <div className="space-y-6 p-0 md:p-4 pb-12">
             <CategoryManager open={categoryManagerOpen} onOpenChange={setCategoryManagerOpen} />
 
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">

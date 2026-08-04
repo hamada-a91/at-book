@@ -82,14 +82,14 @@ export function ProjectsList() {
 
     return (
         <div className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-bold flex items-center gap-2">
                         <FolderKanban className="h-6 w-6 text-blue-600 dark:text-blue-400" /> Projekte
                     </h1>
                     <p className="text-sm text-muted-foreground">Kosten und Erlöse je Projekt – Kunden- oder interne Projekte.</p>
                 </div>
-                <Button onClick={() => setDialogOpen(true)}><Plus className="h-4 w-4 mr-1" /> Neues Projekt</Button>
+                <Button onClick={() => setDialogOpen(true)} className="w-full sm:w-auto"><Plus className="h-4 w-4 mr-1" /> Neues Projekt</Button>
             </div>
 
             <div className="w-56">

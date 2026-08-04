@@ -126,42 +126,44 @@ export function OpenItems() {
                             Die offenen Posten konnten nicht geladen werden.
                         </p>
                     )}
-                    <Table>
-                        <TableHeader><TableRow>
-                            <TableHead>Typ</TableHead><TableHead>Beleg</TableHead><TableHead>Kontakt</TableHead>
-                            <TableHead>Fällig</TableHead><TableHead className="text-right">Gesamt</TableHead>
-                            <TableHead className="text-right">Bezahlt</TableHead><TableHead className="text-right">Offen</TableHead>
-                        </TableRow></TableHeader>
-                        <TableBody>
-                            {data.items.map((item: any) => (
-                                <TableRow
-                                    key={`${item.document_type}-${item.id}`}
-                                    role="link"
-                                    tabIndex={0}
-                                    title={`${item.number} öffnen`}
-                                    className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                                    onClick={() => openDocument(item)}
-                                    onKeyDown={(event) => {
-                                        if (event.key === 'Enter' || event.key === ' ') {
-                                            event.preventDefault();
-                                            openDocument(item);
-                                        }
-                                    }}
-                                >
-                                    <TableCell>{item.type === 'debitor' ? 'Debitor' : 'Kreditor'}</TableCell>
-                                    <TableCell><div className="font-medium">{item.number}</div><div className="text-xs text-slate-500">{item.title}</div></TableCell>
-                                    <TableCell>{item.contact_name}</TableCell>
-                                    <TableCell>{item.due_date ? new Date(item.due_date).toLocaleDateString('de-DE') : '—'}</TableCell>
-                                    <TableCell className="text-right">{money(item.total)}</TableCell>
-                                    <TableCell className="text-right">{money(item.amount_paid)}</TableCell>
-                                    <TableCell className="text-right font-semibold">{money(item.open_amount)}</TableCell>
-                                </TableRow>
-                            ))}
-                            {!query.isLoading && !data.items.length && (
-                                <TableRow><TableCell colSpan={7} className="py-10 text-center text-slate-500">Keine offenen Posten für den gewählten Zeitraum.</TableCell></TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
+                    <div className="overflow-x-auto w-full">
+                        <Table>
+                            <TableHeader><TableRow>
+                                <TableHead>Typ</TableHead><TableHead>Beleg</TableHead><TableHead>Kontakt</TableHead>
+                                <TableHead>Fällig</TableHead><TableHead className="text-right">Gesamt</TableHead>
+                                <TableHead className="text-right">Bezahlt</TableHead><TableHead className="text-right">Offen</TableHead>
+                            </TableRow></TableHeader>
+                            <TableBody>
+                                {data.items.map((item: any) => (
+                                    <TableRow
+                                        key={`${item.document_type}-${item.id}`}
+                                        role="link"
+                                        tabIndex={0}
+                                        title={`${item.number} öffnen`}
+                                        className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                                        onClick={() => openDocument(item)}
+                                        onKeyDown={(event) => {
+                                            if (event.key === 'Enter' || event.key === ' ') {
+                                                event.preventDefault();
+                                                openDocument(item);
+                                            }
+                                        }}
+                                    >
+                                        <TableCell>{item.type === 'debitor' ? 'Debitor' : 'Kreditor'}</TableCell>
+                                        <TableCell><div className="font-medium">{item.number}</div><div className="text-xs text-slate-500">{item.title}</div></TableCell>
+                                        <TableCell>{item.contact_name}</TableCell>
+                                        <TableCell>{item.due_date ? new Date(item.due_date).toLocaleDateString('de-DE') : '—'}</TableCell>
+                                        <TableCell className="text-right">{money(item.total)}</TableCell>
+                                        <TableCell className="text-right">{money(item.amount_paid)}</TableCell>
+                                        <TableCell className="text-right font-semibold">{money(item.open_amount)}</TableCell>
+                                    </TableRow>
+                                ))}
+                                {!query.isLoading && !data.items.length && (
+                                    <TableRow><TableCell colSpan={7} className="py-10 text-center text-slate-500">Keine offenen Posten für den gewählten Zeitraum.</TableCell></TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
                 </CardContent>
             </Card>
         </div>

@@ -212,8 +212,7 @@ export function InventoryReport() {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-cyan-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 p-6">
-            <div className="max-w-7xl mx-auto space-y-6">
+        <div className="max-w-7xl mx-auto space-y-6 p-0 md:p-4 pb-12">
                 {/* Header */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <div>
@@ -578,7 +577,6 @@ export function InventoryReport() {
                         )}
                     </CardContent>
                 </Card>
-            </div>
         </div>
     );
 }

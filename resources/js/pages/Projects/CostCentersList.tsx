@@ -52,13 +52,25 @@ function DimensionManager({ resource, singular }: { resource: 'cost-centers' | '
                 {(items ?? []).length === 0 ? (
                     <p className="p-4 text-sm text-muted-foreground text-center">Noch keine {singular}-Einträge.</p>
                 ) : (items ?? []).map((d) => (
-                    <div key={d.id} className="flex items-center justify-between p-3">
-                        <div className="flex items-center gap-3">
-                            <span className="font-mono text-xs text-muted-foreground w-16">{d.code}</span>
-                            <span>{d.name}</span>
-                            {!d.active && <Badge variant="secondary">inaktiv</Badge>}
-                        </div>
-                        <div className="flex items-center gap-1">
+                    <div key={d.id} className="flex items-center justify-between p-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition-colors">
+                        {resource === 'cost-centers' ? (
+                            <Link 
+                                to={`/${tenant}/cost-centers/${d.id}`}
+                                className="flex items-center gap-3 flex-1 rounded-lg py-1 px-2 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                title="Kostenstelle Auswertung öffnen"
+                            >
+                                <span className="font-mono text-xs text-muted-foreground w-16">{d.code}</span>
+                                <span className="font-medium text-slate-900 dark:text-slate-100">{d.name}</span>
+                                {!d.active && <Badge variant="secondary">inaktiv</Badge>}
+                            </Link>
+                        ) : (
+                            <div className="flex items-center gap-3 flex-1 py-1 px-2">
+                                <span className="font-mono text-xs text-muted-foreground w-16">{d.code}</span>
+                                <span className="text-slate-950 dark:text-slate-50">{d.name}</span>
+                                {!d.active && <Badge variant="secondary">inaktiv</Badge>}
+                            </div>
+                        )}
+                        <div className="flex items-center gap-1 ml-2">
                             {resource === 'cost-centers' && (
                                 <Button variant="ghost" size="sm" asChild title="Auswertung öffnen">
                                     <Link to={`/${tenant}/cost-centers/${d.id}`}><BarChart3 className="h-4 w-4 text-blue-600" /></Link>

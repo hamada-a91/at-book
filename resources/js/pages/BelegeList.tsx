@@ -170,12 +170,12 @@ export function BelegeList() {
             )}
 
             {/* Quick Filters */}
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex overflow-x-auto whitespace-nowrap pb-1 -mx-4 px-4 sm:-mx-0 sm:px-0 sm:flex-wrap items-center gap-2 no-scrollbar">
                 <Button
                     variant={filterType === 'all' ? 'default' : 'outline'}
                     size="sm"
                     onClick={() => setFilterType('all')}
-                    className="gap-2"
+                    className="gap-2 shrink-0"
                 >
                     <Receipt className="w-4 h-4" />
                     Alle
@@ -184,7 +184,7 @@ export function BelegeList() {
                     variant={filterType === 'ausgang' ? 'default' : 'outline'}
                     size="sm"
                     onClick={() => setFilterType('ausgang')}
-                    className="gap-2"
+                    className="gap-2 shrink-0"
                 >
                     <Upload className="w-4 h-4" />
                     Ausgangsbelege
@@ -193,7 +193,7 @@ export function BelegeList() {
                     variant={filterType === 'eingang' ? 'default' : 'outline'}
                     size="sm"
                     onClick={() => setFilterType('eingang')}
-                    className="gap-2"
+                    className="gap-2 shrink-0"
                 >
                     <Download className="w-4 h-4" />
                     Eingangsbelege
@@ -202,7 +202,7 @@ export function BelegeList() {
                     variant={filterType === 'offen' ? 'default' : 'outline'}
                     size="sm"
                     onClick={() => setFilterType('offen')}
-                    className="gap-2"
+                    className="gap-2 shrink-0"
                 >
                     <FileText className="w-4 h-4" />
                     Offene Belege
@@ -210,18 +210,18 @@ export function BelegeList() {
             </div>
 
             {/* Search and Filters */}
-            <div className="flex flex-col sm:flex-row items-center gap-4">
-                <div className="relative flex-1 max-w-sm">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full">
+                <div className="relative flex-1 w-full sm:max-w-sm">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <Input
                         placeholder="Suchen nach Nummer, Titel oder Kontakt..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-9 bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800"
+                        className="pl-9 bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 w-full"
                     />
                 </div>
                 <Select value={filterStatus} onValueChange={(value) => setFilterStatus(value as BelegStatus | 'all')}>
-                    <SelectTrigger className="w-[180px] bg-white dark:bg-slate-950">
+                    <SelectTrigger className="w-full sm:w-[180px] bg-white dark:bg-slate-950">
                         <SelectValue placeholder="Status filtern" />
                     </SelectTrigger>
                     <SelectContent>
