@@ -102,6 +102,8 @@ export function BelegCreate() {
     const [isPaid, setIsPaid] = useState(false);
     const [paymentAccountId, setPaymentAccountId] = useState<string>('');
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [localPreviewUrl, setLocalPreviewUrl] = useState('');
+    const [serverPreviewUrl, setServerPreviewUrl] = useState('');
     const [showProductLines, setShowProductLines] = useState(false);
     const [lines, setLines] = useState<BelegLine[]>([]);
     const [projectId, setProjectId] = useState<string | undefined>();
@@ -109,6 +111,18 @@ export function BelegCreate() {
     const [ocrDraftId, setOcrDraftId] = useState<string>('');
     const [ocrApplied, setOcrApplied] = useState(false);
     const activeBelegId = id || ocrDraftId;
+
+    useEffect(() => {
+        if (!selectedFile) {
+            setLocalPreviewUrl('');
+            return;
+        }
+
+        const objectUrl = URL.createObjectURL(selectedFile);
+        setLocalPreviewUrl(objectUrl);
+
+        return () => URL.revokeObjectURL(objectUrl);
+    }, [selectedFile]);
 
     // SPEC-08 (Teil B): Projekt-Feld nur zeigen, wenn das Modul aktiv ist.
     const { data: companySettings } = useQuery({
@@ -158,6 +172,29 @@ export function BelegCreate() {
             return ocrDraftId && status !== 'done' && status !== 'failed' ? 1500 : false;
         },
     });
+
+    useEffect(() => {
+        if (!activeBelegId || selectedFile) {
+            setServerPreviewUrl('');
+            return;
+        }
+
+        let objectUrl = '';
+        let cancelled = false;
+
+        axios.get(`/api/belege/${activeBelegId}/download`, { responseType: 'blob' })
+            .then(({ data }) => {
+                if (cancelled) return;
+                objectUrl = URL.createObjectURL(data);
+                setServerPreviewUrl(objectUrl);
+            })
+            .catch(() => setServerPreviewUrl(''));
+
+        return () => {
+            cancelled = true;
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
+        };
+    }, [activeBelegId, selectedFile, existingBeleg?.file_name]);
 
     // Populate form when beleg data loads
     useEffect(() => {
@@ -213,16 +250,19 @@ export function BelegCreate() {
         if (typeof grossAmount === 'number') setAmount(grossAmount / 100);
         if (typeof tax === 'number') setTaxAmount(tax / 100);
         if (typeof detectedTaxRate === 'number') setTaxRate(detectedTaxRate);
-        if (detectedContactId) setContactId(detectedContactId.toString());
+        if (detectedContactId) {
+            setContactId(detectedContactId.toString());
+            queryClient.invalidateQueries({ queryKey: ['contacts'] });
+        }
         if (detectedAccountId) setCategoryAccountId(detectedAccountId.toString());
 
         setNotes([
             existingBeleg.notes || '',
             invoiceNumber ? `OCR-Rechnungsnummer: ${invoiceNumber}` : '',
-            supplierName && !detectedContactId ? `OCR-Lieferant: ${supplierName}` : '',
+            supplierName && !detectedContactId ? `OCR-Lieferant (bitte Kontakt zuordnen): ${supplierName}` : '',
         ].filter(Boolean).join('\n'));
         setOcrApplied(true);
-    }, [existingBeleg?.ocr_status, existingBeleg?.ocr_data, existingBeleg?.title, existingBeleg?.notes, ocrApplied]);
+    }, [existingBeleg?.ocr_status, existingBeleg?.ocr_data, existingBeleg?.title, existingBeleg?.notes, ocrApplied, queryClient]);
 
     useEffect(() => {
         if (!sourceBankTransaction || isEditMode) return;
@@ -462,6 +502,9 @@ export function BelegCreate() {
 
     const ocrStatus = existingBeleg?.ocr_status;
     const ocrFields = existingBeleg?.ocr_data?.fields || {};
+    const documentPreviewUrl = localPreviewUrl || serverPreviewUrl;
+    const previewFileName = selectedFile?.name || existingBeleg?.file_name || '';
+    const isDocumentPreviewPdf = (selectedFile?.type || '').includes('pdf') || previewFileName.toLowerCase().endsWith('.pdf');
     const isLowConfidence = (name: string) => {
         const field = ocrFields[name];
         return field?.value !== null && field?.value !== undefined && (field.confidence ?? 0) < 0.8;
@@ -478,7 +521,7 @@ export function BelegCreate() {
     }).filter(([key]) => isLowConfidence(key)).map(([, label]) => label);
 
     return (
-        <div className="max-w-5xl mx-auto space-y-6 p-0 md:p-4 pb-12">
+        <div className="max-w-7xl mx-auto space-y-6 p-0 md:p-4 pb-12">
                 <div className="flex items-center gap-4">
                     <Link to={sourceBankTransactionId ? returnTo : `/${tenant}/belege`}>
                         <Button variant="ghost" size="icon" className="h-10 w-10 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
@@ -520,7 +563,85 @@ export function BelegCreate() {
                     </div>
                 )}
 
+                <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Upload className="w-5 h-5 text-primary" />
+                            Datei hochladen
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={handleDrop}
+                            className="rounded-lg border border-dashed border-slate-300 p-4 dark:border-slate-700"
+                        >
+                            <Input
+                                type="file"
+                                accept="image/*,application/pdf"
+                                capture="environment"
+                                onChange={handleFileChange}
+                                className="bg-white dark:bg-slate-950"
+                            />
+                            <div className="mt-3 flex flex-wrap items-center gap-3">
+                                {selectedFile && (
+                                    <span className="text-sm text-emerald-700 dark:text-emerald-300">
+                                        {selectedFile.name} ausgewählt
+                                    </span>
+                                )}
+                                {!isEditMode && (
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={startOcrUpload}
+                                        disabled={!selectedFile || ocrUploadMutation.isPending || ocrStatus === 'pending' || ocrStatus === 'processing'}
+                                        className="gap-2"
+                                    >
+                                        <Upload className="w-4 h-4" />
+                                        {ocrUploadMutation.isPending || ocrStatus === 'pending' || ocrStatus === 'processing' ? 'OCR läuft ...' : 'Beleg scannen'}
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+
                 <form onSubmit={handleSubmit} className="space-y-6">
+                    <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(420px,560px)] xl:items-start">
+                        <div className="xl:sticky xl:top-4">
+                            <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2">
+                                        <FileText className="w-5 h-5 text-primary" />
+                                        Vorschau
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    {documentPreviewUrl ? (
+                                        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
+                                            {isDocumentPreviewPdf ? (
+                                                <iframe
+                                                    src={documentPreviewUrl}
+                                                    title={previewFileName || 'Belegvorschau'}
+                                                    className="h-[72vh] min-h-[520px] w-full"
+                                                />
+                                            ) : (
+                                                <img
+                                                    src={documentPreviewUrl}
+                                                    alt={previewFileName || 'Belegvorschau'}
+                                                    className="max-h-[72vh] min-h-[360px] w-full object-contain"
+                                                />
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div className="flex min-h-[360px] items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+                                            Noch keine Datei ausgewählt
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </div>
+                        <div className="space-y-6">
                     {/* Document Type */}
                     <Card className="border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg">
                         <CardHeader className="border-b border-gray-200 dark:border-gray-700">
@@ -889,52 +1010,6 @@ export function BelegCreate() {
                         </CardContent>
                     </Card>
 
-                    {/* File Upload */}
-                    <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <Upload className="w-5 h-5 text-primary" />
-                                Datei hochladen
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                                    Beleg-Datei (PDF, JPG, PNG)
-                                </label>
-                                <div
-                                    onDragOver={(e) => e.preventDefault()}
-                                    onDrop={handleDrop}
-                                    className="rounded-lg border border-dashed border-slate-300 p-4 dark:border-slate-700"
-                                >
-                                    <Input
-                                        type="file"
-                                        accept="image/*,application/pdf"
-                                        capture="environment"
-                                        onChange={handleFileChange}
-                                        className="bg-white dark:bg-slate-950"
-                                    />
-                                    {selectedFile && (
-                                        <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-2">
-                                            {selectedFile.name} ausgewaehlt
-                                        </p>
-                                    )}
-                                    {!isEditMode && (
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            onClick={startOcrUpload}
-                                            disabled={!selectedFile || ocrUploadMutation.isPending || ocrStatus === 'pending' || ocrStatus === 'processing'}
-                                            className="mt-3 gap-2"
-                                        >
-                                            <Upload className="w-4 h-4" />
-                                            {ocrUploadMutation.isPending || ocrStatus === 'pending' || ocrStatus === 'processing' ? 'OCR laeuft ...' : 'Beleg scannen/hochladen'}
-                                        </Button>
-                                    )}
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
 
                     {/* Notes */}
                     <Card className="shadow-sm border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
@@ -954,6 +1029,9 @@ export function BelegCreate() {
                             />
                         </CardContent>
                     </Card>
+
+                        </div>
+                    </div>
 
                     {/* Actions */}
                     <div className="flex justify-end gap-4 pb-8">

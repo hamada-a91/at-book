@@ -44,19 +44,26 @@ class BelegOcrParser
         $documentDate = $this->extractDate($normalized, [
             'rechnungsdatum',
             'belegdatum',
+            'invoice date',
             'datum',
+            'date',
         ]);
         $dueDate = $this->extractDate($normalized, [
             'faelligkeit',
             'falligkeit',
             'zahlbar bis',
             'zahlungsziel',
+            'due date of payment',
+            'due date',
+            'payment due',
         ]);
         $invoiceNumber = $this->extractInvoiceNumber($normalized);
         $amounts = $this->extractAmounts($normalized);
         $supplier = $this->extractSupplier($normalized);
         $currency = $this->extractCurrency($normalized);
         $taxRate = $amounts['tax_rate'] ?? $this->extractTaxRate($normalized);
+        $taxNumber = $this->extractTaxNumber($normalized);
+        $iban = $this->extractIban($normalized);
 
         $fields = [
             'document_date' => $documentDate,
@@ -68,9 +75,14 @@ class BelegOcrParser
             'tax_rate' => $this->field($taxRate, $taxRate !== null ? 0.82 : 0.0, $taxRate !== null ? 'ust-satz' : null),
             'currency' => $this->field($currency, 0.75, 'waehrung'),
             'supplier_name' => $supplier,
+            'supplier_tax_number' => $this->field($taxNumber, $taxNumber ? 0.84 : 0.0, $taxNumber ? 'ust-id' : null),
+            'supplier_iban' => $this->field($iban, $iban ? 0.72 : 0.0, $iban ? 'iban' : null),
         ];
 
-        $contact = $this->matchContact($fields, $normalized);
+        // Nur gegen BESTEHENDE Kontakte matchen - der Parser legt NIE selbst einen
+        // Kontakt an (verhindert Müll-Kontakte aus Fehlerkennungen). Fehlt ein Treffer,
+        // bleibt supplier_name/-iban/-tax_number als Vorschlag für die manuelle Auswahl.
+        $contact = $this->matchContact($fields, $normalized, $taxNumber, $iban);
         if ($contact) {
             $fields['contact_id'] = $this->field($contact->id, 0.9, 'tenant-kontakt-match');
             $fields['contact_public_id'] = $this->field($contact->public_id, 0.9, 'tenant-kontakt-match');
@@ -137,14 +149,14 @@ class BelegOcrParser
 
     private function datePattern(): string
     {
-        return '\d{1,2}\.\s*\d{1,2}\.\s*\d{2,4}|\d{1,2}\.\s*[[:alpha:]äöüÄÖÜß]+\s+\d{4}';
+        return '\d{1,2}\.\s*\d{1,2}\.\s*\d{2,4}|\d{1,2}\/\d{1,2}\/\d{2,4}|\d{1,2}\.\s*[[:alpha:]äöüÄÖÜß]+\s+\d{4}';
     }
 
     private function normalizeDate(string $value): ?string
     {
         $value = trim(preg_replace('/\s+/', ' ', $value) ?? $value);
 
-        if (preg_match('/^(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{2,4})$/', $value, $matches)) {
+        if (preg_match('/^(\d{1,2})[\/.]\s*(\d{1,2})[\/.]\s*(\d{2,4})$/', $value, $matches)) {
             $year = (int) $matches[3];
             if ($year < 100) {
                 $year += 2000;
@@ -182,7 +194,7 @@ class BelegOcrParser
     {
         $patterns = [
             '/(?:rechnung(?:s)?(?:\s*[- ]?\s*nr\.?|nummer)|beleg(?:\s*[- ]?\s*nr\.?|nummer)|rg(?:\s*[- ]?\s*nr\.?))\s*[:#\-]?\s*([A-Z0-9][A-Z0-9\/\-.]{2,})/iu',
-            '/(?:invoice|receipt)\s*(?:no\.?|number)?\s*[:#\-]?\s*([A-Z0-9][A-Z0-9\/\-.]{2,})/iu',
+            '/(?:invoice\s*no\.?|invoice\s*number|invoice|receipt)\s*(?:no\.?|number)?\s*[:#\-]?\s*([A-Z0-9][A-Z0-9\/\-.]{2,})/iu',
         ];
 
         foreach ($patterns as $pattern) {
@@ -196,13 +208,13 @@ class BelegOcrParser
 
     private function extractAmounts(string $text): array
     {
-        $amountPattern = '(-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2})';
+        $amountPattern = '(-?\d{1,3}(?:[. ]\d{3})*(?:,\d{2}|\.\d{2})|-?\d+(?:,\d{2}|\.\d{2}))';
         $result = [];
 
         $labelPatterns = [
-            'gross' => '/(?:gesamtbetrag|rechnungsbetrag|brutto(?:betrag)?|summe(?:\s+brutto)?|zu zahlen)\s*[:\-]?\s*'.$amountPattern.'/iu',
-            'net' => '/(?:netto(?:betrag)?|warenwert)\s*[:\-]?\s*'.$amountPattern.'/iu',
-            'tax' => '/(?:(?:ust|mwst|umsatzsteuer|mehrwertsteuer)(?:\s*\d{1,2}\s*%)?)\s*[:\-]?\s*'.$amountPattern.'/iu',
+            'gross' => '/(?:gesamtbetrag|rechnungsbetrag|brutto(?:betrag)?|summe(?:[ 	]+brutto)?|zu zahlen|total(?:[ 	]+amount)?(?:[ 	]+incl\.?[ 	]+vat)?)[ 	]*[:\-]?[ 	]*(?:€[ 	]*)?'.$amountPattern.'/iu',
+            'net' => '/(?:netto(?:betrag)?|warenwert|total[ 	]*\(excl\.[ 	]*vat\)|subtotal[ 	]*\(excl\.[ 	]*vat\))[ 	]*[:\-]?[ 	]*(?:€[ 	]*)?'.$amountPattern.'/iu',
+            'tax' => '/(?:(?:ust|mwst|umsatzsteuer|mehrwertsteuer|tax|vat)(?:[ 	]*\d{1,2}[ 	]*%)?)[ 	]*[:\-]?[ 	]*(?:€[ 	]*)?'.$amountPattern.'/iu',
         ];
 
         foreach ($labelPatterns as $key => $pattern) {
@@ -217,8 +229,16 @@ class BelegOcrParser
             }
         }
 
-        if (! isset($result['gross_amount']) && preg_match_all('/'.$amountPattern.'\s*(?:EUR|Euro|€)/iu', $text, $matches)) {
-            $amounts = array_values(array_filter(array_map(fn (string $value) => $this->moneyToCents($value), $matches[1]), fn ($value) => $value !== null));
+        if (! isset($result['gross_amount']) && preg_match_all('/(?:€\s*'.$amountPattern.'|'.$amountPattern.'\s*(?:EUR|Euro|€))(?!\d)/iu', $text, $matches, PREG_SET_ORDER)) {
+            $amounts = [];
+            foreach ($matches as $match) {
+                $value = ($match[1] ?? '') !== '' ? $match[1] : $match[2];
+                $cents = $this->moneyToCents($value);
+                if ($cents !== null) {
+                    $amounts[] = $cents;
+                }
+            }
+
             if ($amounts !== []) {
                 $result['gross_amount'] = max($amounts);
                 $result['gross_confidence'] = 0.54;
@@ -243,16 +263,30 @@ class BelegOcrParser
             $result['tax_source'] = 'brutto-minus-netto';
         }
 
+        if (isset($result['gross_amount'], $result['tax_rate']) && ! isset($result['net_amount'], $result['tax_amount'])) {
+            $net = (int) round($result['gross_amount'] / (1 + ($result['tax_rate'] / 100)));
+            $result['net_amount'] = $net;
+            $result['net_confidence'] = 0.58;
+            $result['net_source'] = 'brutto-mit-ust-satz';
+            $result['tax_amount'] = $result['gross_amount'] - $net;
+            $result['tax_confidence'] = 0.58;
+            $result['tax_source'] = 'brutto-mit-ust-satz';
+        }
+
         return $result;
     }
 
     private function extractTaxRate(string $text): ?int
     {
-        if (preg_match('/(?:ust|mwst|umsatzsteuer|mehrwertsteuer)[^\n]{0,20}\b(19|7)\s*%/iu', $text, $matches)) {
+        if (preg_match('/(?:ust|mwst|umsatzsteuer|mehrwertsteuer|tax\s*rate|vat)[^\n]{0,40}\b(19|7)\s*%/iu', $text, $matches)) {
             return (int) $matches[1];
         }
 
-        if (preg_match('/\b(19|7)\s*%\s*(?:ust|mwst|umsatzsteuer|mehrwertsteuer)/iu', $text, $matches)) {
+        if (preg_match('/\b(19|7)\s*%\s*(?:ust|mwst|umsatzsteuer|mehrwertsteuer|tax|vat)/iu', $text, $matches)) {
+            return (int) $matches[1];
+        }
+
+        if (preg_match('/\b(19|7)\s*%/u', $text, $matches)) {
             return (int) $matches[1];
         }
 
@@ -271,17 +305,32 @@ class BelegOcrParser
     private function extractSupplier(string $text): array
     {
         $lines = array_values(array_filter(array_map('trim', explode("\n", $text))));
-        $candidateLines = array_slice($lines, 0, 12);
+        $candidateLines = array_slice($lines, 0, 16);
 
+        // Rechnungs-Metadaten / reine Betragszeilen ausschließen (verhindert z.B.
+        // "Kundennr.: 2" oder "Datum: …" als Lieferantennamen). Am ZEILENANFANG
+        // ankern, damit z.B. "Industriestr." nicht wegen "ust" gefiltert wird.
+        $metadata = '/^\s*(rechnung|rechnungs?[-\s]?nr|kunden[-\s]?nr|beleg[-\s]?nr|invoice|customer|datum|rechnungsdatum|belegdatum|f[aä]llig|due\s?date|zwischensumme|gesamtbetrag|nettobetrag|bruttobetrag|umsatzsteuer|steuernummer|ust[-\s]?id|iban|bic|vat|tel\.?[:\s]|fax|www\.|https?:)/iu';
+
+        // 1) Zeile mit Rechtsform (GmbH, AG, …) bevorzugen.
         foreach ($candidateLines as $line) {
-            if ($this->isLikelySupplierLine($line)) {
-                return $this->field($line, 0.58, 'kopfbereich');
+            if (preg_match($metadata, $line)) {
+                continue;
+            }
+            $name = $this->cleanSupplierName($line);
+            if ($this->isLikelySupplierLine($name)) {
+                return $this->field($name, 0.82, 'kopfbereich');
             }
         }
 
+        // 2) Erste namensartige Zeile ohne Metadaten.
         foreach ($candidateLines as $line) {
-            if (mb_strlen($line) >= 4 && ! preg_match('/rechnung|beleg|datum|telefon|email|www|seite/i', $line)) {
-                return $this->field($line, 0.42, 'kopfbereich');
+            if (preg_match($metadata, $line)) {
+                continue;
+            }
+            $name = $this->cleanSupplierName($line);
+            if (mb_strlen($name) >= 3 && preg_match('/[A-Za-zÄÖÜäöüß]/u', $name)) {
+                return $this->field($name, 0.5, 'kopfbereich');
             }
         }
 
@@ -293,37 +342,70 @@ class BelegOcrParser
         return preg_match('/\b(GmbH|UG|AG|KG|OHG|e\.K\.|GbR|SE|Ltd\.?)\b/u', $line) === 1;
     }
 
-    private function matchContact(array $fields, string $text): ?Contact
+    private function cleanSupplierName(string $line): string
     {
-        $taxNumber = $this->extractTaxNumber($text);
+        $line = trim(preg_replace('/\s+/', ' ', $line) ?? $line);
+        // Bei "Name, Straße, PLZ Ort" nur den Namensteil vor dem ersten Komma nehmen.
+        $parts = preg_split('/\s*[,•|]\s*/u', $line);
+        $line = trim($parts[0] ?? $line);
+
+        if (preg_match('/^(.+?\b(?:GmbH|UG|AG|KG|OHG|e\.K\.|GbR|SE|Ltd\.?)\b)/u', $line, $matches)) {
+            return trim($matches[1]);
+        }
+
+        return $line;
+    }
+
+    private function matchContact(array $fields, string $text, ?string $taxNumber = null, ?string $iban = null): ?Contact
+    {
+        // 1) USt-IdNr.
+        $taxNumber ??= $this->extractTaxNumber($text);
         if ($taxNumber) {
-            $contact = Contact::query()
-                ->where('tax_number', $taxNumber)
-                ->first();
+            $contact = Contact::query()->where('tax_number', $taxNumber)->first();
             if ($contact) {
                 return $contact;
             }
         }
 
-        $iban = $this->extractIban($text);
+        // 2) IBAN
+        $iban ??= $this->extractIban($text);
         if ($iban) {
-            $contacts = Contact::query()->whereNotNull('bank_account')->get();
-            foreach ($contacts as $contact) {
+            foreach (Contact::query()->whereNotNull('bank_account')->get() as $contact) {
                 if ($this->normalizeIban((string) $contact->bank_account) === $iban) {
                     return $contact;
                 }
             }
         }
 
+        // 3) Direkter Namenstreffer: taucht ein bestehender Kontaktname irgendwo im
+        //    Belegtext auf (z.B. in der Zahlungs-/Fußzeile)? Längster Treffer gewinnt.
+        $haystack = mb_strtolower($text);
+        $byName = null;
+        $byNameLen = 0;
+        foreach (Contact::query()->get() as $contact) {
+            $name = trim((string) $contact->name);
+            if (mb_strlen($name) < 4) {
+                continue;
+            }
+            if (str_contains($haystack, mb_strtolower($name)) && mb_strlen($name) > $byNameLen) {
+                $byName = $contact;
+                $byNameLen = mb_strlen($name);
+            }
+        }
+        if ($byName) {
+            return $byName;
+        }
+
+        // 4) Fuzzy-Match gegen den extrahierten Lieferantennamen
         $supplierName = $fields['supplier_name']['value'] ?? null;
-        if (! $supplierName) {
+        if (! is_string($supplierName) || mb_strlen($supplierName) < 4) {
             return null;
         }
 
         $best = null;
         $bestScore = 0.0;
         foreach (Contact::query()->get() as $contact) {
-            similar_text(mb_strtolower($supplierName), mb_strtolower($contact->name), $score);
+            similar_text(mb_strtolower($supplierName), mb_strtolower((string) $contact->name), $score);
             if ($score > $bestScore) {
                 $best = $contact;
                 $bestScore = $score;
@@ -335,6 +417,10 @@ class BelegOcrParser
 
     private function extractTaxNumber(string $text): ?string
     {
+        if (preg_match('/(?:USt(?:euer)?(?:-?IdNr\.)?|VAT\s+Reg\.\s+No\.?|VAT\s+ID)\s*[:.]?\s*\b(DE[0-9]{9})\b/i', $text, $matches)) {
+            return strtoupper($matches[1]);
+        }
+
         if (preg_match('/\b(DE[0-9]{9})\b/i', $text, $matches)) {
             return strtoupper($matches[1]);
         }
@@ -360,10 +446,13 @@ class BelegOcrParser
     {
         $keywords = [
             'telekom|telefon|internet|mobilfunk' => ['4922', 'Telekommunikation'],
-            'porto|briefmarke|versand|dhl|post' => ['4910', 'Porto'],
-            'hotel|reise|bahn|flug|taxi' => ['4670', 'Reise'],
-            'anwalt|steuerberater|beratung' => ['4950', 'Beratung'],
+            'server|hosting|cloud|domain|hetzner|software|saas|website|webseite|webdesign|entwicklung|development|programmier|app\b|edv' => ['4922', 'Internet'],
+            'seo|marketing|werbung|werbe|anzeige|google ads|social media|kampagne' => ['4600', 'Werbe'],
+            'porto|briefmarke|versand|dhl|paket|post' => ['4910', 'Porto'],
+            'hotel|reise|übernacht|uebernacht|bahn|flug|taxi|mietwagen' => ['4670', 'Reise'],
+            'anwalt|rechtsanwalt|steuerberater|beratung|consulting' => ['4950', 'Beratung'],
             'buchfuehrung|buchführung|lohnabrechnung' => ['4957', 'Buchfuehrung'],
+            'büro|buero|bürobedarf|schreibwaren|papier|toner|drucker' => ['4930', 'Bürobedarf'],
         ];
 
         foreach ($keywords as $pattern => [$code, $name]) {
