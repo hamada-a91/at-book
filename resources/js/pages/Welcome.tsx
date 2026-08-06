@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { 
@@ -15,12 +16,15 @@ import {
     Lock,
     Eye,
     FolderKanban,
-    Building2
+    Building2,
+    Menu,
+    X
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function Welcome() {
     const navigate = useNavigate();
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-300">
@@ -40,7 +44,7 @@ export default function Welcome() {
                         <a href="#security" className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">Sicherheit</a>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="hidden md:flex items-center gap-3">
                         <Button
                             variant="ghost"
                             className="text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
@@ -55,7 +59,39 @@ export default function Welcome() {
                             Kostenlos starten
                         </Button>
                     </div>
+
+                    {/* Hamburger Button */}
+                    <button 
+                        onClick={() => setMobileMenuOpen(!mobileMenuOpen)} 
+                        className="md:hidden p-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-900 focus:outline-none"
+                    >
+                        {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+                    </button>
                 </div>
+
+                {/* Mobile Menu Drawer */}
+                {mobileMenuOpen && (
+                    <div className="md:hidden border-t border-slate-200/60 dark:border-slate-800/60 bg-white/95 dark:bg-slate-950/95 backdrop-blur-xl px-4 pt-2 pb-6 space-y-4">
+                        <a href="#features" onClick={() => setMobileMenuOpen(false)} className="block py-2 text-base font-semibold text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400">Funktionen</a>
+                        <a href="#workflow" onClick={() => setMobileMenuOpen(false)} className="block py-2 text-base font-semibold text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400">Ablauf</a>
+                        <a href="#security" onClick={() => setMobileMenuOpen(false)} className="block py-2 text-base font-semibold text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400">Sicherheit</a>
+                        <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex flex-col gap-3">
+                            <Button
+                                variant="outline"
+                                className="w-full h-11 text-base font-semibold border-slate-200 dark:border-slate-800"
+                                onClick={() => { setMobileMenuOpen(false); navigate('/login'); }}
+                            >
+                                Anmelden
+                            </Button>
+                            <Button
+                                className="w-full h-11 text-base font-semibold bg-indigo-600 hover:bg-indigo-700 text-white"
+                                onClick={() => { setMobileMenuOpen(false); navigate('/register'); }}
+                            >
+                                Kostenlos starten
+                            </Button>
+                        </div>
+                    </div>
+                )}
             </nav>
 
             {/* Hero Section */}

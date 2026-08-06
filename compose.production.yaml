@@ -48,7 +48,7 @@ services:
         WWWGROUP: '${WWWGROUP:-1000}'
     image: at-book-app
     restart: unless-stopped
-    command: php artisan queue:work --queue=backups,default --tries=3 --timeout=90
+    command: php artisan queue:work --queue=backups,ocr,default --tries=3 --timeout=90
     environment:
       WWWUSER: '${WWWUSER:-1000}'
       APP_ENV: 'production'
