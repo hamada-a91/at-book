@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import axios from '@/lib/axios';
@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, FileText, Trash2, Eye, Edit, Search, Download, Upload, Send, Receipt, AlertCircle } from 'lucide-react';
+import { Plus, FileText, Trash2, Eye, Edit, Search, Download, Upload, Send, Receipt, AlertCircle, Camera } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Beleg, BelegType, BelegStatus } from '@/types/beleg';
 
@@ -19,6 +19,7 @@ export function BelegeList() {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState<BelegType | 'all'>('all');
     const [filterStatus, setFilterStatus] = useState<BelegStatus | 'all'>('all');
+    const scanInputRef = useRef<HTMLInputElement | null>(null);
 
     const { data: belege, isLoading } = useQuery<Beleg[]>({
         queryKey: ['belege', filterType, filterStatus],
@@ -98,6 +99,20 @@ export function BelegeList() {
         }
     };
 
+    const handleScanFileSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) return;
+
+        navigate(`/${tenant}/belege/create`, {
+            state: {
+                scanFile: file,
+                autoStartOcr: true,
+                returnTo: `/${tenant}/belege`,
+            },
+        });
+    };
+
     const handleDownload = async (id: number) => {
         try {
             const response = await axios.get(`/api/belege/${id}/download`, {
@@ -154,12 +169,31 @@ export function BelegeList() {
                     <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Belege</h1>
                     <p className="text-slate-500 dark:text-slate-400">Verwalten Sie Ihre Geschäftsbelege</p>
                 </div>
-                <Link to={`/${tenant}/belege/create`}>
-                    <Button className="shadow-lg shadow-purple-100/20 hover:shadow-purple-200/30 transition-all duration-300 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700">
-                        <Plus className="w-4 h-4 mr-2" />
-                        Neuer Beleg
+                <div className="flex flex-wrap gap-2">
+                    <Input
+                        ref={scanInputRef}
+                        type="file"
+                        accept="image/*,application/pdf"
+                        capture="environment"
+                        onChange={handleScanFileSelected}
+                        className="hidden"
+                    />
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => scanInputRef.current?.click()}
+                        className="gap-2"
+                    >
+                        <Camera className="w-4 h-4" />
+                        Beleg scannen
                     </Button>
-                </Link>
+                    <Link to={`/${tenant}/belege/create`}>
+                        <Button className="shadow-lg shadow-purple-100/20 hover:shadow-purple-200/30 transition-all duration-300 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700">
+                            <Plus className="w-4 h-4 mr-2" />
+                            Neuer Beleg
+                        </Button>
+                    </Link>
+                </div>
             </div>
 
             {(bookError || deleteError) && (

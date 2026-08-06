@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Save, X, Calendar, FileText, Upload, Receipt, Euro, User, Plus, Trash2, Package } from 'lucide-react';
+import { ArrowLeft, Save, X, FileText, Upload, Receipt, Euro, User, Plus, Trash2, Package, Loader2 } from 'lucide-react';
 import { ContactSelector } from '@/components/ContactSelector';
 import { AccountSelector } from '@/components/AccountSelector';
 import { ProductSelector } from '@/components/ProductSelector';
@@ -83,7 +83,7 @@ export function BelegCreate() {
     const location = useLocation();
     const [searchParams] = useSearchParams();
     const { tenant, id } = useParams<{ tenant: string; id: string }>();
-    const locationState = location.state as { bankTransaction?: BankTransaction; returnTo?: string } | null;
+    const locationState = location.state as { bankTransaction?: BankTransaction; returnTo?: string; scanFile?: File; autoStartOcr?: boolean } | null;
     const sourceBankTransactionId = searchParams.get('bank_transaction_id');
     const returnTo = searchParams.get('return_to') || locationState?.returnTo || `/${tenant}/banking`;
     const queryClient = useQueryClient();
@@ -101,7 +101,7 @@ export function BelegCreate() {
     const [categoryAccountId, setCategoryAccountId] = useState<string>('');
     const [isPaid, setIsPaid] = useState(false);
     const [paymentAccountId, setPaymentAccountId] = useState<string>('');
-    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [selectedFile, setSelectedFile] = useState<File | null>(() => locationState?.scanFile || null);
     const [localPreviewUrl, setLocalPreviewUrl] = useState('');
     const [serverPreviewUrl, setServerPreviewUrl] = useState('');
     const [showProductLines, setShowProductLines] = useState(false);
@@ -110,6 +110,7 @@ export function BelegCreate() {
     const [costCenterId, setCostCenterId] = useState<string | undefined>();
     const [ocrDraftId, setOcrDraftId] = useState<string>('');
     const [ocrApplied, setOcrApplied] = useState(false);
+    const [autoOcrStarted, setAutoOcrStarted] = useState(false);
     const activeBelegId = id || ocrDraftId;
 
     useEffect(() => {
@@ -235,6 +236,7 @@ export function BelegCreate() {
         const detectedTaxRate = value<number>('tax_rate');
         const detectedContactId = value<number>('contact_id');
         const detectedAccountId = value<number>('category_account_id');
+        const contactCreated = value<boolean>('contact_created');
         const supplierName = value<string>('supplier_name');
         const invoiceNumber = value<string>('invoice_number');
 
@@ -258,8 +260,9 @@ export function BelegCreate() {
 
         setNotes([
             existingBeleg.notes || '',
-            invoiceNumber ? `OCR-Rechnungsnummer: ${invoiceNumber}` : '',
-            supplierName && !detectedContactId ? `OCR-Lieferant (bitte Kontakt zuordnen): ${supplierName}` : '',
+            invoiceNumber ? 'OCR-Rechnungsnummer: ' + invoiceNumber : '',
+            supplierName && contactCreated ? 'OCR-Kontakt automatisch erstellt: ' + supplierName : '',
+            supplierName && !detectedContactId ? 'OCR-Lieferant (bitte Kontakt zuordnen): ' + supplierName : '',
         ].filter(Boolean).join('\n'));
         setOcrApplied(true);
     }, [existingBeleg?.ocr_status, existingBeleg?.ocr_data, existingBeleg?.title, existingBeleg?.notes, ocrApplied, queryClient]);
@@ -369,6 +372,13 @@ export function BelegCreate() {
             alert(error.response?.data?.message || 'OCR-Upload fehlgeschlagen. Bitte manuell erfassen.');
         },
     });
+
+    useEffect(() => {
+        if (!locationState?.autoStartOcr || !selectedFile || autoOcrStarted || isEditMode) return;
+
+        setAutoOcrStarted(true);
+        ocrUploadMutation.mutate(selectedFile);
+    }, [locationState?.autoStartOcr, selectedFile, autoOcrStarted, isEditMode]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -502,6 +512,7 @@ export function BelegCreate() {
 
     const ocrStatus = existingBeleg?.ocr_status;
     const ocrFields = existingBeleg?.ocr_data?.fields || {};
+    const isOcrRunning = ocrUploadMutation.isPending || ocrStatus === 'pending' || ocrStatus === 'processing';
     const documentPreviewUrl = localPreviewUrl || serverPreviewUrl;
     const previewFileName = selectedFile?.name || existingBeleg?.file_name || '';
     const isDocumentPreviewPdf = (selectedFile?.type || '').includes('pdf') || previewFileName.toLowerCase().endsWith('.pdf');
@@ -551,7 +562,8 @@ export function BelegCreate() {
 
                 {ocrDraftId && (
                     <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-950 dark:border-indigo-900 dark:bg-indigo-950/30 dark:text-indigo-100">
-                        <div className="font-semibold">
+                        <div className="flex items-center gap-2 font-semibold">
+                            {isOcrRunning && <Loader2 className="h-4 w-4 animate-spin" />}
                             {ocrStatus === 'done' ? 'OCR abgeschlossen' : ocrStatus === 'failed' ? 'OCR fehlgeschlagen' : 'Beleg wird ausgelesen ...'}
                         </div>
                         {ocrStatus === 'done' && lowConfidenceLabels.length > 0 && (
@@ -597,8 +609,8 @@ export function BelegCreate() {
                                         disabled={!selectedFile || ocrUploadMutation.isPending || ocrStatus === 'pending' || ocrStatus === 'processing'}
                                         className="gap-2"
                                     >
-                                        <Upload className="w-4 h-4" />
-                                        {ocrUploadMutation.isPending || ocrStatus === 'pending' || ocrStatus === 'processing' ? 'OCR läuft ...' : 'Beleg scannen'}
+                                        {isOcrRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                                        {isOcrRunning ? 'OCR läuft ...' : 'Beleg scannen'}
                                     </Button>
                                 )}
                             </div>
@@ -618,7 +630,15 @@ export function BelegCreate() {
                                 </CardHeader>
                                 <CardContent>
                                     {documentPreviewUrl ? (
-                                        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
+                                        <div className="relative overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
+                                            {isOcrRunning && (
+                                                <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/75 dark:bg-slate-950/75">
+                                                    <div className="flex items-center gap-3 rounded-lg border border-indigo-200 bg-white px-4 py-3 text-sm font-medium text-indigo-900 shadow-sm dark:border-indigo-800 dark:bg-slate-900 dark:text-indigo-100">
+                                                        <Loader2 className="h-5 w-5 animate-spin" />
+                                                        OCR scannt den Beleg ...
+                                                    </div>
+                                                </div>
+                                            )}
                                             {isDocumentPreviewPdf ? (
                                                 <iframe
                                                     src={documentPreviewUrl}

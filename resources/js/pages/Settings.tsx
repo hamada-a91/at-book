@@ -167,12 +167,30 @@ export function Settings() {
                         });
                     }
                 });
+                scrollToFirstError();
             } else {
                 // Handle generic errors
                 console.error('Settings update error:', error);
             }
         },
     });
+
+    const scrollToFirstError = () => {
+        setTimeout(() => {
+            const firstErrorEl = document.querySelector('[aria-invalid="true"], .text-red-500, .text-rose-500, .text-destructive, [id$="-form-item-message"]');
+            if (firstErrorEl) {
+                firstErrorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                if (firstErrorEl instanceof HTMLInputElement || firstErrorEl instanceof HTMLSelectElement || firstErrorEl instanceof HTMLButtonElement) {
+                    firstErrorEl.focus();
+                } else {
+                    const input = firstErrorEl.closest('div')?.querySelector('input, select, button');
+                    if (input instanceof HTMLElement) {
+                        input.focus();
+                    }
+                }
+            }
+        }, 150);
+    };
 
     const onSubmit = (data: SettingsFormValues) => {
         updateMutation.mutate(data);
@@ -292,7 +310,7 @@ export function Settings() {
                     )}
 
                     <Form {...form}>
-                        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                        <form onSubmit={form.handleSubmit(onSubmit, () => scrollToFirstError())} className="space-y-6">
                             {/* Logo Upload Card */}
                             <Card className="shadow-lg border-slate-200 dark:border-slate-800 hover:shadow-xl transition-all duration-300">
                                 <CardHeader>

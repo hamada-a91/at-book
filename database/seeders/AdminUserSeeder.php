@@ -26,7 +26,7 @@ class AdminUserSeeder extends Seeder
             $generated = true;
         }
 
-        $user = \App\Models\User::firstOrCreate(
+        $user = \App\Models\User::updateOrCreate(
             ['email' => $email],
             [
                 'name' => config('atbook.admin_name'),

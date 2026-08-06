@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from '@/lib/axios';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { ArrowLeft, Plus, Trash2, Zap, Upload, FileText, Search, XCircle, Check } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Zap, Upload, FileText, Search, XCircle, Check, Camera, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -61,6 +61,27 @@ interface Contact {
     vendor_account_id?: number;
 }
 
+interface OcrField<T = any> {
+    value: T | null;
+    confidence: number;
+    source?: string | null;
+}
+
+interface BelegOcrData {
+    fields?: Record<string, OcrField>;
+    confidence?: number;
+    source?: string;
+    error?: string;
+}
+
+interface BelegResponse {
+    id: number;
+    title?: string;
+    file_name?: string | null;
+    ocr_status?: 'none' | 'pending' | 'processing' | 'done' | 'failed';
+    ocr_data?: BelegOcrData | null;
+}
+
 const bookingSchema = z.object({
     date: z.string().refine((val) => !isNaN(Date.parse(val)), 'Ungültiges Datum'),
     description: z.string().min(3, 'Beschreibung ist erforderlich'),
@@ -105,11 +126,13 @@ export function BookingCreate() {
     const selectedProjectCostObjectId = projectsForDim?.find((p) => String(p.id) === projectId)?.cost_object_id ?? null;
 
     // Beleg Workflow State
-    type BelegOption = 'none' | 'attach' | 'create' | 'select' | 'exception';
+    type BelegOption = 'none' | 'attach' | 'ocr' | 'create' | 'select' | 'exception';
     const [belegStep, setBelegStep] = useState<'select' | 'complete'>('select');
     const [selectedBelegOption, setSelectedBelegOption] = useState<BelegOption>('none');
     const [newBelegId, setNewBelegId] = useState<number | null>(null);
     const [showBelegDialog, setShowBelegDialog] = useState(false);
+    const [ocrBelegId, setOcrBelegId] = useState<number | null>(null);
+    const [bookingOcrApplied, setBookingOcrApplied] = useState(false);
 
     // Inline Beleg Creation Form State
     const [newBelegData, setNewBelegData] = useState({
@@ -184,6 +207,111 @@ export function BookingCreate() {
         control: form.control,
         name: 'lines',
     });
+
+    const { data: bookingOcrBeleg } = useQuery<BelegResponse | null>({
+        queryKey: ['beleg', ocrBelegId],
+        queryFn: async () => {
+            if (!ocrBelegId) return null;
+            const { data } = await axios.get('/api/belege/' + ocrBelegId);
+            return data;
+        },
+        enabled: !!ocrBelegId,
+        refetchInterval: (query) => {
+            const status = (query.state.data as BelegResponse | null | undefined)?.ocr_status;
+            return ocrBelegId && status !== 'done' && status !== 'failed' ? 1500 : false;
+        },
+    });
+
+    const bookingOcrUploadMutation = useMutation({
+        mutationFn: async (file: File) => {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const { data } = await axios.post('/api/belege/ocr-upload', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                },
+            });
+            return data;
+        },
+        onSuccess: (data) => {
+            setOcrBelegId(data.id);
+            setSelectedBelegId(String(data.id));
+            setNewBelegId(data.id);
+            setBookingOcrApplied(false);
+            queryClient.invalidateQueries({ queryKey: ['belege'] });
+        },
+        onError: (error: any) => {
+            alert(error.response?.data?.message || 'OCR-Upload fehlgeschlagen. Bitte Beleg manuell zuordnen.');
+        },
+    });
+
+    const bookingOcrStatus = bookingOcrBeleg?.ocr_status;
+    const isBookingOcrRunning = bookingOcrUploadMutation.isPending || bookingOcrStatus === 'pending' || bookingOcrStatus === 'processing';
+
+    useEffect(() => {
+        if (bookingOcrBeleg?.ocr_status !== 'done' || bookingOcrApplied) return;
+
+        const fields = bookingOcrBeleg.ocr_data?.fields || {};
+        const value = <T,>(name: string): T | null => (fields[name]?.value as T | null | undefined) ?? null;
+        const grossAmount = value<number>('gross_amount');
+        const detectedTaxRate = value<number>('tax_rate');
+        const detectedDate = value<string>('document_date');
+        const detectedDueDate = value<string>('due_date');
+        const detectedContactId = value<number>('contact_id');
+        const detectedAccountId = value<number>('category_account_id');
+        const supplierName = value<string>('supplier_name');
+        const invoiceNumber = value<string>('invoice_number');
+
+        setSelectedBelegId(String(bookingOcrBeleg.id));
+        setNewBelegId(bookingOcrBeleg.id);
+        setSelectedBelegOption('ocr');
+        setBelegStep('complete');
+
+        setNewBelegData(prev => ({
+            ...prev,
+            title: [supplierName, invoiceNumber ? 'Rechnung ' + invoiceNumber : ''].filter(Boolean).join(' - ') || prev.title || bookingOcrBeleg.title || 'OCR-Beleg',
+            document_date: detectedDate || prev.document_date,
+            due_date: detectedDueDate || prev.due_date,
+            notes: [
+                prev.notes,
+                invoiceNumber ? 'OCR-Rechnungsnummer: ' + invoiceNumber : '',
+                supplierName ? 'OCR-Lieferant: ' + supplierName : '',
+            ].filter(Boolean).join('\n'),
+        }));
+
+        setQuickEntry(prev => ({
+            ...prev,
+            contact_id: detectedContactId ? String(detectedContactId) : prev.contact_id,
+            contra_account_id: detectedAccountId ? String(detectedAccountId) : prev.contra_account_id,
+            vat_rate: detectedTaxRate !== null && detectedTaxRate !== undefined ? String(detectedTaxRate) : prev.vat_rate,
+            gross_amount: typeof grossAmount === 'number' ? (grossAmount / 100).toFixed(2) : prev.gross_amount,
+        }));
+
+        if (detectedDate) form.setValue('date', detectedDate);
+        if (detectedContactId) {
+            form.setValue('contact_id', String(detectedContactId));
+            queryClient.invalidateQueries({ queryKey: ['contacts'] });
+        }
+        if (!form.getValues('description')) {
+            form.setValue('description', [supplierName || 'OCR-Beleg', invoiceNumber ? 'Rechnung ' + invoiceNumber : ''].filter(Boolean).join(' - '));
+        }
+
+        setBookingOcrApplied(true);
+    }, [bookingOcrBeleg?.ocr_status, bookingOcrBeleg?.ocr_data, bookingOcrBeleg?.id, bookingOcrBeleg?.title, bookingOcrApplied, form, queryClient]);
+
+    const handleBookingOcrFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) return;
+
+        setSelectedBelegOption('ocr');
+        setBelegStep('select');
+        setNewBelegData(prev => ({ ...prev, file }));
+        setOcrBelegId(null);
+        setBookingOcrApplied(false);
+        bookingOcrUploadMutation.mutate(file);
+    };
 
     const createMutation = useMutation({
         mutationFn: async (data: BookingFormValues) => {
@@ -675,7 +803,46 @@ export function BookingCreate() {
                                     </div>
                                 </button>
 
-                                {/* Option 2: Create New Beleg */}
+                                {/* Option 2: OCR Scan */}
+                                <button
+                                    onClick={() => {
+                                        setSelectedBelegOption('ocr');
+                                        setBelegStep('select');
+                                    }}
+                                    className={[
+                                        'group relative p-6 rounded-xl border-2 transition-all duration-200 text-left',
+                                        selectedBelegOption === 'ocr'
+                                            ? 'border-cyan-600 bg-cyan-50 dark:bg-cyan-950/30 shadow-md'
+                                            : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 hover:border-cyan-400 hover:shadow-sm',
+                                    ].join(' ')}
+                                >
+                                    <div className="flex items-start gap-4">
+                                        <div className={[
+                                            'p-3 rounded-lg',
+                                            selectedBelegOption === 'ocr'
+                                                ? 'bg-cyan-600'
+                                                : 'bg-gray-100 dark:bg-gray-800 group-hover:bg-cyan-50 dark:group-hover:bg-cyan-950/30',
+                                        ].join(' ')}>
+                                            <Camera className={[
+                                                'w-6 h-6',
+                                                selectedBelegOption === 'ocr' ? 'text-white' : 'text-gray-600 dark:text-gray-400',
+                                            ].join(' ')} />
+                                        </div>
+                                        <div className="flex-1">
+                                            <h3 className="font-semibold text-gray-900 dark:text-white mb-1">
+                                                Beleg scannen (OCR)
+                                            </h3>
+                                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                                                Datei hochladen, auslesen und Buchung vorbefüllen
+                                            </p>
+                                        </div>
+                                        {selectedBelegOption === 'ocr' && (
+                                            <Check className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
+                                        )}
+                                    </div>
+                                </button>
+
+                                {/* Option 3: Create New Beleg */}
                                 <button
                                     onClick={() => {
                                         setSelectedBelegOption('create');
@@ -765,7 +932,7 @@ export function BookingCreate() {
                                 </button>
                             </div>
 
-                            {selectedBelegOption !== 'none' && selectedBelegOption !== 'exception' && selectedBelegOption !== 'attach' && (
+                            {selectedBelegOption !== 'none' && selectedBelegOption !== 'exception' && selectedBelegOption !== 'attach' && selectedBelegOption !== 'ocr' && (
                                 <div className="mt-6 p-4 bg-blue-100 dark:bg-blue-900/30 rounded-lg border border-blue-300 dark:border-blue-700">
                                     <p className="text-sm text-blue-900 dark:text-blue-100 font-medium">
                                         ℹ️ Nach Abschluss der Beleg-Erfassung kehren Sie zu dieser Seite zurück und fahren fort.
@@ -920,6 +1087,43 @@ export function BookingCreate() {
                                     </div>
                                 </div>
                             )}
+
+                            {selectedBelegOption === 'ocr' && (
+                                <div className="mt-6 p-6 bg-white dark:bg-slate-900 rounded-xl border-2 border-cyan-500 dark:border-cyan-600 shadow-lg">
+                                    <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
+                                        <Camera className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
+                                        Beleg scannen
+                                    </h3>
+                                    <div className="rounded-lg border border-dashed border-slate-300 p-4 dark:border-slate-700">
+                                        <Input
+                                            type="file"
+                                            accept="image/*,application/pdf"
+                                            capture="environment"
+                                            onChange={handleBookingOcrFile}
+                                            className="bg-white dark:bg-slate-950"
+                                        />
+                                        {newBelegData.file && (
+                                            <p className="mt-2 text-sm text-emerald-700 dark:text-emerald-300">
+                                                {newBelegData.file.name} ausgewählt
+                                            </p>
+                                        )}
+                                    </div>
+                                    {(isBookingOcrRunning || bookingOcrStatus || bookingOcrUploadMutation.isPending) && (
+                                        <div className="mt-4 rounded-lg border border-cyan-200 bg-cyan-50 p-4 text-sm text-cyan-950 dark:border-cyan-900 dark:bg-cyan-950/30 dark:text-cyan-100">
+                                            <div className="flex items-center gap-2 font-semibold">
+                                                {isBookingOcrRunning && <Loader2 className="h-4 w-4 animate-spin" />}
+                                                {bookingOcrStatus === 'done' ? 'OCR abgeschlossen' : bookingOcrStatus === 'failed' ? 'OCR fehlgeschlagen' : 'OCR scannt den Beleg ...'}
+                                            </div>
+                                            {bookingOcrStatus === 'done' && (
+                                                <div className="mt-1">Die Buchung wurde mit den erkannten Daten vorbefüllt.</div>
+                                            )}
+                                            {bookingOcrStatus === 'failed' && (
+                                                <div className="mt-1">{bookingOcrBeleg?.ocr_data?.error || 'Bitte Beleg manuell zuordnen.'}</div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
                 )}
@@ -938,6 +1142,7 @@ export function BookingCreate() {
                                             {selectedBelegOption === 'exception' && 'Ohne Beleg (Ausnahme)'}
                                             {selectedBelegOption === 'select' && `Beleg #${selectedBelegId}`}
                                             {selectedBelegOption === 'create' && 'Neuer Beleg (Externes Fenster)'}
+                                            {selectedBelegOption === 'ocr' && 'OCR-Beleg #' + (selectedBelegId || newBelegId || '')}
                                             {selectedBelegOption === 'attach' && (
                                                 <span>
                                                     Neuer Beleg: {newBelegData.title || '(Noch nicht ausgefüllt)'}
@@ -947,7 +1152,9 @@ export function BookingCreate() {
                                         <p className="text-sm text-emerald-700 dark:text-emerald-300">
                                             {selectedBelegOption === 'attach'
                                                 ? 'Beleg wird beim Speichern automatisch erstellt'
-                                                : 'Sie können nun mit der Buchung fortfahren'}
+                                                : selectedBelegOption === 'ocr'
+                                                    ? 'OCR-Beleg wurde erstellt und wird mit der Buchung verknüpft'
+                                                    : 'Sie können nun mit der Buchung fortfahren'}
                                         </p>
                                     </div>
                                 </div>

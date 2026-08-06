@@ -15,8 +15,8 @@ use App\Http\Controllers\Auth\RegistrationController;
 use Illuminate\Support\Facades\Route;
 
 // ===== PUBLIC AUTHENTICATION ROUTES =====
-Route::post('/register', [RegistrationController::class, 'register'])->name('api.register');
-Route::post('/login', [LoginController::class, 'login'])->name('api.login');
+Route::post('/register', [RegistrationController::class, 'register'])->middleware('throttle:5,1')->name('api.register');
+Route::post('/login', [LoginController::class, 'login'])->middleware('throttle:5,1')->name('api.login');
 Route::post('/logout', [LoginController::class, 'logout'])->middleware('auth:api')->name('api.logout');
 Route::get('/user', [LoginController::class, 'user'])->middleware('auth:api')->name('api.user');
 Route::get('/config', [\App\Http\Controllers\PublicConfigController::class, 'index']);
